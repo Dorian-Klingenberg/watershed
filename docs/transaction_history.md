@@ -128,3 +128,61 @@ TileState
 
 NOTES:
 This supports additive physical behavior and emergent environmental changes.
+
+---
+
+## TRANSACTION: TX-TEST-0002
+
+STATUS: COMPLETE
+CREATED: 2026-03-08T20:15:00Z
+COMPLETED: 2026-03-09T00:15:00Z
+EXECUTED_BY: Codex
+
+AUTHOR: user
+
+DESCRIPTION:
+Add "water pressure" to simulation properties.
+
+TARGET FILES:
+
+- docs/simulation_model.md
+
+CHANGES:
+
+### docs/simulation_model.md
+
+Added a "Water Pressure" section that explains how pressure signals push
+against containment, what conditions raise it, and how increasing pressure
+feeds leaks, structural failures, and redirected flows.
+
+NOTES:
+Simulation expansion test.
+
+---
+
+## TRANSACTION: TX-TEST-0003
+
+STATUS: COMPLETE
+CREATED: 2026-03-08T20:20:00Z
+COMPLETED: 2026-03-09T00:20:00Z
+EXECUTED_BY: Codex
+
+AUTHOR: user
+
+DESCRIPTION:
+Add "Canal Inspectors" profession to worldbuilding.
+
+TARGET FILES:
+
+- docs/world_systems.md
+
+CHANGES:
+
+### docs/world_systems.md
+
+Created a "Canal Inspectors" subsection that introduces traveling specialists
+who map leaks, read flow patterns, predict downstream shifts, and advise on
+repairs based on folk methods and partial ancient records.
+
+NOTES:
+Worldbuilding profession test.

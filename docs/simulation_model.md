@@ -32,6 +32,26 @@ saturation: increasing
 erosion_risk: medium
 canal_efficiency: reduced
 
+### Water Pressure
+
+Water pressure represents how strongly water attempts to move through infrastructure.
+It reflects the force pushing against containment structures and influences subsequent
+simulation outcomes.
+
+Pressure increases when:
+
+- upstream water volume rises
+- canals narrow
+- flow is blocked
+
+High pressure contributes to:
+
+- leaks
+- structural failures
+- redirected flows
+
+Monitoring water pressure helps highlight hidden stresses before catastrophic failures.
+
 ## Simulation Loop
 
 1. update water flow

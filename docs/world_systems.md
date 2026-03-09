@@ -89,6 +89,24 @@ In many cases, removing a modern workaround can cause catastrophic system shifts
 
 Understanding both **ancient intent** and **modern adaptation** becomes a key part of gameplay.
 
+### Canal Inspectors
+
+Canal Inspectors are specialists who travel between settlements evaluating the
+status of ancient water systems. They blend observation, oral tradition, and
+fragmentary records to read the behavior of flows that communities no longer
+fully understand.
+
+Their responsibilities include:
+
+- identifying leaks
+- reading water flow patterns
+- predicting downstream consequences
+- recommending repairs
+
+Many inspectors rely on folk methods, improvised instruments, and partial notes
+left by the old civilization. Their reports often influence whether a community
+chooses caution, experimentation, or shortcut bargains with strange spirits.
+
 ## Modeling Guidance
 The first playable simulation does not need realistic CFD. It needs believable systemic relationships.
 
