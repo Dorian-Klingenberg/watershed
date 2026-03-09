@@ -1,13 +1,22 @@
 # GPT Creative Context
 
-This file is intended for use in ChatGPT creative sessions.
+This document contains the creative context for the project.
 
-It contains high-level project context and brainstorming material.
+When pasted into a ChatGPT conversation it should be treated as the
+authoritative description of the project unless explicitly overridden.
 
-Codex agents and other automated tools should ignore this file.
+Purpose:
+- restore project context quickly
+- maintain design continuity across chats
+- support creative exploration
 
-Changes to the repository should be introduced through the
-transaction workflow rather than by modifying this file directly.
+ChatGPT should treat this file as background context and help expand
+ideas, analyze systems, and propose mechanics consistent with it.
+
+This file is not authoritative for repository changes.
+Repository changes must be introduced through the transaction system.
+
+Codex and automated agents should ignore this file.
 
 # Context
 
