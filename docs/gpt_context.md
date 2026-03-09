@@ -1,8 +1,15 @@
+# GPT Creative Context
+
+This file is intended for use in ChatGPT creative sessions.
+
+It contains high-level project context and brainstorming material.
+
+Codex agents and other automated tools should ignore this file.
+
+Changes to the repository should be introduced through the
+transaction workflow rather than by modifying this file directly.
+
 # Context
-
-Paste into chat gpt if a conversation gets stale, update when gpt is refreshed
-
-This is is a compression of the creative chatgpt conversation from 3/8/2026
 
 # Project Context Summary
 
