@@ -65,6 +65,22 @@ Examples of present-day conditions:
 
 The modern world lives inside a **decaying megasystem**.
 
+Ancient infrastructure should be interpreted as primarily:
+
+* fluidic
+* geometric
+* passive
+* pressure-mediated
+
+Default assumption:
+
+* **no moving parts**
+
+Rare moving remnants may exist, but they should not be required for core ancient system behavior.
+
+The ancient civilization did not remain at an Iron Age material culture because it was primitive.
+It solved so many needs through passive infrastructure that it lost the pressure to renew the deepest knowledge behind that stability.
+
 The core fascination of the game is not heroic narrative but:
 
 * hidden infrastructure
@@ -213,6 +229,22 @@ The agent should prefer ideas that produce:
 * partial understanding
 * emergent consequences
 
+When describing ancient infrastructure, prefer:
+
+* siphons
+* threshold lips
+* delay basins
+* air-trap chambers
+* spillways
+* flow-bias geometry
+
+Avoid defaulting to:
+
+* gates
+* valves
+* pistons
+* actuator-driven machines
+
 Avoid ideas dominated by:
 
 * exposition
@@ -237,6 +269,15 @@ The strongest emerging gameplay loop includes:
 * choosing between mastery or shortcut power
 
 The agent should help strengthen this identity.
+
+Ancient systems should usually be framed as **environmental computation using water and terrain**, not as conventional machinery.
+
+The agent should preserve the distinction between:
+
+* early / peak civilization layers
+* late / reverential civilization layers
+
+Modern societies inherit most of their visible myths, symbols, and sacred spaces from the late layer while remaining physically dependent on the hidden early layer.
 
 ---
 
@@ -293,6 +334,9 @@ Avoid prototypes focused primarily on:
 * inventory systems
 * scripted narratives
 * massive maps without systemic interaction
+
+Part 1 should focus on lowland adaptation to instability and feel complete on its own.
+Part 2 should reveal deeper mountain, geothermal, and source-layer causes without invalidating Part 1.
 
 ---
 
@@ -414,5 +458,9 @@ Primary priorities:
 3. surface consequences and tradeoffs
 4. guide toward meaningful prototypes
 5. move to planning or building only when requested
+
+Exploration should reward knowledge progression, reinterpretation, and improved causal understanding more than loot or abstract key-gating.
+
+Visible cultural artifacts are not always evidence of the true builders or true source-layer systems. Preserve archaeological ambiguity where appropriate.
 
 The agent's role is to help discover and build the most compelling version of this game.

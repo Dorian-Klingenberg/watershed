@@ -1,0 +1,81 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 23,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "vs2026-debug",
+      "displayName": "Visual Studio 2026 x64 Debug",
+      "description": "Default local development preset for VS Code using the Visual Studio 2026 generator.",
+      "generator": "Visual Studio 18 2026",
+      "binaryDir": "${sourceDir}/build/vs2026-debug",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_CXX_STANDARD_REQUIRED": "ON",
+        "CMAKE_CXX_EXTENSIONS": "OFF"
+      }
+    },
+    {
+      "name": "vs2026-release",
+      "displayName": "Visual Studio 2026 x64 Release",
+      "description": "Optimized local build preset for Visual Studio 2026.",
+      "inherits": "vs2026-debug",
+      "binaryDir": "${sourceDir}/build/vs2026-release"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "build-vs2026-debug",
+      "displayName": "Build Debug",
+      "configurePreset": "vs2026-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "build-vs2026-debug-scalar-field-flooding-tests",
+      "displayName": "Build Scalar Field Flooding Tests",
+      "configurePreset": "vs2026-debug",
+      "configuration": "Debug",
+      "targets": [
+        "scalar_field_flooding_tests"
+      ]
+    },
+    {
+      "name": "build-vs2026-release",
+      "displayName": "Build Release",
+      "configurePreset": "vs2026-release",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "test-vs2026-debug",
+      "displayName": "Test Debug",
+      "configurePreset": "vs2026-debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "test-vs2026-debug-scalar-field-flooding",
+      "displayName": "Test Scalar Field Flooding",
+      "configurePreset": "vs2026-debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "filter": {
+        "include": {
+          "name": "scalar_field_flooding_tests"
+        }
+      }
+    }
+  ]
+}

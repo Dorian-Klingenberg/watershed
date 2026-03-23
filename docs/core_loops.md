@@ -1,6 +1,7 @@
 # Core Loops
 
 ## Primary Loop
+
 1. Travel to a location with a visible symptom.
 2. Observe clues and inspect nearby infrastructure.
 3. Form a hypothesis about what is wrong.
@@ -8,9 +9,10 @@
 5. Apply repair, reroute, release, block, reinforce, or invoke.
 6. Advance time or trigger simulation.
 7. Observe outcomes locally and downstream.
-8. Record new knowledge on the map / journal / system view.
+8. Record new knowledge on the map, journal, or system view.
 
 ## Example Symptoms
+
 - crop failure
 - swamp spread
 - flash flooding
@@ -22,36 +24,6 @@
 
 ## Infrastructure Intervention Loop
 
-1. Player identifies failing infrastructure
-2. Player attempts repair or adjustment
-3. Simulation updates system properties
-4. Environmental and social consequences propagate
-5. Player observes new conditions
-6. Player refines understanding
-
-## Secondary Loop: Knowledge Acquisition
-1. Find fragmentary records, diagrams, oral reports, or ruins.
-2. Compare them against the observed behavior of the world.
-3. Update the player’s mental and in-game model.
-4. Unlock better instruments, interpretations, or safer interventions.
-
-## Secondary Loop: Magic Choice
-1. Encounter a problem with no easy material fix.
-2. Choose disciplined understanding or spirit invocation.
-3. Gain capability, but accept different costs and risks.
-
-## Anti-Loop Warning
-Do not turn the game into:
-- fetch quest repetition
-- static “repair X for reward Y” missions with no systemic change
-- single-solution puzzles
-
-## Infrastructure Intervention Loop
-
-The player interacts with a world where ancient systems and modern modifications coexist.
-
-The primary gameplay loop around infrastructure is:
-
 1. Observe a failing system.
 2. Investigate both ancient structures and modern adaptations.
 3. Identify possible interventions.
@@ -59,7 +31,42 @@ The primary gameplay loop around infrastructure is:
 5. Observe simulation outcomes.
 6. Adapt strategy based on new environmental or social consequences.
 
-### Possible Player Actions
+## Knowledge Loop
+
+1. Find fragmentary records, diagrams, oral reports, or ruins.
+2. Compare them against observed world behavior.
+3. Update the player's mental and in-game model.
+4. Unlock better interpretations, safer interventions, or new routes.
+
+This loop should be treated as a primary reward structure, not a side collectible layer.
+Knowledge should change how the player sees existing areas and previously attempted repairs.
+
+## Magic Choice Loop
+
+1. Encounter a problem with no easy material fix.
+2. Choose disciplined understanding or spirit invocation.
+3. Gain capability, but accept different costs and risks.
+
+## Part Structure Guidance
+
+Part 1 should center on lowland adaptation to instability.
+Part 2 should reveal deeper causal layers without replacing the underlying world model.
+
+That means:
+
+- Part 1 local fixes must be real and meaningful
+- Part 2 should recontextualize rather than invalidate
+- return visits should benefit from deeper understanding
+
+## Anti-Loop Warning
+
+Do not turn the game into:
+
+- fetch quest repetition
+- static "repair X for reward Y" missions with no systemic change
+- single-solution puzzles
+
+## Player Actions
 
 Players may:
 
@@ -70,9 +77,3 @@ Players may:
 - integrate ancient and modern systems
 
 Each action may produce both intended and unintended consequences.
-
-A repair may restore an ancient canal but eliminate a village's improvised irrigation branch.
-
-A reinforcement may stabilize a structure locally but increase pressure downstream.
-
-The player gradually learns how different system layers interact.

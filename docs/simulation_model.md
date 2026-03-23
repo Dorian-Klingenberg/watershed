@@ -17,6 +17,21 @@ Condition
 Ecology
 Arcane Influence
 
+## Ancient Technology Assumption
+
+Ancient infrastructure should be modeled as fluidic, geometric, and passive by default.
+
+Prefer:
+
+- pressure head
+- siphon state
+- basin storage
+- air pockets
+- threshold lips
+- flow-bias geometry
+
+Do not assume ancient control relies on moving gates or actuator-style valves unless a document explicitly justifies an exception.
+
 ## Example Tile State
 
 terrain: clay
@@ -51,6 +66,36 @@ High pressure contributes to:
 - redirected flows
 
 Monitoring water pressure helps highlight hidden stresses before catastrophic failures.
+
+### Fluidic Signal State
+
+Pressure is not only a physical force.
+It is also a signal.
+
+Ancient ruins often compute through:
+
+- pressure differentials
+- delayed basin filling
+- siphon priming and breakage
+- air-trap stability
+- overflow activation
+
+### Required Tile Primitives
+
+Simulation layers should be able to express:
+
+- `TileWaterLevel`
+- `TilePressureHead`
+- `TileAirVolume`
+- `TileFlowResistance`
+- `TileSiphonState`
+
+Useful `TileSiphonState` values:
+
+- `unprimed`
+- `priming`
+- `active`
+- `broken`
 
 ## Simulation Loop
 
@@ -103,7 +148,12 @@ Examples:
 - aqueduct walls
 - pressure nodes
 - reservoirs
-- control gates
+- siphon channels
+- threshold lips
+- delay basins
+- air-trap chambers
+- overflow spillways
+- flow-bias branches
 
 Ancient infrastructure typically defines:
 
@@ -111,6 +161,8 @@ Ancient infrastructure typically defines:
 - flow direction
 - pressure management
 - structural load distribution
+- air management
+- timing and memory behavior
 
 ### Modern Modifications
 
@@ -120,7 +172,7 @@ Examples:
 
 - wooden braces
 - sandbag barriers
-- crude sluice gates
+- crude shutters or temporary barriers
 - patched leaks
 - bypass trenches
 - scavenged ancient components
@@ -153,3 +205,17 @@ Derived results:
 - saturation of nearby terrain: moderate
 
 These combined states determine the tile's simulation behavior.
+
+## Failure As Miscomputation
+
+Ancient systems should usually not transition from "working" to "broken."
+
+They should drift into incorrect behavior through:
+
+- sediment accumulation
+- leak growth
+- air intrusion
+- geometry drift
+
+Those changes alter timing, thresholds, and branch priority.
+The interesting failure is usually a ruin that still computes, but computes the wrong answer.

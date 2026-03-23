@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="820" viewBox="0 0 1280 820">
+  <defs>
+    <style>
+      .bg { fill: #f4f1e8; }
+      .title { font: 700 28px Georgia, serif; fill: #1f2d3a; }
+      .subtitle { font: 400 16px Georgia, serif; fill: #415463; }
+      .state-title { font: 700 20px Georgia, serif; fill: #13212c; }
+      .body { font: 400 14px "Segoe UI", Arial, sans-serif; fill: #20313d; }
+      .small { font: 400 13px "Segoe UI", Arial, sans-serif; fill: #29404f; }
+      .box { stroke: #233746; stroke-width: 2.2; rx: 18; ry: 18; }
+      .arrow { stroke: #344d60; stroke-width: 2.5; fill: none; marker-end: url(#arrowhead); }
+      .note { fill: #fffaf0; stroke: #5f7483; stroke-width: 1.5; rx: 14; ry: 14; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="8.5" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#344d60"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1280" height="820"/>
+
+  <text class="title" x="60" y="55">Tide-Logic Regulator State Diagram</text>
+  <text class="subtitle" x="60" y="84">Canonical fluidic model: pressure differential, delay-basin memory, air-trap stability, threshold lip, siphon release, and overflow spillway.</text>
+
+  <rect class="box" x="70" y="150" width="250" height="145" fill="#e7ecef"/>
+  <text class="state-title" x="95" y="185">Unprimed</text>
+  <text class="body" x="95" y="212">- Reservoir head below effective lip</text>
+  <text class="body" x="95" y="235">- Or tide backpressure too high</text>
+  <text class="body" x="95" y="258">- Delay basin drains toward empty</text>
+  <text class="body" x="95" y="281">- Siphon throat holds air</text>
+
+  <rect class="box" x="380" y="150" width="250" height="145" fill="#dfeee4"/>
+  <text class="state-title" x="405" y="185">Priming</text>
+  <text class="body" x="405" y="212">- Reservoir head reaches threshold lip</text>
+  <text class="body" x="405" y="235">- Tide branch reports safe window</text>
+  <text class="body" x="405" y="258">- Comparator feeds delay basin</text>
+  <text class="body" x="405" y="281">- Air trap starts clearing the throat</text>
+
+  <rect class="box" x="690" y="150" width="250" height="145" fill="#d8ebf7"/>
+  <text class="state-title" x="715" y="185">Active Siphon</text>
+  <text class="body" x="715" y="212">- Basin charge sustains prime</text>
+  <text class="body" x="715" y="235">- Air trap remains stable</text>
+  <text class="body" x="715" y="258">- Inland water discharges downstream</text>
+  <text class="body" x="715" y="281">- Flow continues until head falls</text>
+
+  <rect class="box" x="1000" y="150" width="210" height="145" fill="#f4dfd7"/>
+  <text class="state-title" x="1025" y="185">Broken</text>
+  <text class="body" x="1025" y="212">- Air intrusion breaks prime</text>
+  <text class="body" x="1025" y="235">- Or hostile tide collapses sustain</text>
+  <text class="body" x="1025" y="258">- Flow drops to residue or none</text>
+  <text class="body" x="1025" y="281">- Basin must discharge before reset</text>
+
+  <rect class="box" x="455" y="420" width="360" height="155" fill="#dfe8d4"/>
+  <text class="state-title" x="480" y="455">Overflow Spillway Active</text>
+  <text class="body" x="480" y="482">- Reservoir head rises above spill lip</text>
+  <text class="body" x="480" y="505">- Excess water diverts into sacrificial marsh path</text>
+  <text class="body" x="480" y="528">- Protects comparator and siphon throat from overload</text>
+  <text class="body" x="480" y="551">- Can coexist with Priming, Active, or Broken states</text>
+
+  <path class="arrow" d="M 320 222 C 345 222, 355 222, 380 222"/>
+  <text class="small" x="332" y="208">Reservoir head ready</text>
+  <text class="small" x="332" y="226">Tide safe</text>
+  <text class="small" x="332" y="244">Differential positive</text>
+
+  <path class="arrow" d="M 630 222 C 655 222, 665 222, 690 222"/>
+  <text class="small" x="647" y="208">Delay basin charged</text>
+  <text class="small" x="647" y="226">Air trap cleared enough</text>
+
+  <path class="arrow" d="M 815 295 C 815 350, 1030 335, 1105 295"/>
+  <text class="small" x="870" y="340">Air intrusion rises</text>
+  <text class="small" x="870" y="358">or tide hostility breaks sustain</text>
+
+  <path class="arrow" d="M 1000 222 C 965 222, 955 222, 940 222"/>
+  <text class="small" x="952" y="208">Residual basin charge +</text>
+  <text class="small" x="952" y="226">restored air stability can re-prime</text>
+
+  <path class="arrow" d="M 505 295 C 505 340, 250 345, 195 295"/>
+  <text class="small" x="250" y="340">Signal window collapses</text>
+  <text class="small" x="250" y="358">before stable prime forms</text>
+
+  <path class="arrow" d="M 690 270 C 615 325, 605 390, 605 420"/>
+  <text class="small" x="565" y="362">Head exceeds spill lip</text>
+
+  <path class="arrow" d="M 1080 295 C 1045 360, 905 395, 815 420"/>
+  <text class="small" x="906" y="380">Broken while inland head remains high</text>
+
+  <path class="arrow" d="M 635 575 C 635 625, 635 645, 505 645 C 330 645, 185 560, 185 295"/>
+  <text class="small" x="420" y="676">After spill relief and basin discharge, the system settles back toward Unprimed</text>
+
+  <rect class="note" x="70" y="650" width="1140" height="115"/>
+  <text class="state-title" x="95" y="685">Miscomputation Hooks</text>
+  <text class="body" x="95" y="714">Sediment slows tide sensing and priming. Leaks reduce effective head. Air disruption breaks siphons. Geometry drift shifts lip thresholds.</text>
+  <text class="body" x="95" y="737">The ruin usually does not stop functioning. It keeps computing, but computes the wrong answer at the wrong time.</text>
+</svg>

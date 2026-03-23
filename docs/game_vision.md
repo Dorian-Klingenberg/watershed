@@ -5,6 +5,8 @@ A fantasy exploration and intervention game set in a world whose ancient water-c
 
 The player moves through this world as someone who can observe, infer, and alter systems. Their actions can stabilize or destabilize local and regional conditions.
 
+The ancient civilization should be understood as a society that solved enormous civilizational needs through passive infrastructure so successfully that it lost the pressure to renew the deepest knowledge behind that stability.
+
 ## Experience Goals
 The game should create these feelings:
 
@@ -14,6 +16,7 @@ The game should create these feelings:
 - satisfaction from successful diagnosis
 - surprise from second-order effects
 - unease about shortcut power
+- the pleasure of realizing a previous mental model was incomplete
 
 ## The Present Built on the Past
 
@@ -58,6 +61,8 @@ Not loot accumulation.
 The player fantasy is:
 
 > becoming increasingly capable at reading and intervening in a living world built on forgotten infrastructure and misaligned powers.
+
+Exploration should primarily reward knowledge, reinterpretation, and better models of cause, not only resources or progression tokens.
 
 ## Why This Game Exists
 This game exists to let players explore complex systemic consequences through a fantasy world instead of through abstract dashboards alone.

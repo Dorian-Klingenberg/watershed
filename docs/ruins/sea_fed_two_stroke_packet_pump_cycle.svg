@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760">
+  <defs>
+    <style>
+      .bg { fill: #f5f1e7; }
+      .title { font: 700 28px Georgia, serif; fill: #1b2a36; }
+      .label { font: 700 18px Georgia, serif; fill: #173040; }
+      .body { font: 400 14px "Segoe UI", Arial, sans-serif; fill: #243f4f; }
+      .box { fill: #fcfaf5; stroke: #294455; stroke-width: 2; rx: 18; ry: 18; }
+      .arrow { stroke: #365669; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .sea { fill: #d8ebf7; stroke: #52778c; stroke-width: 1.5; }
+      .fresh { fill: #dfeedd; stroke: #5f7f69; stroke-width: 1.5; }
+      .note { fill: #fffaf0; stroke: #657b87; stroke-width: 1.5; rx: 14; ry: 14; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8.5" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#365669"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1280" height="760"/>
+
+  <text class="title" x="50" y="52">Sea-Fed Two-Stroke Packet Pump</text>
+  <text class="body" x="50" y="82">Slow charge, sudden discharge, staged packet lift. Saltwater provides pulse energy. Freshwater is the lifted payload.</text>
+
+  <rect class="box" x="55" y="140" width="230" height="180"/>
+  <text class="label" x="80" y="172">1. Slow Charge</text>
+  <rect class="sea" x="88" y="205" width="78" height="78"/>
+  <text class="body" x="95" y="248">Sea-fed</text>
+  <text class="body" x="95" y="267">charge</text>
+  <rect class="fresh" x="188" y="222" width="50" height="40"/>
+  <text class="body" x="183" y="298">Restricted fill path</text>
+
+  <rect class="box" x="345" y="140" width="230" height="180"/>
+  <text class="label" x="370" y="172">2. Trigger + Pulse</text>
+  <rect class="sea" x="378" y="205" width="84" height="78"/>
+  <text class="body" x="388" y="247">Charge</text>
+  <text class="body" x="385" y="266">chamber</text>
+  <path class="arrow" d="M 462 225 C 490 200, 515 198, 540 220"/>
+  <text class="body" x="470" y="298">Siphon catches and discharges rapidly</text>
+
+  <rect class="box" x="635" y="140" width="260" height="180"/>
+  <text class="label" x="660" y="172">3. Intake Stroke</text>
+  <rect class="sea" x="665" y="210" width="84" height="70"/>
+  <text class="body" x="680" y="247">Pulse</text>
+  <text class="body" x="666" y="266">coupling</text>
+  <rect class="fresh" x="785" y="218" width="70" height="56"/>
+  <text class="body" x="776" y="301">Freshwater intake pocket</text>
+  <path class="arrow" d="M 749 245 C 768 245, 774 245, 785 245"/>
+
+  <rect class="box" x="955" y="140" width="255" height="180"/>
+  <text class="label" x="980" y="172">4. Lift + Capture</text>
+  <rect class="fresh" x="985" y="240" width="54" height="42"/>
+  <rect class="fresh" x="1092" y="195" width="78" height="46"/>
+  <path class="arrow" d="M 1039 260 C 1060 235, 1068 214, 1092 214"/>
+  <text class="body" x="978" y="306">Short riser lifts one local packet</text>
+  <text class="body" x="1075" y="258">Perched capture basin</text>
+
+  <rect class="box" x="350" y="420" width="280" height="190"/>
+  <text class="label" x="375" y="452">5. Isolation</text>
+  <rect class="fresh" x="385" y="505" width="74" height="44"/>
+  <rect class="fresh" x="530" y="462" width="70" height="44"/>
+  <path class="arrow" d="M 458 525 C 488 525, 495 500, 530 485"/>
+  <line x1="490" y1="458" x2="490" y2="565" stroke="#365669" stroke-width="3" stroke-dasharray="8 8"/>
+  <text class="body" x="474" y="442">Vent / air break</text>
+  <text class="body" x="382" y="584">Packet remains gained after transfer</text>
+
+  <rect class="box" x="700" y="420" width="500" height="190"/>
+  <text class="label" x="725" y="452">Canonical Constraint</text>
+  <text class="body" x="725" y="488">Do not let the machine become one long flooded lift shaft.</text>
+  <text class="body" x="725" y="514">Each stage must:</text>
+  <text class="body" x="745" y="540">- capture one modest freshwater packet</text>
+  <text class="body" x="745" y="563">- gain only a short local elevation</text>
+  <text class="body" x="745" y="586">- re-isolate before the next pulse</text>
+
+  <path class="arrow" d="M 285 230 C 315 230, 320 230, 345 230"/>
+  <path class="arrow" d="M 575 230 C 603 230, 608 230, 635 230"/>
+  <path class="arrow" d="M 895 230 C 922 230, 928 230, 955 230"/>
+  <path class="arrow" d="M 1085 320 C 1045 390, 805 410, 630 510"/>
+
+  <rect class="note" x="55" y="655" width="1155" height="70"/>
+  <text class="body" x="82" y="686">Saltwater side = power source. Freshwater side = payload. Permanent height gain comes from geometry, not from keeping one giant column under dynamic lift.</text>
+</svg>

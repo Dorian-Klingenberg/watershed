@@ -42,6 +42,19 @@ Useful data patterns:
 - intervention history logs
 - event causality notes
 
+## Ancient Infrastructure Modeling Rule
+
+Prefer fluidic interpretations of ancient technology.
+
+Default ancient components should be:
+
+- passive
+- geometry-driven
+- pressure-mediated
+- explainable through terrain, water, and trapped air
+
+Avoid introducing mechanical gates, pistons, actuators, or valve-first logic unless a specific design document justifies the exception.
+
 ## Visualization Priorities
 Need early:
 - map overlay for water stress / saturation / flow
@@ -80,6 +93,26 @@ arcane_layer
 Each layer contributes properties to the simulation.
 
 Final tile behavior emerges from the aggregation of those properties.
+
+## Fluidic Simulation Primitives
+
+When a tile participates in ancient hydraulic logic, the model should support:
+
+- `TileWaterLevel`
+- `TilePressureHead`
+- `TileAirVolume`
+- `TileFlowResistance`
+- `TileSiphonState`
+
+This allows the simulation to express:
+
+- priming
+- sustained siphon flow
+- loss of prime
+- delay-basin memory
+- geometry-shifted thresholds
+
+Prefer continuous flow and state transitions over binary actuator toggles.
 
 ### Example Data Representation
 

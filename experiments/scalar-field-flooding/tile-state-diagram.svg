@@ -1,0 +1,200 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1600 1120" role="img" aria-labelledby="title desc">
+  <title id="title">Wave Function Collapse Tile State Diagram</title>
+  <desc id="desc">A labeled state diagram showing the current prototype tile state space: four terrain types crossed with two water feature states, plus saturation and airability runtime overlays.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#07111f" />
+      <stop offset="100%" stop-color="#14263d" />
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#13243d" />
+      <stop offset="100%" stop-color="#0d1a2d" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#02060d" flood-opacity="0.45" />
+    </filter>
+    <style>
+      .title { font: 700 40px 'Segoe UI', Arial, sans-serif; fill: #eef6ff; }
+      .subtitle { font: 400 20px 'Segoe UI', Arial, sans-serif; fill: #b7cce6; }
+      .section { font: 700 24px 'Segoe UI', Arial, sans-serif; fill: #f7fbff; }
+      .label { font: 700 18px 'Segoe UI', Arial, sans-serif; fill: #f4f9ff; }
+      .body { font: 400 16px 'Segoe UI', Arial, sans-serif; fill: #d9e8fb; }
+      .small { font: 400 14px 'Segoe UI', Arial, sans-serif; fill: #bfd4ec; }
+      .tiny { font: 400 13px 'Segoe UI', Arial, sans-serif; fill: #a8bfdc; }
+      .mono { font: 600 14px Consolas, 'Courier New', monospace; fill: #dff1ff; }
+      .muted { fill: #7da1c6; }
+      .panelStroke { stroke: #2d486b; stroke-width: 2; }
+      .cardStroke { stroke: #476b97; stroke-width: 2; }
+      .route { fill: none; stroke: #89b9ff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; opacity: 0.95; }
+      .ghost { fill: none; stroke: #5d7ca3; stroke-dasharray: 8 8; stroke-width: 2; opacity: 0.75; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1120" fill="url(#bg)" />
+  <rect x="24" y="24" width="1552" height="1072" rx="28" fill="none" stroke="#27415e" stroke-width="2" opacity="0.7" />
+
+  <text x="80" y="92" class="title">Experiment 1 Tile State Diagram</text>
+  <text x="80" y="126" class="subtitle">Current prototype state space = terrain type x water feature, with saturation and airability as live runtime overlays.</text>
+
+  <rect x="70" y="170" width="1040" height="720" rx="28" fill="url(#panel)" class="panelStroke" filter="url(#shadow)" />
+  <text x="110" y="220" class="section">Discrete Tile Archetypes</text>
+  <text x="110" y="250" class="small">Each card is a possible authored/generated tile identity before runtime saturation changes it.</text>
+
+  <rect x="1140" y="170" width="390" height="720" rx="28" fill="url(#panel)" class="panelStroke" filter="url(#shadow)" />
+  <text x="1175" y="220" class="section">Runtime State</text>
+  <text x="1175" y="250" class="small">These values change during simulation and sit on top of the eight discrete tile archetypes.</text>
+
+  <g transform="translate(110 285)">
+    <text x="115" y="-18" class="label" text-anchor="middle">Water Feature: None</text>
+    <text x="640" y="-18" class="label" text-anchor="middle">Water Feature: Spring Source</text>
+
+    <text x="-12" y="82" class="label" text-anchor="end">Bedrock</text>
+    <text x="-12" y="242" class="label" text-anchor="end">Clay</text>
+    <text x="-12" y="402" class="label" text-anchor="end">Loam</text>
+    <text x="-12" y="562" class="label" text-anchor="end">Sand</text>
+
+    <g transform="translate(0,0)">
+      <rect x="0" y="0" width="230" height="120" rx="22" fill="#48525f" class="cardStroke" />
+      <rect x="16" y="16" width="64" height="88" rx="14" fill="#747f8d" />
+      <text x="112" y="38" class="label">Bedrock / None</text>
+      <text x="112" y="64" class="body">Stable hard substrate</text>
+      <text x="112" y="88" class="tiny">Low absorption</text>
+      <text x="112" y="106" class="tiny">High retention</text>
+      <text x="30" y="66" class="mono">B</text>
+    </g>
+
+    <g transform="translate(0,160)">
+      <rect x="0" y="0" width="230" height="120" rx="22" fill="#7a5449" class="cardStroke" />
+      <rect x="16" y="16" width="64" height="88" rx="14" fill="#ac7764" />
+      <text x="112" y="38" class="label">Clay / None</text>
+      <text x="112" y="64" class="body">Dense, saturates fast</text>
+      <text x="112" y="88" class="tiny">Moderate absorption</text>
+      <text x="112" y="106" class="tiny">Moderate spread</text>
+      <text x="30" y="66" class="mono">C</text>
+    </g>
+
+    <g transform="translate(0,320)">
+      <rect x="0" y="0" width="230" height="120" rx="22" fill="#4a6b4e" class="cardStroke" />
+      <rect x="16" y="16" width="64" height="88" rx="14" fill="#7aa065" />
+      <text x="112" y="38" class="label">Loam / None</text>
+      <text x="112" y="64" class="body">Balanced working soil</text>
+      <text x="112" y="88" class="tiny">Mid absorption</text>
+      <text x="112" y="106" class="tiny">High airability potential</text>
+      <text x="30" y="66" class="mono">L</text>
+    </g>
+
+    <g transform="translate(0,480)">
+      <rect x="0" y="0" width="230" height="120" rx="22" fill="#b18f55" class="cardStroke" />
+      <rect x="16" y="16" width="64" height="88" rx="14" fill="#dfbf72" />
+      <text x="112" y="38" class="label">Sand / None</text>
+      <text x="112" y="64" class="body">Loose, highly permeable</text>
+      <text x="112" y="88" class="tiny">High absorption</text>
+      <text x="112" y="106" class="tiny">Highest airability potential</text>
+      <text x="30" y="66" class="mono">S</text>
+    </g>
+
+    <g transform="translate(525,0)">
+      <rect x="0" y="0" width="230" height="120" rx="22" fill="#335f8c" class="cardStroke" />
+      <rect x="16" y="16" width="64" height="88" rx="14" fill="#49a0ff" />
+      <circle cx="48" cy="60" r="18" fill="#d7f0ff" opacity="0.95" />
+      <text x="112" y="38" class="label">Bedrock / Spring</text>
+      <text x="112" y="64" class="body">Hard source emergence</text>
+      <text x="112" y="88" class="tiny">Constant source injection</text>
+      <text x="112" y="106" class="tiny">Boundary-stable edge behavior</text>
+      <text x="30" y="104" class="mono">W + B</text>
+    </g>
+
+    <g transform="translate(525,160)">
+      <rect x="0" y="0" width="230" height="120" rx="22" fill="#4f5ba8" class="cardStroke" />
+      <rect x="16" y="16" width="64" height="88" rx="14" fill="#5fd1ff" />
+      <circle cx="48" cy="60" r="18" fill="#d7f0ff" opacity="0.95" />
+      <text x="112" y="38" class="label">Clay / Spring</text>
+      <text x="112" y="64" class="body">Wet dense source bed</text>
+      <text x="112" y="88" class="tiny">Fast visible saturation</text>
+      <text x="112" y="106" class="tiny">Good for waterlogged states</text>
+      <text x="30" y="104" class="mono">W + C</text>
+    </g>
+
+    <g transform="translate(525,320)">
+      <rect x="0" y="0" width="230" height="120" rx="22" fill="#2d7a6a" class="cardStroke" />
+      <rect x="16" y="16" width="64" height="88" rx="14" fill="#52d3ab" />
+      <circle cx="48" cy="60" r="18" fill="#d7f0ff" opacity="0.95" />
+      <text x="112" y="38" class="label">Loam / Spring</text>
+      <text x="112" y="64" class="body">Productive but unstable</text>
+      <text x="112" y="88" class="tiny">Good target for airable recovery</text>
+      <text x="112" y="106" class="tiny">Middle-ground puzzle state</text>
+      <text x="30" y="104" class="mono">W + L</text>
+    </g>
+
+    <g transform="translate(525,480)">
+      <rect x="0" y="0" width="230" height="120" rx="22" fill="#6b6f22" class="cardStroke" />
+      <rect x="16" y="16" width="64" height="88" rx="14" fill="#bce467" />
+      <circle cx="48" cy="60" r="18" fill="#d7f0ff" opacity="0.95" />
+      <text x="112" y="38" class="label">Sand / Spring</text>
+      <text x="112" y="64" class="body">Loose source terrain</text>
+      <text x="112" y="88" class="tiny">Fast spread, quick breathing</text>
+      <text x="112" y="106" class="tiny">High contrast airability shifts</text>
+      <text x="30" y="104" class="mono">W + S</text>
+    </g>
+
+    <path d="M 248 60 C 320 60, 360 60, 512 60" class="route" />
+    <path d="M 248 220 C 320 220, 360 220, 512 220" class="route" />
+    <path d="M 248 380 C 320 380, 360 380, 512 380" class="route" />
+    <path d="M 248 540 C 320 540, 360 540, 512 540" class="route" />
+    <text x="382" y="45" class="small" text-anchor="middle">add spring source</text>
+  </g>
+
+  <g transform="translate(1175 290)">
+    <rect x="0" y="0" width="320" height="170" rx="22" fill="#142b48" class="cardStroke" />
+    <text x="24" y="36" class="label">Runtime Overlay 1: Saturation</text>
+    <text x="24" y="64" class="body">Continuous value from 0.0 to 1.0</text>
+    <text x="24" y="92" class="small">Driven by springs, lateral spread, retention, and downhill drainage.</text>
+    <text x="24" y="130" class="mono">Glyph ramp: . : - = + * # % @</text>
+    <g transform="translate(24,142)">
+      <rect x="0" y="0" width="256" height="12" rx="6" fill="#11304d" />
+      <rect x="0" y="0" width="256" height="12" rx="6" fill="url(#satRamp)" />
+    </g>
+  </g>
+
+  <defs>
+    <linearGradient id="satRamp" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#9ab0c6" />
+      <stop offset="35%" stop-color="#76c2ff" />
+      <stop offset="70%" stop-color="#3ba2ff" />
+      <stop offset="100%" stop-color="#dff7ff" />
+    </linearGradient>
+    <linearGradient id="airRamp" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3f4c5d" />
+      <stop offset="50%" stop-color="#74c28d" />
+      <stop offset="100%" stop-color="#d8ff8f" />
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(1175 490)">
+    <rect x="0" y="0" width="320" height="210" rx="22" fill="#142b48" class="cardStroke" />
+    <text x="24" y="36" class="label">Runtime Overlay 2: Airability</text>
+    <text x="24" y="64" class="body">Derived from terrain base potential and current saturation.</text>
+    <text x="24" y="92" class="small">Used as a player-facing land-health signal and possible quest target.</text>
+    <text x="24" y="128" class="mono">airability = terrain base x (1.0 - saturation)</text>
+    <text x="24" y="160" class="small">Target band in current prototype: 0.20 to 0.65 = "airable"</text>
+    <g transform="translate(24,178)">
+      <rect x="0" y="0" width="256" height="12" rx="6" fill="#23384d" />
+      <rect x="0" y="0" width="256" height="12" rx="6" fill="url(#airRamp)" />
+    </g>
+  </g>
+
+  <g transform="translate(1175 735)">
+    <rect x="0" y="0" width="320" height="120" rx="22" fill="#142b48" class="cardStroke" />
+    <text x="24" y="36" class="label">Boundary Rule</text>
+    <text x="24" y="64" class="body">Edges use clamped neighbors.</text>
+    <text x="24" y="90" class="small">Outside-the-map lookups mirror the nearest edge tile instead of acting empty.</text>
+  </g>
+
+  <g transform="translate(80 930)">
+    <rect x="0" y="0" width="1450" height="130" rx="24" fill="#10233b" class="panelStroke" filter="url(#shadow)" />
+    <text x="34" y="38" class="section">How To Read This Diagram</text>
+    <text x="34" y="68" class="body">Discrete identity comes from terrain and water feature. Runtime behavior comes from saturation and airability.</text>
+    <text x="34" y="96" class="body">In the current prototype that means 8 authored/generated tile archetypes, each of which can move through many live wetness states over time.</text>
+  </g>
+</svg>
