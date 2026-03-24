@@ -14,6 +14,20 @@ systems-heavy game space can support:
 The competition is not a replacement for the world-first identity of the game.
 It is a presentation and development format layered on top of that identity.
 
+## Inherited Canon
+
+This project does not redefine the larger game's world model.
+
+It inherits:
+
+- ancient passive hydraulic infrastructure from [docs/ancient_technology.md](/D:/Repos/Games/TheGame/docs/ancient_technology.md)
+- intervention and consequence loops from [docs/core_loops.md](/D:/Repos/Games/TheGame/docs/core_loops.md)
+- the broader present-over-ancient layered world model from [docs/game_vision.md](/D:/Repos/Games/TheGame/docs/game_vision.md)
+- simulation assumptions from [docs/simulation_model.md](/D:/Repos/Games/TheGame/docs/simulation_model.md)
+
+The project-level docs here should only define what is local to
+`Granny's House Trials`.
+
 ## What This Project Is Trying To Prove
 
 The project should prove:
@@ -142,6 +156,16 @@ The likely technical starting shape is:
 - one interactable system
 - one or more resettable round states
 - simple tester stand-ins before anything more ambitious
+- shared `sim`, `playtest`, and `gfx` modules so later subprojects can reuse
+  the same world truth, tester surfaces, and camera helpers
+
+Renderer status note:
+
+- the current proving slice now uses shader-side column raycast rendering for
+  the grass field
+- it does not yet use a full arbitrary voxel ray marcher or cube marcher
+- the next renderer experiments should extend that path without committing to a
+  complete arbitrary 3D traversal architecture too early
 
 ## Immediate Success Condition
 
@@ -149,4 +173,3 @@ The first major success condition for this project is:
 
 > one complete round that is understandable, visually legible, and funny
 > because the testing revealed a real system truth
-

@@ -15,6 +15,8 @@ Deliverables:
 
 - project folder
 - core docs
+- module structure
+- one project test target
 - scope boundaries
 - first scenario choice
 - first cast / scoring model
@@ -35,6 +37,15 @@ Deliverables:
 Success condition:
 
 - we can move around a readable homestead yard
+
+Current note:
+
+- `subprojects/grass-field-001` is already the terrain-and-camera proving slice for this milestone
+- it should stay a thin visual harness around shared `sim` and `gfx` code
+- its current renderer now uses shader-side column raycast rendering
+- it is no longer dependent on CPU-emitted cube meshes for the field view
+- a full general voxel traversal renderer is still a near-term goal, but not
+  done yet
 
 ## Milestone 3: First Testable Mechanic
 
@@ -58,10 +69,17 @@ Deliverables:
 - tracked incidents
 - tracked discoveries
 - round summary UI
+- reusable playtest-facing evidence projection
 
 Success condition:
 
 - a round leaves behind enough evidence to judge what happened
+
+Implementation note:
+
+- keep the shared tester-facing packet and evidence surface in a dedicated `playtest` module
+- keep world legality and hidden-structure truth in `sim`
+- do not create a driver subproject yet
 
 ## Milestone 5: Cast Layer
 
@@ -112,6 +130,6 @@ Do not move into:
 - advanced AI autonomy
 - broad inventory systems
 - deep narrative scripting
+- driver applications under `subprojects/`
 
 until Milestone 6 is working.
-

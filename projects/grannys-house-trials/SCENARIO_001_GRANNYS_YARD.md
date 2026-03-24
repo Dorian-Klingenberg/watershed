@@ -28,6 +28,12 @@ The point is contrast:
 - a humble household problem
 - over a buried ancient water system
 
+This should preserve the repo-wide layered-history idea:
+
+- present-day domestic adaptation on top
+- older hydraulic logic underneath
+- a local fix that may accidentally disturb inherited structure
+
 ## Physical Layout
 
 The first-pass layout should likely include:
@@ -39,6 +45,23 @@ The first-pass layout should likely include:
 - a low wet patch or soft ground zone
 - a cellar edge, foundation line, or drainage risk area
 - one buried channel or drain tied to older infrastructure
+
+## Named Anchors
+
+For the first playtest-facing pass, the yard should expose a small stable set
+of named anchors rather than freeform coordinates.
+
+Recommended anchors:
+
+- `porch`
+- `path_edge`
+- `terrace_cut`
+- `drain_mouth`
+- `cellar_lip`
+- `garden_bed_north`
+
+These are not the whole world.
+They are the first parser-stable places from which testers can observe or act.
 
 ## Round Objective
 
@@ -63,10 +86,42 @@ Good candidate:
 
 - an old foundation drain that cross-feeds into an ancient terrace conduit
 
+That hidden route should behave like passive hydraulic logic, not a machine:
+
+- thresholds
+- trapped water
+- pressure bias
+- terrain-guided routing
+
 What this enables:
 
 - a "reasonable" yard fix that causes trouble somewhere else in the same space
 - a reveal that the house is sitting inside older infrastructure logic
+
+## Visible Targets And Keywords
+
+The first constrained protocol should expose a small noun list tied directly to
+the scenario.
+
+Recommended visible targets:
+
+- `cellar_edge`
+- `terrace_cut`
+- `drain_mouth`
+- `garden_bed_north`
+- `flat_stone_run`
+
+Recommended first-pass state tags:
+
+- `dry`
+- `damp`
+- `wet`
+- `soft`
+- `stable`
+- `unstable`
+- `flowing`
+- `blocked`
+- `revealed`
 
 ## Good Failure Modes
 
@@ -120,6 +175,21 @@ assumptions, even if they do not physically execute the cleanest solution.
 7. Let the host award points
 8. Reset for another attempt
 
+## Atomic Playtest Actions
+
+The first tester-facing surface should stay intentionally small.
+
+Recommended first-pass actions:
+
+- `LOOK`
+- `MOVE <anchor>`
+- `INSPECT <target>`
+- `CLEAR_BLOCKAGE <target>`
+- `WAIT`
+
+No action should require the tester to supply a multi-step plan.
+The world should present only legal actions from the current anchor.
+
 ## Why This Scenario Matters
 
 If this scenario works, it proves:
@@ -128,4 +198,3 @@ If this scenario works, it proves:
 - hidden infrastructure can matter in a domestic space
 - tester competition can expose meaningful system truth
 - the audience can understand a round quickly
-
