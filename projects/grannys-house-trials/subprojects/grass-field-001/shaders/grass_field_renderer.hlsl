@@ -1,3 +1,7 @@
+// -----------------------------------------------------------------------------
+// Scene Inputs And Shared Types
+// -----------------------------------------------------------------------------
+
 cbuffer SceneConstants : register(b0)
 {
     float4x4 inverseViewProjection;
@@ -63,6 +67,16 @@ static const uint display_mode_coarse = 0u;
 static const uint display_mode_refined = 1u;
 static const uint display_mode_hybrid = 2u;
 
+struct CameraRay
+{
+    float3 origin;
+    float3 direction;
+};
+
+// -----------------------------------------------------------------------------
+// Vertex Stage
+// -----------------------------------------------------------------------------
+
 VSOutput VSMain(uint vertexId : SV_VertexID)
 {
     const float2 clip = float2(
@@ -73,6 +87,22 @@ VSOutput VSMain(uint vertexId : SV_VertexID)
     output.position = float4(clip, 0.0, 1.0);
     output.uv = float2((clip.x + 1.0) * 0.5, (1.0 - clip.y) * 0.5);
     return output;
+}
+
+// -----------------------------------------------------------------------------
+// Ray Setup
+// -----------------------------------------------------------------------------
+
+CameraRay BuildCameraRay(VSOutput input)
+{
+    const float2 ndc = float2(input.uv.x * 2.0 - 1.0, 1.0 - input.uv.y * 2.0);
+    float4 farWorld = mul(float4(ndc, 1.0, 1.0), inverseViewProjection);
+    farWorld.xyz /= farWorld.w;
+
+    CameraRay ray;
+    ray.origin = cameraWorldPosition.xyz;
+    ray.direction = normalize(farWorld.xyz - ray.origin);
+    return ray;
 }
 
 float3 SkyColor(float3 rayDirection)
@@ -95,48 +125,9 @@ bool IntersectAabb(float3 origin, float3 direction, float3 minimum, float3 maxim
     return tExit >= max(tEnter, 0.0);
 }
 
-float3 MaterialColor(FieldCell cell, int cellX, int cellZ)
-{
-    const float tint = 0.92 + (float)((cellX * 17 + cellZ * 31) & 3) * 0.03;
-    float3 color = float3(0.75, 0.25, 0.85);
-
-    switch (cell.materialId)
-    {
-    case 0:
-        color = float3(0.23, 0.63, 0.19);
-        break;
-    case 1:
-        color = float3(0.43, 0.36, 0.22);
-        break;
-    case 2:
-        color = float3(0.49, 0.41, 0.27);
-        break;
-    case 3:
-        color = float3(0.62, 0.63, 0.59);
-        break;
-    case 4:
-        color = float3(0.24, 0.29, 0.34);
-        break;
-    case 5:
-        color = float3(0.57, 0.31, 0.24);
-        break;
-    case 6:
-        color = float3(0.18, 0.43, 0.68);
-        break;
-    }
-
-    color *= tint;
-    if (cell.materialId != 6)
-    {
-        color = lerp(color, color * 0.70, saturate(cell.soilMoisture * 0.65));
-    }
-    else
-    {
-        color = lerp(color, float3(0.52, 0.73, 0.94), 0.22);
-    }
-    color += float3(0.02, 0.04, 0.01) * cell.fertility;
-    return saturate(color);
-}
+// -----------------------------------------------------------------------------
+// Field Data Helpers
+// -----------------------------------------------------------------------------
 
 TraceHitInfo MakeTraceMiss()
 {
@@ -172,77 +163,17 @@ float FineVoxelSize(float coarseVoxelSize)
     return coarseVoxelSize / PatchResolution();
 }
 
-float GridEdgeFactor(float coordinate, float cellSize, float lineWidth)
+float3 FieldMinimum(float voxelSize)
 {
-    const float cellCoordinate = frac(coordinate / cellSize);
-    const float edgeDistance = min(cellCoordinate, 1.0 - cellCoordinate) * cellSize;
-    return 1.0 - smoothstep(0.0, lineWidth, edgeDistance);
+    return float3(fieldOriginAndVoxelSize.x, 0.0, fieldOriginAndVoxelSize.y);
 }
 
-float SurfaceGridLine(float3 hitPosition, float3 normal, float cellSize, float lineWidth)
+float3 FieldMaximum(float voxelSize, float maxColumnHeight)
 {
-    if (abs(normal.y) > 0.5)
-    {
-        return max(
-            GridEdgeFactor(hitPosition.x - fieldOriginAndVoxelSize.x, cellSize, lineWidth),
-            GridEdgeFactor(hitPosition.z - fieldOriginAndVoxelSize.y, cellSize, lineWidth));
-    }
-
-    if (abs(normal.x) > 0.5)
-    {
-        return max(
-            GridEdgeFactor(hitPosition.z - fieldOriginAndVoxelSize.y, cellSize, lineWidth),
-            GridEdgeFactor(hitPosition.y, cellSize, lineWidth));
-    }
-
-    return max(
-        GridEdgeFactor(hitPosition.x - fieldOriginAndVoxelSize.x, cellSize, lineWidth),
-        GridEdgeFactor(hitPosition.y, cellSize, lineWidth));
-}
-
-float3 ApplyDisplayModeStyling(float3 color, FieldCell cell, float3 hitPosition, float3 normal, float voxelSize, uint displayMode)
-{
-    const float fineCellSize = displayMode == display_mode_coarse ? voxelSize : FineVoxelSize(voxelSize);
-    const float coarseCellSize = voxelSize;
-    float3 styledColor = saturate(color);
-
-    if (displayMode == display_mode_coarse)
-    {
-        return styledColor;
-    }
-
-    if (displayMode == display_mode_refined)
-    {
-        const float fineLine = SurfaceGridLine(
-            hitPosition,
-            normal,
-            fineCellSize,
-            max(fineCellSize * 0.10, 0.0005));
-        styledColor = lerp(color, color * 0.78 + float3(0.03, 0.03, 0.03), saturate(fineLine * 0.45));
-        return saturate(styledColor);
-    }
-
-    const float coarseFullHeight = cell.coarseFullHeightVoxels * voxelSize;
-    const bool refinedTopExists = cell.columnHeightVoxels > cell.coarseFullHeightVoxels + 0.001;
-    const bool hitsCoarseSide = abs(normal.y) <= 0.5
-        && hitPosition.y < coarseFullHeight - voxelSize * 0.05;
-    const bool coarseOwnedHit = !refinedTopExists || hitsCoarseSide;
-
-    if (coarseOwnedHit)
-    {
-        const float coarseLine = SurfaceGridLine(hitPosition, normal, coarseCellSize, max(voxelSize * 0.80, coarseCellSize * 0.06));
-        styledColor = lerp(color, color * 0.70, saturate(coarseLine * 0.62));
-        styledColor = lerp(styledColor, styledColor + float3(0.05, 0.03, 0.00), 0.08);
-    }
-    else
-    {
-        const float fineLine = SurfaceGridLine(hitPosition, normal, fineCellSize, max(fineCellSize * 0.12, 0.0005));
-        const float coarseLine = SurfaceGridLine(hitPosition, normal, coarseCellSize, max(voxelSize * 0.45, coarseCellSize * 0.04));
-        styledColor = lerp(color, color * 0.80 + float3(0.02, 0.02, 0.02), saturate(fineLine * 0.42));
-        styledColor = lerp(styledColor, styledColor * 0.74, saturate(coarseLine * 0.18));
-        styledColor = lerp(styledColor, styledColor + float3(0.03, 0.02, 0.00), 0.10);
-    }
-    return saturate(styledColor);
+    return float3(
+        fieldOriginAndVoxelSize.x + fieldInfo.x * voxelSize,
+        maxColumnHeight,
+        fieldOriginAndVoxelSize.y + fieldInfo.y * voxelSize);
 }
 
 float ColumnBaseHeight(FieldCell cell, float voxelSize, uint displayMode)
@@ -250,11 +181,25 @@ float ColumnBaseHeight(FieldCell cell, float voxelSize, uint displayMode)
     return displayMode == display_mode_refined ? cell.coarseFullHeightVoxels * voxelSize : 0.0;
 }
 
+float3 MaterialColor(FieldCell cell, int cellX, int cellZ);
+float3 ApplyDisplayModeStyling(float3 color, FieldCell cell, float3 hitPosition, float3 normal, float voxelSize, uint displayMode);
+
 float LocalPatchColumnTop(RefinedPatchMetadata patch, int localX, int localZ)
 {
     const uint patchResolution = PatchResolution();
     const uint heightIndex = patch.heightOffset + (uint)localX + (uint)localZ * patchResolution;
     return refinedPatchHeights[heightIndex] * FineVoxelSize(fieldOriginAndVoxelSize.z);
+}
+
+// -----------------------------------------------------------------------------
+// Traversal
+// -----------------------------------------------------------------------------
+
+float GridEdgeFactor(float coordinate, float cellSize, float lineWidth)
+{
+    const float cellCoordinate = frac(coordinate / cellSize);
+    const float edgeDistance = min(cellCoordinate, 1.0 - cellCoordinate) * cellSize;
+    return 1.0 - smoothstep(0.0, lineWidth, edgeDistance);
 }
 
 float3 EstimateFinePatchNormal(int coarseCellX, int coarseCellZ, int localX, int localZ, float coarseVoxelSize)
@@ -513,11 +458,8 @@ TraceHitInfo TraceFieldClosestHit(float3 rayOrigin, float3 rayDirection, float v
     const uint fieldWidth = fieldInfo.x;
     const uint fieldDepth = fieldInfo.y;
     const float maxColumnHeight = fieldOriginAndVoxelSize.w * voxelSize;
-    const float3 fieldMin = float3(fieldOriginAndVoxelSize.x, 0.0, fieldOriginAndVoxelSize.y);
-    const float3 fieldMax = float3(
-        fieldOriginAndVoxelSize.x + fieldWidth * voxelSize,
-        maxColumnHeight,
-        fieldOriginAndVoxelSize.y + fieldDepth * voxelSize);
+    const float3 fieldMin = FieldMinimum(voxelSize);
+    const float3 fieldMax = FieldMaximum(voxelSize, maxColumnHeight);
 
     float tEnter = 0.0;
     float tExit = 0.0;
@@ -716,6 +658,10 @@ bool TraceFieldAnyHit(float3 rayOrigin, float3 rayDirection, float voxelSize, fl
     return TraceFieldClosestHit(rayOrigin, rayDirection, voxelSize, maxDistance, displayMode).hit != 0;
 }
 
+// -----------------------------------------------------------------------------
+// Lighting
+// -----------------------------------------------------------------------------
+
 float ComputeSunVisibility(float3 hitPosition, float3 normal, float3 sunDirection, float voxelSize, uint displayMode)
 {
     const float3 shadowOrigin = hitPosition + normal * (voxelSize * 0.10) + sunDirection * (voxelSize * 0.05);
@@ -787,6 +733,123 @@ float3 ComputeBounceLighting(float3 hitPosition, float3 normal, float voxelSize,
     return bouncedLight * 0.10;
 }
 
+// -----------------------------------------------------------------------------
+// Presentation / Styling
+// -----------------------------------------------------------------------------
+
+float3 MaterialColor(FieldCell cell, int cellX, int cellZ)
+{
+    const float tint = 0.92 + (float)((cellX * 17 + cellZ * 31) & 3) * 0.03;
+    float3 color = float3(0.75, 0.25, 0.85);
+
+    switch (cell.materialId)
+    {
+    case 0:
+        color = float3(0.23, 0.63, 0.19);
+        break;
+    case 1:
+        color = float3(0.43, 0.36, 0.22);
+        break;
+    case 2:
+        color = float3(0.49, 0.41, 0.27);
+        break;
+    case 3:
+        color = float3(0.62, 0.63, 0.59);
+        break;
+    case 4:
+        color = float3(0.24, 0.29, 0.34);
+        break;
+    case 5:
+        color = float3(0.57, 0.31, 0.24);
+        break;
+    case 6:
+        color = float3(0.18, 0.43, 0.68);
+        break;
+    }
+
+    color *= tint;
+    if (cell.materialId != 6)
+    {
+        color = lerp(color, color * 0.70, saturate(cell.soilMoisture * 0.65));
+    }
+    else
+    {
+        color = lerp(color, float3(0.52, 0.73, 0.94), 0.22);
+    }
+    color += float3(0.02, 0.04, 0.01) * cell.fertility;
+    return saturate(color);
+}
+
+float SurfaceGridLine(float3 hitPosition, float3 normal, float cellSize, float lineWidth)
+{
+    if (abs(normal.y) > 0.5)
+    {
+        return max(
+            GridEdgeFactor(hitPosition.x - fieldOriginAndVoxelSize.x, cellSize, lineWidth),
+            GridEdgeFactor(hitPosition.z - fieldOriginAndVoxelSize.y, cellSize, lineWidth));
+    }
+
+    if (abs(normal.x) > 0.5)
+    {
+        return max(
+            GridEdgeFactor(hitPosition.z - fieldOriginAndVoxelSize.y, cellSize, lineWidth),
+            GridEdgeFactor(hitPosition.y, cellSize, lineWidth));
+    }
+
+    return max(
+        GridEdgeFactor(hitPosition.x - fieldOriginAndVoxelSize.x, cellSize, lineWidth),
+        GridEdgeFactor(hitPosition.y, cellSize, lineWidth));
+}
+
+float3 ApplyDisplayModeStyling(float3 color, FieldCell cell, float3 hitPosition, float3 normal, float voxelSize, uint displayMode)
+{
+    const float fineCellSize = displayMode == display_mode_coarse ? voxelSize : FineVoxelSize(voxelSize);
+    const float coarseCellSize = voxelSize;
+    float3 styledColor = saturate(color);
+
+    if (displayMode == display_mode_coarse)
+    {
+        return styledColor;
+    }
+
+    if (displayMode == display_mode_refined)
+    {
+        const float fineLine = SurfaceGridLine(
+            hitPosition,
+            normal,
+            fineCellSize,
+            max(fineCellSize * 0.10, 0.0005));
+        styledColor = lerp(color, color * 0.78 + float3(0.03, 0.03, 0.03), saturate(fineLine * 0.45));
+        return saturate(styledColor);
+    }
+
+    const float coarseFullHeight = cell.coarseFullHeightVoxels * voxelSize;
+    const bool refinedTopExists = cell.columnHeightVoxels > cell.coarseFullHeightVoxels + 0.001;
+    const bool hitsCoarseSide = abs(normal.y) <= 0.5
+        && hitPosition.y < coarseFullHeight - voxelSize * 0.05;
+    const bool coarseOwnedHit = !refinedTopExists || hitsCoarseSide;
+
+    if (coarseOwnedHit)
+    {
+        const float coarseLine = SurfaceGridLine(hitPosition, normal, coarseCellSize, max(voxelSize * 0.80, coarseCellSize * 0.06));
+        styledColor = lerp(color, color * 0.70, saturate(coarseLine * 0.62));
+        styledColor = lerp(styledColor, styledColor + float3(0.05, 0.03, 0.00), 0.08);
+    }
+    else
+    {
+        const float fineLine = SurfaceGridLine(hitPosition, normal, fineCellSize, max(fineCellSize * 0.12, 0.0005));
+        const float coarseLine = SurfaceGridLine(hitPosition, normal, coarseCellSize, max(voxelSize * 0.45, coarseCellSize * 0.04));
+        styledColor = lerp(color, color * 0.80 + float3(0.02, 0.02, 0.02), saturate(fineLine * 0.42));
+        styledColor = lerp(styledColor, styledColor * 0.74, saturate(coarseLine * 0.18));
+        styledColor = lerp(styledColor, styledColor + float3(0.03, 0.02, 0.00), 0.10);
+    }
+    return saturate(styledColor);
+}
+
+// -----------------------------------------------------------------------------
+// Pixel Stage
+// -----------------------------------------------------------------------------
+
 float4 ShadePixel(VSOutput input, uint displayMode)
 {
     const float voxelSize = fieldOriginAndVoxelSize.z;
@@ -796,28 +859,20 @@ float4 ShadePixel(VSOutput input, uint displayMode)
     const bool highlightSelection = fieldInfo.z != 0;
     const bool hasSelection = fieldInfo.w != 0;
 
-    const float2 ndc = float2(input.uv.x * 2.0 - 1.0, 1.0 - input.uv.y * 2.0);
-    float4 farWorld = mul(float4(ndc, 1.0, 1.0), inverseViewProjection);
-    farWorld.xyz /= farWorld.w;
-
-    const float3 rayOrigin = cameraWorldPosition.xyz;
-    const float3 rayDirection = normalize(farWorld.xyz - rayOrigin);
-    const float3 skyColor = SkyColor(rayDirection);
+    const CameraRay ray = BuildCameraRay(input);
+    const float3 skyColor = SkyColor(ray.direction);
 
     float tEnter = 0.0;
     float tExit = 0.0;
-    const float3 fieldMin = float3(fieldOriginAndVoxelSize.x, 0.0, fieldOriginAndVoxelSize.y);
-    const float3 fieldMax = float3(
-        fieldOriginAndVoxelSize.x + fieldWidth * voxelSize,
-        maxColumnHeight,
-        fieldOriginAndVoxelSize.y + fieldDepth * voxelSize);
+    const float3 fieldMin = FieldMinimum(voxelSize);
+    const float3 fieldMax = FieldMaximum(voxelSize, maxColumnHeight);
 
-    if (!IntersectAabb(rayOrigin, rayDirection, fieldMin, fieldMax, tEnter, tExit))
+    if (!IntersectAabb(ray.origin, ray.direction, fieldMin, fieldMax, tEnter, tExit))
     {
         return float4(skyColor, 1.0);
     }
 
-    const TraceHitInfo hit = TraceFieldClosestHit(rayOrigin, rayDirection, voxelSize, tExit, displayMode);
+    const TraceHitInfo hit = TraceFieldClosestHit(ray.origin, ray.direction, voxelSize, tExit, displayMode);
     if (hit.hit == 0)
     {
         return float4(skyColor, 1.0);

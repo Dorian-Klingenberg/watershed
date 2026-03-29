@@ -1,0 +1,199 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1880" viewBox="0 0 1600 1880" role="img" aria-labelledby="title desc">
+  <title id="title">Grass Field 001 Sequence Diagram</title>
+  <desc id="desc">Sequence diagram for the grass-field-001 program covering startup, main loop, selection, erosion updates, and rendering.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#355c7d" />
+    </marker>
+    <style>
+      .bg { fill: #fbfcfe; }
+      .panel { fill: #ffffff; stroke: #d8e1ea; stroke-width: 2; rx: 12; }
+      .phase { fill: #eef4fb; stroke: #c5d8eb; stroke-width: 1.5; rx: 10; }
+      .head { fill: #edf3f8; stroke: #b8c8d8; stroke-width: 1.5; rx: 10; }
+      .life { stroke: #b8c8d8; stroke-width: 2; stroke-dasharray: 8 8; }
+      .msg { stroke: #355c7d; stroke-width: 2.4; marker-end: url(#arrow); fill: none; }
+      .return { stroke: #6d8ba7; stroke-width: 1.8; stroke-dasharray: 7 5; marker-end: url(#arrow); fill: none; }
+      .box { fill: #f7fafc; stroke: #d4dee8; stroke-width: 1.3; rx: 8; }
+      .note { fill: #fff9e8; stroke: #e6d7a6; stroke-width: 1.3; rx: 8; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #203040; }
+      .subtitle { font: 16px 'Segoe UI', Arial, sans-serif; fill: #486179; }
+      .label { font: 600 18px 'Segoe UI', Arial, sans-serif; fill: #22384d; }
+      .small { font: 14px 'Segoe UI', Arial, sans-serif; fill: #3c5368; }
+      .tiny { font: 13px 'Segoe UI', Arial, sans-serif; fill: #526b80; }
+      .mono { font: 13px Consolas, 'Courier New', monospace; fill: #27445f; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1600" height="1880" />
+
+  <text class="title" x="48" y="58">Grass Field 001 :: Program Sequence Overview</text>
+  <text class="subtitle" x="48" y="88">
+    Startup, app shell, shared sim state, message handling, selection, erosion stepping, and shader-side column rendering.
+  </text>
+
+  <rect class="phase" x="36" y="118" width="1528" height="400" />
+  <text class="label" x="56" y="150">Phase 1 :: Startup And Initialization</text>
+
+  <rect class="phase" x="36" y="538" width="1528" height="450" />
+  <text class="label" x="56" y="570">Phase 2 :: Main Loop And Per-Frame Render</text>
+
+  <rect class="phase" x="36" y="1008" width="1528" height="370" />
+  <text class="label" x="56" y="1040">Phase 3 :: Input, Picking, And Inspector Refresh</text>
+
+  <rect class="phase" x="36" y="1398" width="1528" height="410" />
+  <text class="label" x="56" y="1430">Phase 4 :: Erosion Step And Buffer Rebuild</text>
+
+  <g id="lifelines">
+    <rect class="head" x="70" y="180" width="160" height="56" />
+    <text class="label" x="114" y="214">User</text>
+
+    <rect class="head" x="290" y="180" width="180" height="56" />
+    <text class="label" x="340" y="214">WinMain</text>
+
+    <rect class="head" x="560" y="180" width="190" height="56" />
+    <text class="label" x="588" y="214">D3D12App</text>
+
+    <rect class="head" x="845" y="180" width="225" height="56" />
+    <text class="label" x="878" y="214">Win32 + D3D12</text>
+
+    <rect class="head" x="1140" y="180" width="220" height="56" />
+    <text class="label" x="1188" y="214">Shared Sim</text>
+
+    <rect class="head" x="1390" y="180" width="150" height="56" />
+    <text class="label" x="1432" y="214">GPU / Shader</text>
+
+    <line class="life" x1="150" y1="236" x2="150" y2="1830" />
+    <line class="life" x1="380" y1="236" x2="380" y2="1830" />
+    <line class="life" x1="655" y1="236" x2="655" y2="1830" />
+    <line class="life" x1="958" y1="236" x2="958" y2="1830" />
+    <line class="life" x1="1250" y1="236" x2="1250" y2="1830" />
+    <line class="life" x1="1465" y1="236" x2="1465" y2="1830" />
+  </g>
+
+  <g id="startup">
+    <path class="msg" d="M 150 280 L 380 280" />
+    <text class="small" x="190" y="270">launch executable</text>
+
+    <path class="msg" d="M 380 325 L 655 325" />
+    <text class="small" x="454" y="315">construct app and call <tspan class="mono">run()</tspan></text>
+
+    <path class="msg" d="M 655 370 L 655 410" />
+    <text class="small" x="678" y="394"><tspan class="mono">initialize()</tspan></text>
+
+    <path class="msg" d="M 655 455 L 958 455" />
+    <text class="small" x="726" y="445">register classes, create host + viewport windows, create UI</text>
+
+    <path class="msg" d="M 655 500 L 1250 500" />
+    <text class="small" x="822" y="490">construct <tspan class="mono">GrassField</tspan>, <tspan class="mono">GravityErosionField</tspan>, ownership, sparse patch field</text>
+
+    <path class="msg" d="M 655 545 L 958 545" />
+    <text class="small" x="748" y="535"><tspan class="mono">initialize_pipeline()</tspan> :: device, swap chain, heaps, command objects</text>
+
+    <path class="msg" d="M 655 590 L 958 590" />
+    <text class="small" x="742" y="580"><tspan class="mono">create_assets()</tspan> :: load precompiled shader blobs, root signature, 3 PSOs, buffers</text>
+
+    <path class="return" d="M 958 635 L 655 635" />
+    <text class="tiny" x="780" y="625">window + renderer ready</text>
+
+    <path class="msg" d="M 655 680 L 655 720" />
+    <text class="small" x="678" y="704"><tspan class="mono">rebuild_display_field_buffer()</tspan></text>
+
+    <path class="msg" d="M 655 765 L 1250 765" />
+    <text class="small" x="878" y="755">read current coarse field, erosion state, ownership, sparse refined patches</text>
+
+    <path class="msg" d="M 655 810 L 958 810" />
+    <text class="small" x="774" y="800">upload SRV buffers for field cells + refined patch lookup/metadata/heights</text>
+
+    <path class="msg" d="M 655 855 L 655 895" />
+    <text class="small" x="678" y="879"><tspan class="mono">refresh_info_panel()</tspan> + agent snapshot</text>
+
+    <path class="msg" d="M 655 940 L 958 940" />
+    <text class="small" x="787" y="930">show main window</text>
+
+    <rect class="note" x="1100" y="260" width="360" height="150" />
+    <text class="label" x="1120" y="290">Startup Notes</text>
+    <text class="tiny" x="1120" y="318">- Shader compilation now happens during the build, not here.</text>
+    <text class="tiny" x="1120" y="342">- Runtime startup only loads `.cso` blobs and creates PSOs.</text>
+    <text class="tiny" x="1120" y="366">- Shared sim state is authoritative; the viewport is just a consumer.</text>
+  </g>
+
+  <g id="frame-loop">
+    <rect class="box" x="88" y="610" width="140" height="30" />
+    <text class="tiny" x="108" y="630">while app is running</text>
+
+    <path class="msg" d="M 655 1085 L 655 1125" />
+    <text class="small" x="678" y="1109"><tspan class="mono">update()</tspan></text>
+    <text class="tiny" x="705" y="1134">camera matrices, selection info, render constants</text>
+
+    <path class="msg" d="M 655 1180 L 655 1220" />
+    <text class="small" x="678" y="1204"><tspan class="mono">render()</tspan></text>
+
+    <path class="msg" d="M 655 1265 L 958 1265" />
+    <text class="small" x="768" y="1255">reset command list using active PSO for current display mode</text>
+
+    <path class="msg" d="M 655 1310 L 958 1310" />
+    <text class="small" x="770" y="1300">bind root signature, constant buffer, SRV table, fullscreen triangle</text>
+
+    <path class="msg" d="M 958 1355 L 1465 1355" />
+    <text class="small" x="1100" y="1345">pixel shader raycasts column field / sparse refined patches / hybrid view</text>
+
+    <path class="return" d="M 1465 1400 L 958 1400" />
+    <text class="tiny" x="1184" y="1390">lit image with selection highlight, haze, shadows, AO, bounce light</text>
+
+    <path class="msg" d="M 958 1445 L 958 1485" />
+    <text class="small" x="982" y="1469">present swap chain</text>
+
+    <rect class="note" x="1120" y="1120" width="360" height="180" />
+    <text class="label" x="1140" y="1150">Render Notes</text>
+    <text class="tiny" x="1140" y="1178">- Coarse mode traces authored `1-foot` columns.</text>
+    <text class="tiny" x="1140" y="1202">- Refined mode descends only into promoted sparse inch patches.</text>
+    <text class="tiny" x="1140" y="1226">- Hybrid mode shows coarse-owned lower volume plus refined tops.</text>
+    <text class="tiny" x="1140" y="1250">- The renderer is still column-field based, not a full arbitrary voxel marcher.</text>
+  </g>
+
+  <g id="selection">
+    <path class="msg" d="M 150 1535 L 958 1535" />
+    <text class="small" x="386" y="1525">mouse click / drag / wheel / button command</text>
+
+    <path class="msg" d="M 958 1580 L 655 1580" />
+    <text class="small" x="765" y="1570"><tspan class="mono">handle_message()</tspan></text>
+
+    <path class="msg" d="M 655 1625 L 655 1665" />
+    <text class="small" x="678" y="1649">route input to camera, mode switch, clear, copy, or pick</text>
+
+    <path class="msg" d="M 655 1710 L 655 1750" />
+    <text class="small" x="678" y="1734"><tspan class="mono">try_pick_voxel()</tspan></text>
+
+    <path class="msg" d="M 655 1795 L 1250 1795" />
+    <text class="small" x="886" y="1785">read current display mode, ownership, refined patch data, and column heights</text>
+
+    <path class="return" d="M 1250 1840 L 655 1840" />
+    <text class="tiny" x="950" y="1830">selected voxel coordinates</text>
+
+    <path class="msg" d="M 655 1885 L 655 1925" />
+    <text class="small" x="678" y="1909"><tspan class="mono">refresh_info_panel()</tspan> + <tspan class="mono">build_agent_snapshot_text()</tspan></text>
+
+    <rect class="note" x="1020" y="1530" width="460" height="170" />
+    <text class="label" x="1040" y="1560">Inspector Notes</text>
+    <text class="tiny" x="1040" y="1588">- Selection is based on the currently displayed grid mode.</text>
+    <text class="tiny" x="1040" y="1612">- The host UI shows material, garden stats, ownership, and height data.</text>
+    <text class="tiny" x="1040" y="1636">- A local JSON snapshot is generated for AI-agent ingestion.</text>
+  </g>
+
+  <g id="erosion">
+    <path class="msg" d="M 150 1460 L 958 1460" />
+    <text class="small" x="430" y="1450"><tspan class="mono">Step Erosion</tspan> button or <tspan class="mono">E</tspan> key</text>
+
+    <path class="msg" d="M 958 1505 L 655 1505" />
+    <text class="small" x="772" y="1495"><tspan class="mono">handle_message()</tspan> → <tspan class="mono">step_erosion_cycle()</tspan></text>
+
+    <path class="msg" d="M 655 1550 L 1250 1550" />
+    <text class="small" x="840" y="1540">advance gravity settling, rebuild ownership field, rebuild sparse refined patches</text>
+
+    <path class="msg" d="M 655 1595 L 958 1595" />
+    <text class="small" x="747" y="1585">rebuild GPU field + refined patch buffers if the current view needs them</text>
+
+    <path class="msg" d="M 655 1640 L 655 1680" />
+    <text class="small" x="678" y="1664">refresh info panel and wait for next frame</text>
+  </g>
+</svg>

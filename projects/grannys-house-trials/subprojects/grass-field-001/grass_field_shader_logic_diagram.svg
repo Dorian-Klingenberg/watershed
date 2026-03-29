@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1160" viewBox="0 0 1680 1160">
+  <defs>
+    <style>
+      .title { font: 700 30px 'Segoe UI', Arial, sans-serif; fill: #18324a; }
+      .subtitle { font: 400 16px 'Segoe UI', Arial, sans-serif; fill: #4f6475; }
+      .section { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #20405d; }
+      .label { font: 700 16px 'Segoe UI', Arial, sans-serif; fill: #20405d; }
+      .body { font: 400 15px 'Segoe UI', Arial, sans-serif; fill: #2c3f52; }
+      .small { font: 400 13px 'Segoe UI', Arial, sans-serif; fill: #566b7d; }
+      .code { font: 700 14px Consolas, 'Courier New', monospace; fill: #1f4b7a; }
+      .box { fill: #ffffff; stroke: #b8c8d8; stroke-width: 2; rx: 16; ry: 16; }
+      .blue { fill: #eef6ff; stroke: #8bb8e8; }
+      .green { fill: #eefaf3; stroke: #8fcba0; }
+      .gold { fill: #fff8ea; stroke: #e1c27d; }
+      .rose { fill: #fff2f5; stroke: #e0a1b4; }
+      .note { fill: #f8fbfd; stroke: #d4e0ea; stroke-width: 2; rx: 12; ry: 12; }
+      .arrow { stroke: #58748f; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+      .dash { stroke: #93a9bc; stroke-width: 2; stroke-dasharray: 8 7; fill: none; marker-end: url(#arrowhead); }
+      .group { fill: #fbfdff; stroke: #d9e5ef; stroke-width: 2; rx: 20; ry: 20; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="8" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#58748f"/>
+    </marker>
+  </defs>
+
+  <rect width="1680" height="1160" fill="#f7fafc"/>
+
+  <text x="70" y="60" class="title">Grass Field 001 Shader Logic</text>
+  <text x="70" y="90" class="subtitle">Beginner view: each pixel asks “what do I see in this direction?” and the shader answers by tracing through the voxel field.</text>
+
+  <rect x="55" y="120" width="1570" height="970" class="group"/>
+
+  <rect x="90" y="165" width="220" height="110" class="box blue"/>
+  <text x="110" y="198" class="section">1. Inputs</text>
+  <text x="110" y="228" class="body">Camera matrices</text>
+  <text x="110" y="250" class="body">Sun direction</text>
+  <text x="110" y="272" class="body">Field / patch buffers</text>
+
+  <rect x="390" y="165" width="260" height="130" class="box blue"/>
+  <text x="410" y="198" class="section">2. Vertex Shader</text>
+  <text x="410" y="228" class="code">VSMain</text>
+  <text x="410" y="252" class="body">Creates one fullscreen triangle.</text>
+  <text x="410" y="274" class="body">No terrain mesh is emitted.</text>
+
+  <rect x="730" y="150" width="330" height="160" class="box green"/>
+  <text x="750" y="183" class="section">3. One Pixel Starts</text>
+  <text x="750" y="213" class="code">ShadePixel</text>
+  <text x="750" y="237" class="body">Take screen UV</text>
+  <text x="750" y="259" class="body">Unproject through camera</text>
+  <text x="750" y="281" class="body">Build a world-space ray</text>
+
+  <rect x="1140" y="165" width="420" height="130" class="box gold"/>
+  <text x="1160" y="198" class="section">Mental Model</text>
+  <text x="1160" y="228" class="body">“For this pixel, shoot a line from the camera</text>
+  <text x="1160" y="250" class="body">into the world and find the first thing it hits.”</text>
+
+  <path d="M310 220 L390 220" class="arrow"/>
+  <path d="M650 230 L730 230" class="arrow"/>
+  <path d="M1060 230 L1140 230" class="dash"/>
+
+  <rect x="110" y="355" width="1450" height="300" class="group"/>
+  <text x="130" y="392" class="section">4. Trace Through The World</text>
+
+  <rect x="145" y="425" width="255" height="170" class="box blue"/>
+  <text x="165" y="458" class="label">A. Enter field bounds</text>
+  <text x="165" y="485" class="code">IntersectAabb</text>
+  <text x="165" y="511" class="body">If the ray misses the whole world box,</text>
+  <text x="165" y="533" class="body">return sky immediately.</text>
+  <text x="165" y="563" class="small">Cheap rejection step.</text>
+
+  <rect x="460" y="425" width="285" height="170" class="box blue"/>
+  <text x="480" y="458" class="label">B. Walk coarse cells</text>
+  <text x="480" y="485" class="code">TraceFieldClosestHit</text>
+  <text x="480" y="511" class="body">Move cell-by-cell through the</text>
+  <text x="480" y="533" class="body">100 x 100 coarse column grid.</text>
+  <text x="480" y="563" class="small">This is the main traversal loop.</text>
+
+  <rect x="805" y="405" width="310" height="210" class="box green"/>
+  <text x="825" y="438" class="label">C. Choose display mode behavior</text>
+  <text x="825" y="468" class="body">Coarse:</text>
+  <text x="920" y="468" class="body">hit full 1-foot columns</text>
+  <text x="825" y="494" class="body">Refined:</text>
+  <text x="920" y="494" class="body">only descend into sparse promoted patches</text>
+  <text x="825" y="520" class="body">Hybrid:</text>
+  <text x="920" y="520" class="body">coarse first, then refine only mixed top blocks</text>
+  <text x="825" y="556" class="small">This is why the renderer can avoid a full</text>
+  <text x="825" y="577" class="small">1200 x 1200 fine-grid march.</text>
+
+  <rect x="1175" y="425" width="345" height="170" class="box rose"/>
+  <text x="1195" y="458" class="label">D. Refined patch descent</text>
+  <text x="1195" y="485" class="code">TraceRefinedPatchClosestHit</text>
+  <text x="1195" y="511" class="body">If a coarse cell has a promoted patch,</text>
+  <text x="1195" y="533" class="body">search inside that 12 x 12 inch detail area</text>
+  <text x="1195" y="555" class="body">for the nearest local hit.</text>
+
+  <path d="M400 510 L460 510" class="arrow"/>
+  <path d="M745 510 L805 510" class="arrow"/>
+  <path d="M1115 510 L1175 510" class="arrow"/>
+
+  <rect x="130" y="690" width="560" height="315" class="group"/>
+  <text x="150" y="727" class="section">5. Once A Surface Is Hit</text>
+
+  <rect x="165" y="760" width="235" height="95" class="box gold"/>
+  <text x="185" y="792" class="label">Material color</text>
+  <text x="185" y="818" class="code">MaterialColor</text>
+  <text x="185" y="842" class="body">Base grass / soil / brick / water color</text>
+
+  <rect x="430" y="760" width="220" height="95" class="box gold"/>
+  <text x="450" y="792" class="label">Direct sun</text>
+  <text x="450" y="818" class="body">Dot(surface normal, sun direction)</text>
+  <text x="450" y="842" class="body">gives basic brightness</text>
+
+  <rect x="165" y="880" width="235" height="95" class="box green"/>
+  <text x="185" y="912" class="label">Shadows</text>
+  <text x="185" y="938" class="code">ComputeSunVisibility</text>
+  <text x="185" y="962" class="body">Trace another ray toward the sun</text>
+
+  <rect x="430" y="880" width="220" height="95" class="box green"/>
+  <text x="450" y="912" class="label">Ambient occlusion</text>
+  <text x="450" y="938" class="code">ComputeAmbientOcclusion</text>
+  <text x="450" y="962" class="body">Sample nearby directions to see how enclosed it feels</text>
+
+  <rect x="750" y="690" width="420" height="315" class="group"/>
+  <text x="770" y="727" class="section">6. Extra Lighting</text>
+
+  <rect x="785" y="760" width="350" height="95" class="box rose"/>
+  <text x="805" y="792" class="label">Bounce lighting / color bleed</text>
+  <text x="805" y="818" class="code">ComputeBounceLighting</text>
+  <text x="805" y="842" class="body">Trace a few nearby rays, borrow some color from hit surfaces</text>
+
+  <rect x="785" y="880" width="350" height="95" class="box rose"/>
+  <text x="805" y="912" class="label">Sky fill + haze</text>
+  <text x="805" y="938" class="code">SkyColor</text>
+  <text x="805" y="962" class="body">Blend toward sky color with distance</text>
+
+  <rect x="1230" y="690" width="295" height="315" class="group"/>
+  <text x="1250" y="727" class="section">7. Final Styling</text>
+
+  <rect x="1265" y="760" width="225" height="95" class="box blue"/>
+  <text x="1285" y="792" class="label">Mode styling</text>
+  <text x="1285" y="818" class="code">ApplyDisplayModeStyling</text>
+  <text x="1285" y="842" class="body">Tint coarse / refined / hybrid differently</text>
+
+  <rect x="1265" y="880" width="225" height="95" class="box blue"/>
+  <text x="1285" y="912" class="label">Selection highlight</text>
+  <text x="1285" y="938" class="body">If the clicked voxel matches, emphasize it</text>
+
+  <path d="M560 595 L560 650 L280 650 L280 690" class="arrow"/>
+  <path d="M920 615 L920 690" class="arrow"/>
+  <path d="M1345 595 L1345 690" class="arrow"/>
+
+  <path d="M400 808 L430 808" class="arrow"/>
+  <path d="M400 928 L430 928" class="arrow"/>
+  <path d="M650 818 L785 818" class="arrow"/>
+  <path d="M650 928 L785 928" class="arrow"/>
+  <path d="M1135 818 L1265 818" class="arrow"/>
+  <path d="M1135 928 L1265 928" class="arrow"/>
+
+  <rect x="1320" y="210" width="250" height="72" class="note"/>
+  <text x="1340" y="240" class="small">A pixel shader runs once per pixel.</text>
+  <text x="1340" y="262" class="small">So this whole flow happens a lot.</text>
+
+  <rect x="110" y="1025" width="1410" height="50" class="note"/>
+  <text x="130" y="1056" class="body">Short version: the vertex shader only draws a screen-covering triangle. The pixel shader does the real work: make a ray, find the first terrain hit, compute lighting, then return a final color.</text>
+</svg>

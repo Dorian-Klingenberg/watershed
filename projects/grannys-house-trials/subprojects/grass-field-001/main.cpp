@@ -43,6 +43,9 @@ constexpr UINT frame_count = 2;
 constexpr float pi = 3.1415926535f;
 constexpr wchar_t main_window_class_name[] = L"GrannysHouseTrialsGrassField001";
 constexpr wchar_t viewport_window_class_name[] = L"GrannysHouseTrialsGrassFieldViewport";
+constexpr int default_field_width = 100;
+constexpr int default_field_depth = 100;
+constexpr float default_voxel_size_feet = 1.0f;
 
 enum ControlId : int
 {
@@ -254,6 +257,12 @@ void debug_log(std::string_view message)
 [[nodiscard]] std::wstring widen(std::string_view text)
 {
     return std::wstring(text.begin(), text.end());
+}
+
+[[nodiscard]] grannys_house_trials::gfx::OrbitCamera make_default_camera(int field_width, int field_depth)
+{
+    const float field_span = static_cast<float>(std::max(field_width, field_depth));
+    return grannys_house_trials::gfx::OrbitCamera{45.0f, 35.0f, std::max(140.0f, field_span * 1.15f)};
 }
 
 [[nodiscard]] std::string escape_json_string(std::string_view text)
@@ -491,6 +500,36 @@ struct SparseRefinedPatchGpuData
     return matrices;
 }
 
+[[nodiscard]] ComPtr<ID3D12Resource> create_upload_buffer(
+    ID3D12Device *device,
+    UINT64 byte_size,
+    const char *failure_message)
+{
+    D3D12_HEAP_PROPERTIES upload_heap{};
+    upload_heap.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+    D3D12_RESOURCE_DESC buffer_desc{};
+    buffer_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    buffer_desc.Width = std::max<UINT64>(byte_size, 4);
+    buffer_desc.Height = 1;
+    buffer_desc.DepthOrArraySize = 1;
+    buffer_desc.MipLevels = 1;
+    buffer_desc.SampleDesc.Count = 1;
+    buffer_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+    ComPtr<ID3D12Resource> buffer;
+    throw_if_failed(
+        device->CreateCommittedResource(
+            &upload_heap,
+            D3D12_HEAP_FLAG_NONE,
+            &buffer_desc,
+            D3D12_RESOURCE_STATE_GENERIC_READ,
+            nullptr,
+            IID_PPV_ARGS(&buffer)),
+        failure_message);
+    return buffer;
+}
+
 [[nodiscard]] bool try_intersect_aabb(
     const Ray &ray,
     const XMFLOAT3 &minimum,
@@ -566,6 +605,8 @@ private:
     [[nodiscard]] std::wstring build_agent_snapshot_text() const;
     [[nodiscard]] std::optional<VoxelSelection> try_pick_voxel(POINT client_point) const;
     void rebuild_display_field_buffer();
+    void ensure_field_buffer_capacity(UINT required_cells);
+    void ensure_refined_patch_buffer_capacity(UINT lookup_count, UINT patch_count, UINT height_count);
     void set_display_grid_mode(DisplayGridMode mode);
     void on_mouse_down(MouseState::DragMode drag_mode, LPARAM lparam);
     void on_mouse_up(MouseState::DragMode drag_mode, LPARAM lparam);
@@ -603,8 +644,8 @@ private:
     UINT width_ = 1280;
     UINT height_ = 720;
     MouseState mouse_{};
-    grannys_house_trials::gfx::OrbitCamera camera_{45.0f, 35.0f, 110.0f};
-    grannys_house_trials::sim::GrassField field_{100, 100, 1.0f};
+    grannys_house_trials::gfx::OrbitCamera camera_{make_default_camera(default_field_width, default_field_depth)};
+    grannys_house_trials::sim::GrassField field_{default_field_width, default_field_depth, default_voxel_size_feet};
     grannys_house_trials::sim::GravityErosionField erosion_field_{field_};
     grannys_house_trials::sim::AdaptiveTerrainOwnershipField ownership_field_{field_, erosion_field_};
     grannys_house_trials::sim::SparseRefinedPatchField refined_patch_field_{field_, erosion_field_, ownership_field_};
@@ -703,8 +744,6 @@ bool D3D12App::initialize(HINSTANCE instance)
 {
     debug_log("[grass-field-001] initialize begin");
     constexpr DWORD window_style = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
-    constexpr LONG desired_client_width = 1560;
-    constexpr LONG desired_client_height = 920;
 
     INITCOMMONCONTROLSEX common_controls{};
     common_controls.dwSize = sizeof(common_controls);
@@ -728,6 +767,8 @@ bool D3D12App::initialize(HINSTANCE instance)
     RegisterClassW(&viewport_class);
     debug_log("[grass-field-001] viewport window class registered");
 
+    constexpr LONG desired_client_width = 1560;
+    constexpr LONG desired_client_height = 920;
     RECT window_rect{0, 0, desired_client_width, desired_client_height};
     AdjustWindowRect(&window_rect, window_style, FALSE);
 
@@ -1052,86 +1093,38 @@ void D3D12App::create_assets()
     create_pipeline_state(hybrid_pixel_shader.Get(), hybrid_pipeline_state_, "hybrid");
     debug_log("[grass-field-001] pipeline states created");
 
-    const UINT coarse_field_cell_count = static_cast<UINT>(field_.cell_count());
-    const UINT fine_field_cell_count = static_cast<UINT>(
-        field_.width() * erosion_field_.patch_resolution() * field_.depth() * erosion_field_.patch_resolution());
-    field_buffer_capacity_cells_ = std::max(coarse_field_cell_count, fine_field_cell_count);
-    const UINT64 field_buffer_size = static_cast<UINT64>(field_buffer_capacity_cells_) * sizeof(GpuFieldCell);
-    refined_patch_lookup_capacity_ = coarse_field_cell_count;
-    refined_patch_capacity_ = coarse_field_cell_count;
-    refined_patch_height_capacity_ = refined_patch_capacity_ * static_cast<UINT>(
-        erosion_field_.patch_resolution() * erosion_field_.patch_resolution());
-    const UINT64 refined_patch_lookup_buffer_size =
-        static_cast<UINT64>(refined_patch_lookup_capacity_) * sizeof(std::int32_t);
-    const UINT64 refined_patch_metadata_buffer_size =
-        static_cast<UINT64>(refined_patch_capacity_) * sizeof(GpuRefinedPatchMetadata);
-    const UINT64 refined_patch_height_buffer_size =
-        static_cast<UINT64>(refined_patch_height_capacity_) * sizeof(std::uint32_t);
-
-    D3D12_HEAP_PROPERTIES upload_heap{};
-    upload_heap.Type = D3D12_HEAP_TYPE_UPLOAD;
-
-    D3D12_RESOURCE_DESC buffer_desc{};
-    buffer_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-    buffer_desc.Width = field_buffer_size;
-    buffer_desc.Height = 1;
-    buffer_desc.DepthOrArraySize = 1;
-    buffer_desc.MipLevels = 1;
-    buffer_desc.SampleDesc.Count = 1;
-    buffer_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-
-    throw_if_failed(
-        device_->CreateCommittedResource(
-            &upload_heap,
-            D3D12_HEAP_FLAG_NONE,
-            &buffer_desc,
-            D3D12_RESOURCE_STATE_GENERIC_READ,
-            nullptr,
-            IID_PPV_ARGS(&field_buffer_)),
+    field_buffer_capacity_cells_ = static_cast<UINT>(field_.cell_count());
+    field_buffer_ = create_upload_buffer(
+        device_.Get(),
+        static_cast<UINT64>(field_buffer_capacity_cells_) * sizeof(GpuFieldCell),
         "Could not create field buffer.");
 
-    buffer_desc.Width = refined_patch_lookup_buffer_size;
-    throw_if_failed(
-        device_->CreateCommittedResource(
-            &upload_heap,
-            D3D12_HEAP_FLAG_NONE,
-            &buffer_desc,
-            D3D12_RESOURCE_STATE_GENERIC_READ,
-            nullptr,
-            IID_PPV_ARGS(&refined_patch_lookup_buffer_)),
+    const UINT initial_lookup_count = static_cast<UINT>(field_.cell_count());
+    const UINT initial_patch_count = std::max(1, refined_patch_field_.patch_count());
+    const UINT initial_height_count = std::max(
+        1u,
+        initial_patch_count * static_cast<UINT>(refined_patch_field_.patch_resolution() * refined_patch_field_.patch_resolution()));
+
+    refined_patch_lookup_capacity_ = initial_lookup_count;
+    refined_patch_capacity_ = initial_patch_count;
+    refined_patch_height_capacity_ = initial_height_count;
+
+    refined_patch_lookup_buffer_ = create_upload_buffer(
+        device_.Get(),
+        static_cast<UINT64>(refined_patch_lookup_capacity_) * sizeof(std::int32_t),
         "Could not create refined patch lookup buffer.");
-
-    buffer_desc.Width = refined_patch_metadata_buffer_size;
-    throw_if_failed(
-        device_->CreateCommittedResource(
-            &upload_heap,
-            D3D12_HEAP_FLAG_NONE,
-            &buffer_desc,
-            D3D12_RESOURCE_STATE_GENERIC_READ,
-            nullptr,
-            IID_PPV_ARGS(&refined_patch_metadata_buffer_)),
+    refined_patch_metadata_buffer_ = create_upload_buffer(
+        device_.Get(),
+        static_cast<UINT64>(refined_patch_capacity_) * sizeof(GpuRefinedPatchMetadata),
         "Could not create refined patch metadata buffer.");
-
-    buffer_desc.Width = refined_patch_height_buffer_size;
-    throw_if_failed(
-        device_->CreateCommittedResource(
-            &upload_heap,
-            D3D12_HEAP_FLAG_NONE,
-            &buffer_desc,
-            D3D12_RESOURCE_STATE_GENERIC_READ,
-            nullptr,
-            IID_PPV_ARGS(&refined_patch_height_buffer_)),
+    refined_patch_height_buffer_ = create_upload_buffer(
+        device_.Get(),
+        static_cast<UINT64>(refined_patch_height_capacity_) * sizeof(std::uint32_t),
         "Could not create refined patch height buffer.");
 
-    buffer_desc.Width = (sizeof(SceneConstants) + 255) & ~255;
-    throw_if_failed(
-        device_->CreateCommittedResource(
-            &upload_heap,
-            D3D12_HEAP_FLAG_NONE,
-            &buffer_desc,
-            D3D12_RESOURCE_STATE_GENERIC_READ,
-            nullptr,
-            IID_PPV_ARGS(&constant_buffer_)),
+    constant_buffer_ = create_upload_buffer(
+        device_.Get(),
+        (sizeof(SceneConstants) + 255) & ~255,
         "Could not create constant buffer.");
 
     D3D12_RANGE read_range{0, 0};
@@ -1225,6 +1218,50 @@ int D3D12App::source_local_z_inches_for_display_z(int display_z) const noexcept
     return display_z % erosion_field_.patch_resolution();
 }
 
+void D3D12App::ensure_field_buffer_capacity(UINT required_cells)
+{
+    if (required_cells <= field_buffer_capacity_cells_)
+    {
+        return;
+    }
+
+    field_buffer_ = create_upload_buffer(
+        device_.Get(),
+        static_cast<UINT64>(required_cells) * sizeof(GpuFieldCell),
+        "Could not grow field buffer.");
+    field_buffer_capacity_cells_ = required_cells;
+}
+
+void D3D12App::ensure_refined_patch_buffer_capacity(UINT lookup_count, UINT patch_count, UINT height_count)
+{
+    if (lookup_count > refined_patch_lookup_capacity_)
+    {
+        refined_patch_lookup_buffer_ = create_upload_buffer(
+            device_.Get(),
+            static_cast<UINT64>(lookup_count) * sizeof(std::int32_t),
+            "Could not grow refined patch lookup buffer.");
+        refined_patch_lookup_capacity_ = lookup_count;
+    }
+
+    if (patch_count > refined_patch_capacity_)
+    {
+        refined_patch_metadata_buffer_ = create_upload_buffer(
+            device_.Get(),
+            static_cast<UINT64>(patch_count) * sizeof(GpuRefinedPatchMetadata),
+            "Could not grow refined patch metadata buffer.");
+        refined_patch_capacity_ = patch_count;
+    }
+
+    if (height_count > refined_patch_height_capacity_)
+    {
+        refined_patch_height_buffer_ = create_upload_buffer(
+            device_.Get(),
+            static_cast<UINT64>(height_count) * sizeof(std::uint32_t),
+            "Could not grow refined patch height buffer.");
+        refined_patch_height_capacity_ = height_count;
+    }
+}
+
 void D3D12App::rebuild_display_field_buffer()
 {
     debug_log("[grass-field-001] rebuild_display_field_buffer begin");
@@ -1263,6 +1300,12 @@ void D3D12App::rebuild_display_field_buffer()
     {
         wait_for_gpu();
     }
+
+    ensure_field_buffer_capacity(field_cell_count_);
+    ensure_refined_patch_buffer_capacity(
+        static_cast<UINT>(refined_patch_gpu_data.lookup.size()),
+        static_cast<UINT>(refined_patch_gpu_data.metadata.size()),
+        static_cast<UINT>(refined_patch_gpu_data.heights.size()));
 
     void *field_buffer_data = nullptr;
     D3D12_RANGE read_range{0, 0};
@@ -2697,7 +2740,7 @@ void D3D12App::on_mouse_wheel(WPARAM wparam)
 
 void D3D12App::reset_camera()
 {
-    camera_ = grannys_house_trials::gfx::OrbitCamera{45.0f, 35.0f, 110.0f};
+    camera_ = make_default_camera(field_.width(), field_.depth());
 }
 
 void D3D12App::step_erosion_cycle()
