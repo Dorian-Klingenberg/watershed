@@ -1,12 +1,19 @@
 # Grass Field 001
 
 This subproject is the first graphics-side harness for
-`Granny's House Trials`.
+`Granny's House Trials`, and it now also serves as the first real mechanic
+harness for the Granny's Yard drainage round.
+
+Canonical mission tie-in:
+
+> prove that a small, agent-friendly yard scenario can reveal hidden
+> infrastructure, record meaningful evidence, and support a real
+> drainage/repair round without losing the larger world-first identity
 
 It renders a simple `100 x 100` square of `1-foot` terrain voxels in a D3D12
 viewport hosted inside a standard Windows app shell so we can prove camera,
-lighting, terrain readability, and voxel inspection before the full Granny's
-Yard round exists.
+lighting, terrain readability, voxel inspection, and a small agent-facing
+yard mechanic inside one runnable.
 
 It intentionally reuses shared code:
 
@@ -16,6 +23,10 @@ It intentionally reuses shared code:
 - `sim::AdaptiveTerrainOwnershipField` decides which `1-foot` blocks are still
   fully coarse-owned and which upper blocks must be treated as refined
   inch-scale volume
+- `sim::GrannysYardScenario` owns the yard-scale drainage objective, hidden
+  dependency, legal actions, and factual evidence log
+- `playtest::TurnPacket` and `playtest::EvidenceBoardView` project that shared
+  sim state into agent-facing and UI-facing forms
 - `gfx::OrbitCamera` owns orbit camera behavior
 
 Renderer status:
@@ -57,6 +68,10 @@ The field now has:
 - sunlight plus distance haze to give the horizon a little more depth
 - click-to-inspect voxel selection with an in-window property panel
 - a copyable JSON snapshot for AI-agent ingestion based on the selected voxel
+- a shared Granny's Yard objective:
+  get water to the north bed without flooding the cellar edge or softening the path
+- target-aware scenario actions driven by the current selection
+- recent scenario events and evidence surfaced in the host UI
 
 Current controls:
 
@@ -68,6 +83,9 @@ Current controls:
 - `Step Erosion`: advance the inch-scale gravity settling simulation by one cycle
 - `Clear Selection`: clear the current voxel selection
 - `Display Grid`: choose between authored coarse, refined `1-inch` remainder, and hybrid adaptive views
+- `Run Target Action`: execute the currently selected legal action for the selected target
+- `Advance Round`: advance the shared drainage simulation one step
+- `Reset Round`: restore the scenario to its initial state
 - `Highlight Selected Voxel`: toggle the in-scene selection highlight
 - `Copy Agent JSON`: copy the current machine-readable voxel snapshot
 - `E`: step one erosion cycle from the keyboard
@@ -87,10 +105,15 @@ Host UI:
 - D3D viewport as a child window inside the app shell
 - selection details shown directly in the host window, including current
   erosion-cycle information and inch-scale height ranges
+- scenario details shown directly in the host window, including the current
+  objective, focused target, legal actions, recent events, evidence counts,
+  and round success/failure state
 - selection details now also show the hybrid ownership breakdown for the
   selected coarse column: how many `1-foot` blocks remain full/coarse and how
   many top blocks have been promoted to inch refinement
-- agent-facing JSON shown in the host window and copyable to the clipboard
+- agent-facing JSON shown in the host window and copyable to the clipboard,
+  now including objective text, focused target, legal actions, recent
+  evidence, recent events, and current round outcome flags
 
 Current erosion/render boundary:
 
@@ -109,5 +132,6 @@ Current erosion/render boundary:
 - the renderer is still operating on heightfield-like column grids, not yet on
   a fully general arbitrary voxel volume
 
-This subproject should stay focused on visual inspection and interaction.
-It should not grow its own copy of scenario logic, tester protocol, or scoring.
+This subproject should stay focused on visual inspection plus one small,
+shared-sim-driven yard mechanic. It should not grow its own copy of scenario
+logic, tester protocol, or scoring.

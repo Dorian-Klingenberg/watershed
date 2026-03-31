@@ -1,0 +1,88 @@
+{
+  "schema": "grannys_house_trials.agent_context.v1",
+  "project": "Granny's House Trials",
+  "mission": "Prove that a small, agent-friendly yard scenario can reveal hidden infrastructure, record meaningful evidence, and support a real drainage/repair round without losing the larger world-first identity.",
+  "north_star": [
+    "world first",
+    "systems first",
+    "hidden infrastructure",
+    "intervention under uncertainty",
+    "meaningful unintended consequences"
+  ],
+  "current_focus": [
+    "one deterministic drainage round",
+    "one hidden dependency",
+    "high-level agent actions",
+    "factual evidence capture",
+    "host-judged points later, not yet"
+  ],
+  "do_not_build_yet": [
+    "full arbitrary voxel marcher",
+    "cast dialogue and performance layers",
+    "host scoring UI",
+    "autonomous agent society",
+    "broad fluid solver",
+    "big settlement sim"
+  ],
+  "scenario": {
+    "name": "Granny's Yard drainage round",
+    "objective": "Deliver enough water to the north bed without soaking the cellar edge or softening the yard path.",
+    "hidden_dependency": "a buried cross-link from the drain mouth toward the cellar-side runoff path",
+    "visible_consequences": [
+      "garden moisture success or failure",
+      "cellar-edge flooding or dampness",
+      "path softening or damage",
+      "hidden dependency revealed"
+    ]
+  },
+  "agent_surface": {
+    "actions": [
+      "look",
+      "inspect_target",
+      "inspect_neighborhood",
+      "route_water_source",
+      "close_water_source",
+      "dig_shallow_channel",
+      "pack_flat_stone_run",
+      "pack_cellar_edge",
+      "advance_simulation",
+      "reset_round"
+    ],
+    "packet_contains": [
+      "objective",
+      "focused target",
+      "legal actions",
+      "recent evidence",
+      "recent events",
+      "objective_completed",
+      "objective_failed",
+      "hidden_dependency_revealed"
+    ]
+  },
+  "evidence_model": {
+    "record": [
+      "objective progress",
+      "hidden dependency revealed",
+      "collateral damage caused",
+      "ineffective action",
+      "successful corrective action",
+      "round success or failure"
+    ],
+    "score_policy": "system records facts; host awards points manually later"
+  },
+  "implementation_notes": [
+    "Keep the current D3D12 grass-field harness.",
+    "Use shared sim/playtest code for scenario truth and agent packets.",
+    "Treat the viewport as presentation, not the subject.",
+    "Keep shader/render novelty on pause unless it directly unblocks the mechanic."
+  ],
+  "canonical_docs": {
+    "root_readme": "README.md",
+    "status": "STATUS.md",
+    "project_brief": "PROJECT_BRIEF.md",
+    "milestones": "MILESTONES.md",
+    "scenario": "SCENARIO_001_GRANNYS_YARD.md",
+    "playtest_protocol": "PLAYTEST_PROTOCOL_V0.md",
+    "cast_and_scoring": "CAST_AND_SCORING.md"
+  }
+}

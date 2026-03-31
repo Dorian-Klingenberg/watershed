@@ -1,0 +1,37 @@
+{
+  "schema": "thegame.codex_bootstrap.v1",
+  "repo": "TheGame",
+  "purpose": "Fast, constrained Codex startup for Granny's House Trials and the broader ancient-infrastructure game work.",
+  "default_workflows": [
+    "read AGENTS.md",
+    "read projects/grannys-house-trials/AGENT_CONTEXT.json",
+    "read projects/grannys-house-trials/STATUS.md",
+    "read projects/grannys-house-trials/README.md",
+    "check docs/transactions.md before edits"
+  ],
+  "focused_context_files": [
+    "projects/grannys-house-trials/AGENT_CONTEXT.json",
+    "projects/grannys-house-trials/STATUS.md",
+    "projects/grannys-house-trials/PROJECT_BRIEF.md",
+    "projects/grannys-house-trials/README.md",
+    "projects/grannys-house-trials/subprojects/grass-field-001/README.md"
+  ],
+  "human_reference_files": [
+    "AGENTS.md",
+    "docs/gpt_context.md",
+    "docs/game_vision.md",
+    "docs/core_loops.md",
+    "docs/ancient_technology.md",
+    "docs/simulation_model.md"
+  ],
+  "load_policy": {
+    "mode": "narrow",
+    "notes": [
+      "Prefer the compact AGENT_CONTEXT.json for agent startup.",
+      "Do not load broad docs unless a task needs them.",
+      "Do not expand into unrelated experiments by default.",
+      "Check transactions before making structured repository changes."
+    ]
+  },
+  "mission": "Prove that a small, agent-friendly yard scenario can reveal hidden infrastructure, record meaningful evidence, and support a real drainage/repair round without losing the larger world-first identity."
+}

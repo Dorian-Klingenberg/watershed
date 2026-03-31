@@ -441,6 +441,16 @@ On startup the agent should:
 4. process pending transactions if present
 5. otherwise begin in ADVISOR + CREATIVE PARTNER mode
 
+Shell preference for agent tooling on this repo and this machine:
+
+- Prefer WSL/bash-equivalent shells for repository inspection, build, and test
+  commands when they are available.
+- Use Windows shells only when the task specifically requires Windows-native
+  behavior or the tool is explicitly Windows-only.
+- This is a practical reliability preference for the current mixed-toolchain
+  setup, not a statement that Windows is inherently unreliable.
+- If WSL is not available, continue with the best local shell.
+
 The project is assumed to still be **in discovery and design exploration**.
 
 ---

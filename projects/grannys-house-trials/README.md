@@ -9,6 +9,19 @@ Its job is to prove one combined idea:
 > development and entertaining because it is framed as a ridiculous
 > competition between recurring tester personalities
 
+## Canonical Mission
+
+**Mission:** prove that a small, agent-friendly yard scenario can reveal
+hidden infrastructure, record meaningful evidence, and support a real
+drainage/repair round without losing the larger world-first identity.
+
+Machine-readable context:
+
+- [AGENT_CONTEXT.json](/D:/Repos/Games/TheGame/projects/grannys-house-trials/AGENT_CONTEXT.json)
+
+Keep the prose docs human-friendly and keep `AGENT_CONTEXT.json` as the
+compact ingest target for agents.
+
 This is not the full game.
 This is not a throwaway experiment.
 It is a focused project intended to discover whether the "testing as show
@@ -91,7 +104,8 @@ The first round should likely center on a yard-scale water problem, such as
 getting water to garden beds without flooding the cellar edge or softening the
 path around the house.
 
-The first graphics-side proving slice is intentionally simpler:
+The first graphics-side proving slice is intentionally simpler, but it now also
+hosts the first real mechanic harness:
 
 - a `100 x 100` field of `1-foot` grass voxels
 - authored `1-inch` detail seed data plus a separate `sim::GravityErosionField`
@@ -105,6 +119,9 @@ The first graphics-side proving slice is intentionally simpler:
   garden-bed patch
 - inspectable by mouse so the viewer can surface shared voxel facts without
   building the whole game UI first
+- a shared Granny's Yard drainage scenario with target-aware legal actions,
+  recent evidence, and objective/failure state exposed through the host UI and
+  the agent packet
 
 Current renderer status:
 
@@ -125,6 +142,9 @@ Current renderer status:
 - the app now also tracks the intended hybrid ownership model: keep full
   `1-foot` blocks coarse, retire only the no-longer-full top blocks, and let
   inch-scale refinement own those mixed volumes
+- the same runnable now also hosts the first yard-scale drainage loop:
+  route water to the north bed without soaking the cellar edge or softening
+  the path, with target-aware actions and factual evidence capture
 - it is still not a complete arbitrary voxel ray marcher, cube marcher, or
   fully general shader-side voxel traversal renderer
 - a fuller arbitrary voxel traversal path is still intended, but has not been

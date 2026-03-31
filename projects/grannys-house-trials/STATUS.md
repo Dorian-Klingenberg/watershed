@@ -10,6 +10,16 @@ Its job is to separate:
 
 This should be kept current as the project evolves.
 
+## Canonical Mission
+
+**Mission:** prove that a small, agent-friendly yard scenario can reveal
+hidden infrastructure, record meaningful evidence, and support a real
+drainage/repair round without losing the larger world-first identity.
+
+Machine-readable context:
+
+- [AGENT_CONTEXT.json](/D:/Repos/Games/TheGame/projects/grannys-house-trials/AGENT_CONTEXT.json)
+
 ## Current Phase
 
 The project is currently:
@@ -20,8 +30,10 @@ The project is currently:
 In plain terms:
 
 - the terrain and rendering proving slice is real and fairly advanced
-- the shared scenario and playtest protocol types exist
-- the first full in-world testing round is not assembled yet
+- the shared scenario and playtest protocol types are now partially wired into
+  the runnable
+- the first full in-world testing round is still incomplete, but the first
+  real drainage mechanic loop now exists in the app
 
 ## Milestone Status
 
@@ -63,11 +75,22 @@ What is done:
 - gravity erosion stepping on the `1-inch` refinement layer
 - sparse refined patch ownership model
 - Granny's Yard scenario types in `sim`
+- a deterministic shared yard drainage mechanic with:
+  - one objective
+  - one hidden dependency
+  - visible garden / cellar / path consequences
+  - target-aware legal actions
+  - resettable round state
+- runnable UI controls for target actions, round advance, and round reset
+- agent packet output that now includes objective, focused target, legal
+  actions, recent evidence, recent events, and success/failure flags
 
 What is not done:
 
-- the actual yard-scale water-routing / drainage gameplay loop in the runnable
-- visible success / failure outcomes tied to a round objective
+- stronger visual world feedback for the round beyond the current moisture /
+  inspector overlays
+- a more complete action set beyond the first high-level route / dig / pack /
+  inspect loop
 
 ### Milestone 4: Evidence Board
 
@@ -77,10 +100,11 @@ What is done:
 
 - round-log and evidence-related sim/playtest types
 - tested protocol and evidence-board projections in shared code
+- host UI text now surfaces recent scenario events and evidence counts
 
 What is not done:
 
-- evidence-board UI in the main runnable
+- a more intentional evidence-board UI in the main runnable
 - end-of-round summary flow
 
 ### Milestone 5: Cast Layer
@@ -154,7 +178,6 @@ The strongest next step is:
 
 In practical terms, that likely means:
 
-- choose one concrete yard mechanic: water routing / drainage
-- expose a tiny set of legal actions in the app
-- surface evidence as the player/testers act
+- improve the readability and feedback of the existing water-routing round
+- surface evidence in a more deliberate board-style presentation
 - build the first host-judged round summary

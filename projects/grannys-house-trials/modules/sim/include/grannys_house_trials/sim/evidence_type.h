@@ -7,10 +7,14 @@ namespace grannys_house_trials::sim
 enum class EvidenceType
 {
     ObjectiveCompleted,
+    ObjectiveProgress,
+    ObjectiveFailed,
     HiddenDependencyRevealed,
     FailureReproduced,
     DiagnosisMade,
     CollateralDamage,
+    IneffectiveAction,
+    SuccessfulCorrectiveAction,
     ResetUsed,
     PredictionConfirmed,
     PredictionFailed,
@@ -24,6 +28,10 @@ enum class EvidenceType
     {
     case EvidenceType::ObjectiveCompleted:
         return "objective completed";
+    case EvidenceType::ObjectiveProgress:
+        return "objective progress";
+    case EvidenceType::ObjectiveFailed:
+        return "objective failed";
     case EvidenceType::HiddenDependencyRevealed:
         return "hidden dependency revealed";
     case EvidenceType::FailureReproduced:
@@ -32,6 +40,10 @@ enum class EvidenceType
         return "diagnosis made";
     case EvidenceType::CollateralDamage:
         return "collateral damage";
+    case EvidenceType::IneffectiveAction:
+        return "ineffective action";
+    case EvidenceType::SuccessfulCorrectiveAction:
+        return "successful corrective action";
     case EvidenceType::ResetUsed:
         return "reset used";
     case EvidenceType::PredictionConfirmed:

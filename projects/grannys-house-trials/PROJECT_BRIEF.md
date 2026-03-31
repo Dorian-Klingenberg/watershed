@@ -37,6 +37,10 @@ The project should prove:
 3. tester personalities can expose different truths about the same mechanic
 4. useful development insight can come from a structured in-world session
 
+Machine-readable agent context lives at:
+
+- [AGENT_CONTEXT.json](/D:/Repos/Games/TheGame/projects/grannys-house-trials/AGENT_CONTEXT.json)
+
 ## What This Project Is Not
 
 This project is not:

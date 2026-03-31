@@ -10,16 +10,6 @@ namespace grannys_house_trials::sim
 {
 namespace
 {
-[[nodiscard]] LegalAction make_move_action(std::string_view id, AnchorId destination)
-{
-    return LegalAction{
-        util::NonEmptyString(std::string(id)),
-        ActionKind::Move,
-        destination,
-        std::nullopt,
-    };
-}
-
 [[nodiscard]] LegalAction make_target_action(
     std::string_view id,
     ActionKind kind,
@@ -67,6 +57,25 @@ void record_evidence(
     round_log.record(item);
     outcome.evidence.push_back(std::move(item));
 }
+
+[[nodiscard]] AnchorId anchor_for_target(TargetId target) noexcept
+{
+    switch (target)
+    {
+    case TargetId::CellarEdge:
+        return AnchorId::CellarLip;
+    case TargetId::TerraceCut:
+        return AnchorId::TerraceCut;
+    case TargetId::DrainMouth:
+        return AnchorId::DrainMouth;
+    case TargetId::GardenBedNorth:
+        return AnchorId::GardenBedNorth;
+    case TargetId::FlatStoneRun:
+        return AnchorId::PathEdge;
+    }
+
+    return AnchorId::Porch;
+}
 } // namespace
 
 const GrannysYardState &GrannysYardScenario::state() const noexcept
@@ -85,6 +94,41 @@ void GrannysYardScenario::reset()
     round_log_ = RoundLog{};
 }
 
+void GrannysYardScenario::recompute_outcomes()
+{
+    state_.garden_bed_north_watered = false;
+    state_.cellar_edge_saturated = false;
+    state_.path_edge_softened = false;
+    state_.objective_completed = false;
+    state_.objective_failed = false;
+
+    if (!state_.drain_source_routed)
+    {
+        return;
+    }
+
+    if (!state_.terrace_channel_dug)
+    {
+        state_.path_edge_softened = !state_.flat_stone_packed;
+        return;
+    }
+
+    state_.garden_bed_north_watered = true;
+    state_.cellar_edge_saturated = state_.hidden_cross_link_active && !state_.cellar_edge_packed;
+    state_.path_edge_softened = !state_.flat_stone_packed;
+
+    if (state_.garden_bed_north_watered && !state_.cellar_edge_saturated && !state_.path_edge_softened)
+    {
+        state_.objective_completed = true;
+        return;
+    }
+
+    if (state_.garden_bed_north_watered && (state_.cellar_edge_saturated || state_.path_edge_softened))
+    {
+        state_.objective_failed = true;
+    }
+}
+
 std::vector<TargetStateTag> GrannysYardScenario::target_states(TargetId target) const
 {
     switch (target)
@@ -92,57 +136,57 @@ std::vector<TargetStateTag> GrannysYardScenario::target_states(TargetId target) 
     case TargetId::CellarEdge:
         if (state_.cellar_edge_saturated)
         {
-            return {
-                TargetStateTag::Wet,
-                TargetStateTag::Soft,
-                TargetStateTag::Unstable,
-            };
+            return {TargetStateTag::Wet, TargetStateTag::Soft, TargetStateTag::Unstable};
         }
 
-        return {
-            TargetStateTag::Damp,
-            TargetStateTag::Stable,
-        };
-    case TargetId::TerraceCut:
-        if (state_.terrace_cut_blocked)
+        if (state_.cellar_edge_packed)
         {
-            return {
-                TargetStateTag::Damp,
-                TargetStateTag::Blocked,
-            };
+            return {TargetStateTag::Damp, TargetStateTag::Stable};
         }
 
-        return {
-            TargetStateTag::Wet,
-            TargetStateTag::Flowing,
-        };
+        return {TargetStateTag::Damp, TargetStateTag::Stable};
+    case TargetId::TerraceCut:
+        if (state_.terrace_channel_dug)
+        {
+            return state_.drain_source_routed
+                ? std::vector<TargetStateTag>{TargetStateTag::Wet, TargetStateTag::Flowing}
+                : std::vector<TargetStateTag>{TargetStateTag::Damp, TargetStateTag::Stable};
+        }
+
+        return {TargetStateTag::Blocked, TargetStateTag::Damp};
     case TargetId::DrainMouth:
         if (state_.hidden_cross_link_revealed)
         {
-            return {
-                TargetStateTag::Damp,
-                TargetStateTag::Revealed,
-            };
+            return state_.drain_source_routed
+                ? std::vector<TargetStateTag>{TargetStateTag::Wet, TargetStateTag::Flowing, TargetStateTag::Revealed}
+                : std::vector<TargetStateTag>{TargetStateTag::Damp, TargetStateTag::Revealed};
         }
 
-        return {TargetStateTag::Damp};
+        return state_.drain_source_routed
+            ? std::vector<TargetStateTag>{TargetStateTag::Wet, TargetStateTag::Flowing}
+            : std::vector<TargetStateTag>{TargetStateTag::Damp};
     case TargetId::GardenBedNorth:
-        if (state_.garden_bed_north_watered)
-        {
-            return {TargetStateTag::Wet};
-        }
-
-        return {TargetStateTag::Dry};
+        return state_.garden_bed_north_watered
+            ? std::vector<TargetStateTag>{TargetStateTag::Wet}
+            : std::vector<TargetStateTag>{TargetStateTag::Dry};
     case TargetId::FlatStoneRun:
-        if (state_.hidden_cross_link_revealed)
+        if (state_.path_edge_softened)
         {
-            return {
-                TargetStateTag::Damp,
-                TargetStateTag::Revealed,
-            };
+            return state_.hidden_cross_link_revealed
+                ? std::vector<TargetStateTag>{TargetStateTag::Wet, TargetStateTag::Soft, TargetStateTag::Revealed}
+                : std::vector<TargetStateTag>{TargetStateTag::Wet, TargetStateTag::Soft};
         }
 
-        return {TargetStateTag::Stable};
+        if (state_.flat_stone_packed)
+        {
+            return state_.hidden_cross_link_revealed
+                ? std::vector<TargetStateTag>{TargetStateTag::Stable, TargetStateTag::Revealed}
+                : std::vector<TargetStateTag>{TargetStateTag::Stable};
+        }
+
+        return state_.hidden_cross_link_revealed
+            ? std::vector<TargetStateTag>{TargetStateTag::Damp, TargetStateTag::Revealed}
+            : std::vector<TargetStateTag>{TargetStateTag::Stable};
     }
 
     return {};
@@ -150,175 +194,57 @@ std::vector<TargetStateTag> GrannysYardScenario::target_states(TargetId target) 
 
 std::vector<VisibleTarget> GrannysYardScenario::visible_targets() const
 {
-    switch (state_.current_anchor)
-    {
-    case AnchorId::Porch:
-        return {
-            make_visible_target(
-                TargetId::GardenBedNorth,
-                TargetKind::GardenBed,
-                target_states(TargetId::GardenBedNorth)),
-            make_visible_target(
-                TargetId::CellarEdge,
-                TargetKind::GroundPatch,
-                target_states(TargetId::CellarEdge)),
-        };
-    case AnchorId::PathEdge:
-        return {
-            make_visible_target(
-                TargetId::TerraceCut,
-                TargetKind::Channel,
-                target_states(TargetId::TerraceCut)),
-            make_visible_target(
-                TargetId::FlatStoneRun,
-                TargetKind::StoneRun,
-                target_states(TargetId::FlatStoneRun)),
-            make_visible_target(
-                TargetId::CellarEdge,
-                TargetKind::GroundPatch,
-                target_states(TargetId::CellarEdge)),
-            make_visible_target(
-                TargetId::GardenBedNorth,
-                TargetKind::GardenBed,
-                target_states(TargetId::GardenBedNorth)),
-        };
-    case AnchorId::TerraceCut:
-        return {
-            make_visible_target(
-                TargetId::TerraceCut,
-                TargetKind::Channel,
-                target_states(TargetId::TerraceCut)),
-            make_visible_target(
-                TargetId::GardenBedNorth,
-                TargetKind::GardenBed,
-                target_states(TargetId::GardenBedNorth)),
-        };
-    case AnchorId::DrainMouth:
-        return {
-            make_visible_target(
-                TargetId::DrainMouth,
-                TargetKind::Drain,
-                target_states(TargetId::DrainMouth)),
-            make_visible_target(
-                TargetId::FlatStoneRun,
-                TargetKind::StoneRun,
-                target_states(TargetId::FlatStoneRun)),
-        };
-    case AnchorId::CellarLip:
-        return {
-            make_visible_target(
-                TargetId::CellarEdge,
-                TargetKind::GroundPatch,
-                target_states(TargetId::CellarEdge)),
-            make_visible_target(
-                TargetId::FlatStoneRun,
-                TargetKind::StoneRun,
-                target_states(TargetId::FlatStoneRun)),
-        };
-    case AnchorId::GardenBedNorth:
-        return {
-            make_visible_target(
-                TargetId::GardenBedNorth,
-                TargetKind::GardenBed,
-                target_states(TargetId::GardenBedNorth)),
-            make_visible_target(
-                TargetId::TerraceCut,
-                TargetKind::Channel,
-                target_states(TargetId::TerraceCut)),
-        };
-    }
-
-    return {};
+    return {
+        make_visible_target(TargetId::DrainMouth, TargetKind::Drain, target_states(TargetId::DrainMouth)),
+        make_visible_target(TargetId::TerraceCut, TargetKind::Channel, target_states(TargetId::TerraceCut)),
+        make_visible_target(TargetId::GardenBedNorth, TargetKind::GardenBed, target_states(TargetId::GardenBedNorth)),
+        make_visible_target(TargetId::FlatStoneRun, TargetKind::StoneRun, target_states(TargetId::FlatStoneRun)),
+        make_visible_target(TargetId::CellarEdge, TargetKind::GroundPatch, target_states(TargetId::CellarEdge)),
+    };
 }
 
-std::vector<LegalAction> GrannysYardScenario::legal_actions() const
+std::vector<LegalAction> GrannysYardScenario::legal_actions(std::optional<TargetId> focus) const
 {
     std::vector<LegalAction> actions;
     actions.push_back(make_simple_action("look", ActionKind::Look));
-    actions.push_back(make_simple_action("wait", ActionKind::Wait));
+    actions.push_back(make_simple_action("advance_simulation", ActionKind::AdvanceSimulation));
+    actions.push_back(make_simple_action("reset_round", ActionKind::ResetRound));
 
-    switch (state_.current_anchor)
+    if (!focus.has_value())
     {
-    case AnchorId::Porch:
-        actions.push_back(make_move_action("move_path_edge", AnchorId::PathEdge));
-        actions.push_back(make_move_action("move_cellar_lip", AnchorId::CellarLip));
-        actions.push_back(make_target_action(
-            "inspect_garden_bed_north",
-            ActionKind::Inspect,
-            TargetId::GardenBedNorth));
-        break;
-    case AnchorId::PathEdge:
-        actions.push_back(make_move_action("move_porch", AnchorId::Porch));
-        actions.push_back(make_move_action("move_terrace_cut", AnchorId::TerraceCut));
-        actions.push_back(make_move_action("move_drain_mouth", AnchorId::DrainMouth));
-        actions.push_back(make_move_action("move_cellar_lip", AnchorId::CellarLip));
-        actions.push_back(make_move_action("move_garden_bed_north", AnchorId::GardenBedNorth));
-        actions.push_back(make_target_action(
-            "inspect_terrace_cut",
-            ActionKind::Inspect,
-            TargetId::TerraceCut));
-        actions.push_back(make_target_action(
-            "inspect_flat_stone_run",
-            ActionKind::Inspect,
-            TargetId::FlatStoneRun));
-        actions.push_back(make_target_action(
-            "inspect_cellar_edge",
-            ActionKind::Inspect,
-            TargetId::CellarEdge));
-        break;
-    case AnchorId::TerraceCut:
-        actions.push_back(make_move_action("move_path_edge", AnchorId::PathEdge));
-        actions.push_back(make_target_action(
-            "inspect_terrace_cut",
-            ActionKind::Inspect,
-            TargetId::TerraceCut));
-        actions.push_back(make_target_action(
-            "inspect_garden_bed_north",
-            ActionKind::Inspect,
-            TargetId::GardenBedNorth));
+        return actions;
+    }
 
-        if (state_.terrace_cut_blocked)
+    actions.push_back(make_target_action("inspect_target", ActionKind::Inspect, *focus));
+    actions.push_back(make_target_action("inspect_neighborhood", ActionKind::InspectNeighborhood, *focus));
+
+    switch (*focus)
+    {
+    case TargetId::DrainMouth:
+        actions.push_back(make_target_action(
+            state_.drain_source_routed ? "close_water_source" : "route_water_source",
+            ActionKind::RouteWater,
+            *focus));
+        break;
+    case TargetId::TerraceCut:
+        if (!state_.terrace_channel_dug)
         {
-            actions.push_back(make_target_action(
-                "clear_blockage_terrace_cut",
-                ActionKind::ClearBlockage,
-                TargetId::TerraceCut));
+            actions.push_back(make_target_action("dig_shallow_channel", ActionKind::DigChannel, *focus));
         }
-
         break;
-    case AnchorId::DrainMouth:
-        actions.push_back(make_move_action("move_path_edge", AnchorId::PathEdge));
-        actions.push_back(make_target_action(
-            "inspect_drain_mouth",
-            ActionKind::Inspect,
-            TargetId::DrainMouth));
-        actions.push_back(make_target_action(
-            "inspect_flat_stone_run",
-            ActionKind::Inspect,
-            TargetId::FlatStoneRun));
+    case TargetId::CellarEdge:
+        if (!state_.cellar_edge_packed)
+        {
+            actions.push_back(make_target_action("pack_cellar_edge", ActionKind::PackSoil, *focus));
+        }
         break;
-    case AnchorId::CellarLip:
-        actions.push_back(make_move_action("move_path_edge", AnchorId::PathEdge));
-        actions.push_back(make_move_action("move_porch", AnchorId::Porch));
-        actions.push_back(make_target_action(
-            "inspect_cellar_edge",
-            ActionKind::Inspect,
-            TargetId::CellarEdge));
-        actions.push_back(make_target_action(
-            "inspect_flat_stone_run",
-            ActionKind::Inspect,
-            TargetId::FlatStoneRun));
+    case TargetId::FlatStoneRun:
+        if (!state_.flat_stone_packed)
+        {
+            actions.push_back(make_target_action("pack_flat_stone_run", ActionKind::PackSoil, *focus));
+        }
         break;
-    case AnchorId::GardenBedNorth:
-        actions.push_back(make_move_action("move_path_edge", AnchorId::PathEdge));
-        actions.push_back(make_target_action(
-            "inspect_garden_bed_north",
-            ActionKind::Inspect,
-            TargetId::GardenBedNorth));
-        actions.push_back(make_target_action(
-            "inspect_terrace_cut",
-            ActionKind::Inspect,
-            TargetId::TerraceCut));
+    case TargetId::GardenBedNorth:
         break;
     }
 
@@ -327,22 +253,22 @@ std::vector<LegalAction> GrannysYardScenario::legal_actions() const
 
 ActionOutcome GrannysYardScenario::apply_action(
     const util::NonEmptyString &actor,
-    std::string_view action_id)
+    std::string_view action_id,
+    std::optional<TargetId> focus)
 {
     ActionOutcome outcome{};
-    outcome.success = false;
+    const auto candidate_actions = legal_actions(focus);
 
-    const auto actions = legal_actions();
     const auto it = std::find_if(
-        actions.begin(),
-        actions.end(),
+        candidate_actions.begin(),
+        candidate_actions.end(),
         [action_id](const LegalAction &action) {
             return action.id.view() == action_id;
         });
 
-    if (it == actions.end())
+    if (it == candidate_actions.end())
     {
-        outcome.observations.push_back("That action is not currently legal from here.");
+        outcome.observations.push_back("That action is not currently legal.");
         return outcome;
     }
 
@@ -350,73 +276,27 @@ ActionOutcome GrannysYardScenario::apply_action(
     const LegalAction &action = *it;
     outcome.success = true;
 
+    if (focus.has_value())
+    {
+        state_.current_anchor = anchor_for_target(*focus);
+    }
+    else if (action.target.has_value())
+    {
+        state_.current_anchor = anchor_for_target(*action.target);
+    }
+
     switch (action.kind)
     {
     case ActionKind::Look:
-        switch (state_.current_anchor)
-        {
-        case AnchorId::Porch:
-            outcome.observations.push_back(
-                "From the porch, the north bed looks close enough to save if the water can be coaxed uphill.");
-            break;
-        case AnchorId::PathEdge:
-            outcome.observations.push_back(
-                "From the path edge, the terrace cut, flat stones, and cellar lip all feel tied to the same wet problem.");
-            break;
-        case AnchorId::TerraceCut:
-            outcome.observations.push_back(
-                state_.terrace_cut_blocked
-                    ? "The terrace cut is choked with silt and roots."
-                    : "Water threads through the terrace cut toward the north bed.");
-            break;
-        case AnchorId::DrainMouth:
-            outcome.observations.push_back(
-                "The drain mouth is older than the house around it and still smells faintly of cold runoff.");
-            break;
-        case AnchorId::CellarLip:
-            outcome.observations.push_back(
-                state_.cellar_edge_saturated
-                    ? "The cellar lip has gone dark and soft."
-                    : "The cellar lip is holding for now, but it already feels damp.");
-            break;
-        case AnchorId::GardenBedNorth:
-            outcome.observations.push_back(
-                state_.garden_bed_north_watered
-                    ? "The north bed glistens with enough water to keep the plants alive."
-                    : "The north bed is still too dry to count as a success.");
-            break;
-        }
-        break;
-    case ActionKind::Move:
-        state_.current_anchor = *action.destination;
         outcome.observations.push_back(
-            "Moved to " + std::string(to_string(state_.current_anchor)) + ".");
+            "The yard still wants the same thing: get water into the north bed without turning the cellar edge or path into the price.");
         break;
     case ActionKind::Inspect:
         switch (*action.target)
         {
-        case TargetId::GardenBedNorth:
-            outcome.observations.push_back(
-                state_.garden_bed_north_watered
-                    ? "The north bed has finally taken water."
-                    : "The north bed is dry enough that the roots still look stressed.");
-            break;
-        case TargetId::CellarEdge:
-            outcome.observations.push_back(
-                state_.cellar_edge_saturated
-                    ? "Water has crept into the cellar edge and softened the ground."
-                    : "The cellar edge is damp but not yet failing.");
-            break;
-        case TargetId::TerraceCut:
-            outcome.observations.push_back(
-                state_.terrace_cut_blocked
-                    ? "The terrace cut is visibly blocked with silt."
-                    : "The terrace cut is open and carrying water.");
-            break;
         case TargetId::DrainMouth:
             outcome.observations.push_back(
-                "Scouring around the drain mouth exposes stonework that does not belong to the house.");
-
+                "The drain mouth is stone-lined and older than the house built above it.");
             if (!state_.hidden_cross_link_revealed)
             {
                 state_.hidden_cross_link_revealed = true;
@@ -425,61 +305,247 @@ ActionOutcome GrannysYardScenario::apply_action(
                     outcome,
                     actor,
                     EvidenceType::HiddenDependencyRevealed,
-                    "The foundation drain is cross-linked to an older terrace conduit.");
+                    "Inspecting the drain mouth exposed a buried cross-link into the cellar-side runoff path.");
             }
-
+            break;
+        case TargetId::TerraceCut:
+            outcome.observations.push_back(
+                state_.terrace_channel_dug
+                    ? "The terrace cut is open enough to carry flow toward the bed."
+                    : "The terrace cut still needs a shallow guiding channel before it will carry water cleanly.");
+            break;
+        case TargetId::GardenBedNorth:
+            outcome.observations.push_back(
+                state_.garden_bed_north_watered
+                    ? "The north bed is finally holding moisture."
+                    : "The north bed is still too dry to count as a win.");
             break;
         case TargetId::FlatStoneRun:
             outcome.observations.push_back(
                 state_.hidden_cross_link_revealed
-                    ? "The flat stones now read like a cover over older runoff geometry."
-                    : "Water can be heard somewhere below the flat stones, but the route is still unclear.");
+                    ? "The flat stones cover a cross-route that can dump runoff toward the house unless it is packed."
+                    : "The flat stones sound hollow under the runoff, but the route below is still ambiguous.");
+            break;
+        case TargetId::CellarEdge:
+            outcome.observations.push_back(
+                state_.cellar_edge_saturated
+                    ? "The cellar edge has gone dark and soft."
+                    : state_.cellar_edge_packed
+                        ? "The cellar edge has been packed and should resist a stray wet pulse."
+                        : "The cellar edge is vulnerable if the old cross-link starts feeding it.");
             break;
         }
         break;
-    case ActionKind::ClearBlockage:
-        if (*action.target == TargetId::TerraceCut && state_.terrace_cut_blocked)
+    case ActionKind::InspectNeighborhood:
+        switch (*action.target)
         {
-            state_.terrace_cut_blocked = false;
-            state_.garden_bed_north_watered = true;
-            state_.cellar_edge_saturated = true;
-            state_.path_edge_softened = true;
-
+        case TargetId::DrainMouth:
+        case TargetId::FlatStoneRun:
             outcome.observations.push_back(
-                "Water breaks through the terrace cut and reaches the north bed.");
+                "Taken together, the drain mouth and stone run suggest the yard still obeys an older drainage geometry than the visible house plan.");
+            if (!state_.hidden_cross_link_revealed)
+            {
+                state_.hidden_cross_link_revealed = true;
+                record_evidence(
+                    round_log_,
+                    outcome,
+                    actor,
+                    EvidenceType::HiddenDependencyRevealed,
+                    "Neighborhood inspection connected the drain mouth to the concealed cellar-side runoff path.");
+            }
+            break;
+        case TargetId::TerraceCut:
             outcome.observations.push_back(
-                "A darker wet line spreads toward the cellar edge while the path begins to soften.");
-
+                "The terrace cut, drain mouth, and north bed line up as one water route if someone is willing to shape it.");
+            break;
+        case TargetId::GardenBedNorth:
+            outcome.observations.push_back(
+                "The north bed sits high enough that it will need guided flow instead of just loose flooding.");
+            break;
+        case TargetId::CellarEdge:
+            outcome.observations.push_back(
+                "The cellar edge lies in the wrong place to tolerate any surprise runoff from the buried cross-link.");
+            break;
+        }
+        break;
+    case ActionKind::RouteWater:
+        state_.drain_source_routed = !state_.drain_source_routed;
+        outcome.observations.push_back(
+            state_.drain_source_routed
+                ? "The drain mouth has been opened to feed the yard."
+                : "The drain mouth has been shut back down.");
+        break;
+    case ActionKind::DigChannel:
+        state_.terrace_channel_dug = true;
+        outcome.observations.push_back(
+            "A shallow channel now connects the terrace cut toward the north bed.");
+        record_evidence(
+            round_log_,
+            outcome,
+            actor,
+            EvidenceType::ObjectiveProgress,
+            "A guiding channel was dug from the terrace cut toward the north bed.");
+        break;
+    case ActionKind::PackSoil:
+        if (*action.target == TargetId::FlatStoneRun)
+        {
+            state_.flat_stone_packed = true;
+            state_.hidden_cross_link_active = false;
+            outcome.observations.push_back(
+                "Packing the flat stone run chokes off the buried cross-link before it can leak toward the house.");
             record_evidence(
                 round_log_,
                 outcome,
                 actor,
-                EvidenceType::ObjectiveCompleted,
-                "Water reached the north garden bed.");
+                EvidenceType::SuccessfulCorrectiveAction,
+                "Packing the flat stone run shut down the buried cross-link.");
+        }
+        else if (*action.target == TargetId::CellarEdge)
+        {
+            state_.cellar_edge_packed = true;
+            outcome.observations.push_back(
+                "The cellar edge has been packed to better resist stray wetting.");
+            record_evidence(
+                round_log_,
+                outcome,
+                actor,
+                EvidenceType::SuccessfulCorrectiveAction,
+                "Packing the cellar edge hardened the most vulnerable ground beside the house.");
+        }
+        else
+        {
+            outcome.success = false;
+            outcome.observations.push_back("There is no useful packing work to do at that target.");
+        }
+        break;
+    case ActionKind::AdvanceSimulation:
+    {
+        const bool garden_was_watered = state_.garden_bed_north_watered;
+        const bool cellar_was_saturated = state_.cellar_edge_saturated;
+        const bool path_was_softened = state_.path_edge_softened;
+        const bool objective_was_completed = state_.objective_completed;
+        const bool objective_was_failed = state_.objective_failed;
+
+        state_.simulation_step_count += 1;
+        recompute_outcomes();
+
+        if (!state_.drain_source_routed)
+        {
+            outcome.observations.push_back("Without routed water, the yard state does not meaningfully change.");
+            record_evidence(
+                round_log_,
+                outcome,
+                actor,
+                EvidenceType::IneffectiveAction,
+                "A simulation step was advanced before any water source was routed.");
+            break;
+        }
+
+        if (!state_.terrace_channel_dug)
+        {
+            outcome.observations.push_back(
+                "Water wanders out of the source but never reaches the north bed cleanly.");
+            if (!path_was_softened && state_.path_edge_softened)
+            {
+                record_evidence(
+                    round_log_,
+                    outcome,
+                    actor,
+                    EvidenceType::FailureReproduced,
+                    "Routing water without a guiding terrace channel softened the path instead of watering the bed.");
+            }
+            else
+            {
+                record_evidence(
+                    round_log_,
+                    outcome,
+                    actor,
+                    EvidenceType::IneffectiveAction,
+                    "Water was routed before the terrace channel was dug.");
+            }
+            break;
+        }
+
+        if (!garden_was_watered && state_.garden_bed_north_watered)
+        {
+            outcome.observations.push_back("Water reaches the north bed.");
+            record_evidence(
+                round_log_,
+                outcome,
+                actor,
+                EvidenceType::ObjectiveProgress,
+                "Water reached the north bed during the simulation step.");
+        }
+
+        if (!cellar_was_saturated && state_.cellar_edge_saturated)
+        {
+            outcome.observations.push_back("The cellar edge darkens as the cross-link feeds runoff back toward the house.");
             record_evidence(
                 round_log_,
                 outcome,
                 actor,
                 EvidenceType::CollateralDamage,
-                "The cellar edge darkened and the path softened after the cut was cleared.");
-        }
-        else
-        {
-            outcome.success = false;
-            outcome.observations.push_back("There is no blockage here that can be cleared.");
+                "Runoff saturated the cellar edge.");
         }
 
-        break;
-    case ActionKind::Wait:
-        if (state_.garden_bed_north_watered)
+        if (!path_was_softened && state_.path_edge_softened)
+        {
+            outcome.observations.push_back("The yard path softens under the redirected water.");
+            record_evidence(
+                round_log_,
+                outcome,
+                actor,
+                EvidenceType::CollateralDamage,
+                "Runoff softened the yard path.");
+        }
+
+        if (!objective_was_completed && state_.objective_completed)
         {
             outcome.observations.push_back(
-                "Water keeps working through the yard, and the cellar edge does not look any happier.");
+                "The yard now satisfies the objective: the bed is wet and the collateral damage stayed under control.");
+            record_evidence(
+                round_log_,
+                outcome,
+                actor,
+                EvidenceType::ObjectiveCompleted,
+                "The north bed was watered without soaking the cellar edge or softening the path.");
         }
-        else
+        else if (!objective_was_failed && state_.objective_failed)
         {
-            outcome.observations.push_back("Nothing improves on its own.");
+            outcome.observations.push_back(
+                "The bed takes water, but the yard pays for it elsewhere.");
+            record_evidence(
+                round_log_,
+                outcome,
+                actor,
+                EvidenceType::ObjectiveFailed,
+                "Water reached the bed, but collateral damage made the round a failure.");
         }
+
+        if (outcome.observations.empty())
+        {
+            outcome.observations.push_back("The routed water continues along the current path.");
+        }
+        break;
+    }
+    case ActionKind::ResetRound:
+        reset();
+        outcome.observations.push_back("The yard has been reset to its initial test state.");
+        record_evidence(
+            round_log_,
+            outcome,
+            actor,
+            EvidenceType::ResetUsed,
+            "The round was reset.");
+        break;
+    case ActionKind::Wait:
+        outcome.observations.push_back("Waiting does not help the yard learn anything new.");
+        record_evidence(
+            round_log_,
+            outcome,
+            actor,
+            EvidenceType::IneffectiveAction,
+            "Time was advanced without a useful intervention.");
         break;
     }
 

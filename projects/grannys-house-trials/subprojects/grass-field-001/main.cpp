@@ -12,6 +12,8 @@
 
 #include "grannys_house_trials/sim/adaptive_terrain_ownership_field.h"
 #include "grannys_house_trials/gfx/orbit_camera.h"
+#include "grannys_house_trials/playtest/evidence_board_view.h"
+#include "grannys_house_trials/playtest/turn_packet.h"
 #include "grannys_house_trials/sim/gravity_erosion_field.h"
 #include "grannys_house_trials/sim/grass_field.h"
 #include "grannys_house_trials/sim/sparse_refined_patch_field.h"
@@ -55,6 +57,10 @@ enum ControlId : int
     control_id_copy_agent_snapshot = 1004,
     control_id_step_erosion = 1005,
     control_id_display_grid_combo = 1006,
+    control_id_scenario_action_combo = 1007,
+    control_id_run_action = 1008,
+    control_id_advance_round = 1009,
+    control_id_reset_round = 1010,
 };
 
 enum class DisplayGridMode
@@ -160,6 +166,60 @@ struct GpuRefinedPatchMetadata
     }
 
     return "unknown display grid";
+}
+
+[[nodiscard]] constexpr std::string_view tester_role_name(grannys_house_trials::playtest::TesterRole role) noexcept
+{
+    using grannys_house_trials::playtest::TesterRole;
+
+    switch (role)
+    {
+    case TesterRole::Builder:
+        return "Builder";
+    case TesterRole::ChaosTester:
+        return "Chaos Tester";
+    case TesterRole::SystemsAuditor:
+        return "Systems Auditor";
+    }
+
+    return "Unknown";
+}
+
+[[nodiscard]] bool is_in_rect(int x, int z, int min_x, int max_x, int min_z, int max_z) noexcept
+{
+    return x >= min_x && x <= max_x && z >= min_z && z <= max_z;
+}
+
+[[nodiscard]] std::optional<grannys_house_trials::sim::TargetId> scenario_target_for_cell(int x, int z)
+{
+    using grannys_house_trials::sim::TargetId;
+
+    if (is_in_rect(x, z, 87, 92, 36, 41))
+    {
+        return TargetId::DrainMouth;
+    }
+
+    if (is_in_rect(x, z, 73, 76, 42, 50))
+    {
+        return TargetId::TerraceCut;
+    }
+
+    if (is_in_rect(x, z, 76, 92, 36, 54))
+    {
+        return TargetId::GardenBedNorth;
+    }
+
+    if (is_in_rect(x, z, 60, 88, 60, 62))
+    {
+        return TargetId::FlatStoneRun;
+    }
+
+    if (is_in_rect(x, z, 60, 72, 55, 58))
+    {
+        return TargetId::CellarEdge;
+    }
+
+    return std::nullopt;
 }
 
 [[nodiscard]] constexpr std::string_view terrain_volume_ownership_name(
@@ -340,6 +400,7 @@ void debug_log(std::string_view message)
 
 [[nodiscard]] std::vector<GpuFieldCell> build_coarse_field_buffer_data(
     const grannys_house_trials::sim::GrassField &field,
+    const grannys_house_trials::sim::GrannysYardScenario &scenario,
     float &max_column_height_voxels)
 {
     std::vector<GpuFieldCell> cells;
@@ -352,7 +413,7 @@ void debug_log(std::string_view message)
         {
             const auto &cell = field.at(x, z);
             max_column_height_voxels = std::max(max_column_height_voxels, static_cast<float>(cell.column_height_voxels));
-            cells.push_back(GpuFieldCell{
+            GpuFieldCell gpu_cell{
                 .column_height_voxels = static_cast<float>(cell.column_height_voxels),
                 .material = static_cast<std::uint32_t>(cell.material),
                 .is_homestead_pad = cell.is_homestead_pad ? 1u : 0u,
@@ -362,7 +423,30 @@ void debug_log(std::string_view message)
                 .sunlight = cell.garden.sunlight,
                 .weed_pressure = cell.garden.weed_pressure,
                 .coarse_full_height_voxels = static_cast<float>(cell.column_height_voxels),
-            });
+            };
+
+            const auto target = scenario_target_for_cell(x, z);
+            if (target == grannys_house_trials::sim::TargetId::GardenBedNorth && scenario.state().garden_bed_north_watered)
+            {
+                gpu_cell.soil_moisture = 0.95f;
+                gpu_cell.fertility = std::max(gpu_cell.fertility, 0.94f);
+            }
+            else if (target == grannys_house_trials::sim::TargetId::CellarEdge && scenario.state().cellar_edge_saturated)
+            {
+                gpu_cell.material = static_cast<std::uint32_t>(grannys_house_trials::sim::TerrainMaterial::WetSoil);
+                gpu_cell.soil_moisture = 0.98f;
+            }
+            else if (target == grannys_house_trials::sim::TargetId::FlatStoneRun && scenario.state().path_edge_softened)
+            {
+                gpu_cell.soil_moisture = 0.88f;
+                gpu_cell.weed_pressure = std::max(gpu_cell.weed_pressure, 0.20f);
+            }
+            else if (target == grannys_house_trials::sim::TargetId::DrainMouth && scenario.state().drain_source_routed)
+            {
+                gpu_cell.soil_moisture = 1.00f;
+            }
+
+            cells.push_back(gpu_cell);
         }
     }
 
@@ -371,6 +455,7 @@ void debug_log(std::string_view message)
 
 [[nodiscard]] std::vector<GpuFieldCell> build_hybrid_field_buffer_data(
     const grannys_house_trials::sim::GrassField &field,
+    const grannys_house_trials::sim::GrannysYardScenario &scenario,
     const grannys_house_trials::sim::AdaptiveTerrainOwnershipField &ownership_field,
     float &max_column_height_voxels)
 {
@@ -387,7 +472,7 @@ void debug_log(std::string_view message)
             const int coarse_full_block_count = ownership_field.full_block_count_at(coarse_x, coarse_z);
 
             max_column_height_voxels = std::max(max_column_height_voxels, static_cast<float>(highest_non_empty_block_count));
-            cells.push_back(GpuFieldCell{
+            GpuFieldCell gpu_cell{
                 .column_height_voxels = static_cast<float>(highest_non_empty_block_count),
                 .material = static_cast<std::uint32_t>(coarse_cell.material),
                 .is_homestead_pad = coarse_cell.is_homestead_pad ? 1u : 0u,
@@ -397,7 +482,28 @@ void debug_log(std::string_view message)
                 .sunlight = coarse_cell.garden.sunlight,
                 .weed_pressure = coarse_cell.garden.weed_pressure,
                 .coarse_full_height_voxels = static_cast<float>(coarse_full_block_count),
-            });
+            };
+
+            const auto target = scenario_target_for_cell(coarse_x, coarse_z);
+            if (target == grannys_house_trials::sim::TargetId::GardenBedNorth && scenario.state().garden_bed_north_watered)
+            {
+                gpu_cell.soil_moisture = 0.95f;
+            }
+            else if (target == grannys_house_trials::sim::TargetId::CellarEdge && scenario.state().cellar_edge_saturated)
+            {
+                gpu_cell.material = static_cast<std::uint32_t>(grannys_house_trials::sim::TerrainMaterial::WetSoil);
+                gpu_cell.soil_moisture = 0.98f;
+            }
+            else if (target == grannys_house_trials::sim::TargetId::FlatStoneRun && scenario.state().path_edge_softened)
+            {
+                gpu_cell.soil_moisture = 0.88f;
+            }
+            else if (target == grannys_house_trials::sim::TargetId::DrainMouth && scenario.state().drain_source_routed)
+            {
+                gpu_cell.soil_moisture = 1.00f;
+            }
+
+            cells.push_back(gpu_cell);
         }
     }
 
@@ -604,6 +710,12 @@ private:
     void refresh_info_panel();
     [[nodiscard]] std::wstring build_agent_snapshot_text() const;
     [[nodiscard]] std::optional<VoxelSelection> try_pick_voxel(POINT client_point) const;
+    [[nodiscard]] std::optional<grannys_house_trials::sim::TargetId> selected_scenario_target() const;
+    [[nodiscard]] std::vector<grannys_house_trials::sim::LegalAction> scenario_actions_for_selection() const;
+    [[nodiscard]] grannys_house_trials::playtest::TurnPacket current_turn_packet() const;
+    void refresh_scenario_action_ui();
+    void run_selected_scenario_action();
+    void run_scenario_action(std::string_view action_id);
     void rebuild_display_field_buffer();
     void ensure_field_buffer_capacity(UINT required_cells);
     void ensure_refined_patch_buffer_capacity(UINT lookup_count, UINT patch_count, UINT height_count);
@@ -640,6 +752,11 @@ private:
     HWND display_grid_combo_ = nullptr;
     HWND highlight_checkbox_ = nullptr;
     HWND copy_agent_snapshot_button_ = nullptr;
+    HWND scenario_group_ = nullptr;
+    HWND scenario_action_combo_ = nullptr;
+    HWND run_action_button_ = nullptr;
+    HWND advance_round_button_ = nullptr;
+    HWND reset_round_button_ = nullptr;
     HWND info_panel_ = nullptr;
     UINT width_ = 1280;
     UINT height_ = 720;
@@ -649,10 +766,13 @@ private:
     grannys_house_trials::sim::GravityErosionField erosion_field_{field_};
     grannys_house_trials::sim::AdaptiveTerrainOwnershipField ownership_field_{field_, erosion_field_};
     grannys_house_trials::sim::SparseRefinedPatchField refined_patch_field_{field_, erosion_field_, ownership_field_};
+    grannys_house_trials::sim::GrannysYardScenario scenario_{};
     DisplayGridMode display_grid_mode_ = DisplayGridMode::coarse_foot_columns;
     std::optional<VoxelSelection> selected_voxel_;
     bool highlight_selection_ = true;
+    grannys_house_trials::playtest::TesterRole active_tester_role_ = grannys_house_trials::playtest::TesterRole::Builder;
     std::wstring latest_agent_snapshot_;
+    std::vector<std::string> recent_scenario_events_{};
     HFONT ui_font_ = nullptr;
     HFONT info_font_ = nullptr;
 
@@ -1272,15 +1392,15 @@ void D3D12App::rebuild_display_field_buffer()
 
     if (display_grid_mode_ == DisplayGridMode::coarse_foot_columns)
     {
-        display_cells = build_coarse_field_buffer_data(field_, max_column_height_voxels);
+        display_cells = build_coarse_field_buffer_data(field_, scenario_, max_column_height_voxels);
     }
     else if (display_grid_mode_ == DisplayGridMode::erosion_inch_columns)
     {
-        display_cells = build_coarse_field_buffer_data(field_, max_column_height_voxels);
+        display_cells = build_coarse_field_buffer_data(field_, scenario_, max_column_height_voxels);
     }
     else
     {
-        display_cells = build_hybrid_field_buffer_data(field_, ownership_field_, max_column_height_voxels);
+        display_cells = build_hybrid_field_buffer_data(field_, scenario_, ownership_field_, max_column_height_voxels);
     }
 
     if (display_grid_mode_ != DisplayGridMode::coarse_foot_columns)
@@ -1589,6 +1709,76 @@ void D3D12App::create_ui()
         app_instance,
         nullptr);
 
+    scenario_group_ = CreateWindowExW(
+        0,
+        L"BUTTON",
+        L"Scenario",
+        WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
+        0,
+        0,
+        0,
+        0,
+        hwnd_,
+        nullptr,
+        app_instance,
+        nullptr);
+
+    scenario_action_combo_ = CreateWindowExW(
+        0,
+        WC_COMBOBOXW,
+        L"",
+        WS_CHILD | WS_VISIBLE | WS_VSCROLL | CBS_DROPDOWNLIST,
+        0,
+        0,
+        0,
+        0,
+        hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(control_id_scenario_action_combo)),
+        app_instance,
+        nullptr);
+
+    run_action_button_ = CreateWindowExW(
+        0,
+        L"BUTTON",
+        L"Run Target Action",
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        0,
+        0,
+        0,
+        0,
+        hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(control_id_run_action)),
+        app_instance,
+        nullptr);
+
+    advance_round_button_ = CreateWindowExW(
+        0,
+        L"BUTTON",
+        L"Advance Round",
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        0,
+        0,
+        0,
+        0,
+        hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(control_id_advance_round)),
+        app_instance,
+        nullptr);
+
+    reset_round_button_ = CreateWindowExW(
+        0,
+        L"BUTTON",
+        L"Reset Round",
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        0,
+        0,
+        0,
+        0,
+        hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(control_id_reset_round)),
+        app_instance,
+        nullptr);
+
     selection_group_ = CreateWindowExW(
         0,
         L"BUTTON",
@@ -1634,6 +1824,8 @@ void D3D12App::create_ui()
     if (!title_label_ || !hint_label_ || !camera_group_ || !reset_camera_button_
         || !step_erosion_button_ || !display_grid_label_ || !display_grid_combo_
         || !clear_selection_button_ || !highlight_checkbox_ || !copy_agent_snapshot_button_
+        || !scenario_group_ || !scenario_action_combo_ || !run_action_button_
+        || !advance_round_button_ || !reset_round_button_
         || !selection_group_ || !info_panel_ || !viewport_hwnd_)
     {
         throw std::runtime_error("Could not create the host application controls.");
@@ -1676,8 +1868,12 @@ void D3D12App::create_ui()
         step_erosion_button_,
         clear_selection_button_,
         display_grid_combo_,
+        scenario_action_combo_,
         highlight_checkbox_,
         copy_agent_snapshot_button_,
+        run_action_button_,
+        advance_round_button_,
+        reset_round_button_,
         info_panel_,
     };
 
@@ -1692,14 +1888,19 @@ void D3D12App::create_ui()
             title_label_,
             hint_label_,
             camera_group_,
+            scenario_group_,
             selection_group_,
             reset_camera_button_,
             step_erosion_button_,
             clear_selection_button_,
             display_grid_label_,
             display_grid_combo_,
+            scenario_action_combo_,
             highlight_checkbox_,
             copy_agent_snapshot_button_,
+            run_action_button_,
+            advance_round_button_,
+            reset_round_button_,
         };
 
         for (HWND control : ui_controls)
@@ -1719,6 +1920,10 @@ void D3D12App::create_ui()
     ComboBox_AddString(display_grid_combo_, L"Hybrid adaptive");
     ComboBox_SetCurSel(display_grid_combo_, static_cast<int>(display_grid_mode_));
     EnableWindow(copy_agent_snapshot_button_, FALSE);
+    EnableWindow(run_action_button_, FALSE);
+    EnableWindow(advance_round_button_, TRUE);
+    EnableWindow(reset_round_button_, TRUE);
+    refresh_scenario_action_ui();
     layout_ui();
 }
 
@@ -1752,14 +1957,20 @@ void D3D12App::layout_ui()
     MoveWindow(display_grid_combo_, margin + 176, 226, button_width, 240, TRUE);
     MoveWindow(highlight_checkbox_, margin + 16, 244, sidebar_width - 48, 24, TRUE);
 
-    MoveWindow(selection_group_, margin, 308, sidebar_width - (margin * 2), client_rect.bottom - 324, TRUE);
-    MoveWindow(copy_agent_snapshot_button_, margin + 16, 340, sidebar_width - 48, button_height, TRUE);
+    MoveWindow(scenario_group_, margin, 308, sidebar_width - (margin * 2), 138, TRUE);
+    MoveWindow(scenario_action_combo_, margin + 16, 340, sidebar_width - 48, 240, TRUE);
+    MoveWindow(run_action_button_, margin + 16, 372, button_width, button_height, TRUE);
+    MoveWindow(advance_round_button_, margin + 176, 372, button_width, button_height, TRUE);
+    MoveWindow(reset_round_button_, margin + 16, 414, sidebar_width - 48, button_height, TRUE);
+
+    MoveWindow(selection_group_, margin, 458, sidebar_width - (margin * 2), client_rect.bottom - 474, TRUE);
+    MoveWindow(copy_agent_snapshot_button_, margin + 16, 490, sidebar_width - 48, button_height, TRUE);
     MoveWindow(
         info_panel_,
         margin + 16,
-        382,
+        532,
         sidebar_width - 48,
-        std::max<int>(110, static_cast<int>(client_rect.bottom) - 414),
+        std::max<int>(110, static_cast<int>(client_rect.bottom) - 564),
         TRUE);
 
     MoveWindow(viewport_hwnd_, viewport_x, margin, viewport_width, viewport_height, TRUE);
@@ -1916,6 +2127,64 @@ std::wstring D3D12App::build_agent_snapshot_text() const
          << "\"\n"
          << "    }\n";
 
+    const auto turn_packet = current_turn_packet();
+    json << "  },\n"
+         << "  \"scenario\": {\n"
+         << "    \"objective\": \"" << escape_json_string(turn_packet.objective.view()) << "\",\n"
+         << "    \"focused_target\": "
+         << (turn_packet.focused_target
+                 ? "\"" + escape_json_string(grannys_house_trials::sim::to_string(*turn_packet.focused_target)) + "\""
+                 : "null")
+         << ",\n"
+         << "    \"tester_role\": \"" << escape_json_string(tester_role_name(turn_packet.role)) << "\",\n"
+         << "    \"hidden_dependency_revealed\": " << (turn_packet.hidden_dependency_revealed ? "true" : "false") << ",\n"
+         << "    \"objective_completed\": " << (turn_packet.objective_completed ? "true" : "false") << ",\n"
+         << "    \"objective_failed\": " << (turn_packet.objective_failed ? "true" : "false") << ",\n"
+         << "    \"legal_actions\": [";
+
+    for (std::size_t index = 0; index < turn_packet.legal_actions.size(); ++index)
+    {
+        if (index > 0)
+        {
+            json << ", ";
+        }
+        json << "\"" << escape_json_string(turn_packet.legal_actions[index].id.str()) << "\"";
+    }
+
+    json << "],\n"
+         << "    \"recent_evidence\": [\n";
+
+    for (std::size_t index = 0; index < turn_packet.recent_evidence.size(); ++index)
+    {
+        const auto &evidence = turn_packet.recent_evidence[index];
+        json << "      {\n"
+             << "        \"type\": \"" << escape_json_string(grannys_house_trials::sim::to_string(evidence.type)) << "\",\n"
+             << "        \"actor\": \"" << escape_json_string(evidence.actor.view()) << "\",\n"
+             << "        \"description\": \"" << escape_json_string(evidence.description.view()) << "\"\n"
+             << "      }";
+
+        if (index + 1 < turn_packet.recent_evidence.size())
+        {
+            json << ",";
+        }
+        json << "\n";
+    }
+
+    json << "    ],\n"
+         << "    \"recent_events\": [\n";
+
+    for (std::size_t index = 0; index < turn_packet.recent_events.size(); ++index)
+    {
+        json << "      \"" << escape_json_string(turn_packet.recent_events[index]) << "\"";
+        if (index + 1 < turn_packet.recent_events.size())
+        {
+            json << ",";
+        }
+        json << "\n";
+    }
+
+    json << "    ]\n";
+
     json << "  },\n"
          << "  \"discoverable_neighborhood\": [\n";
 
@@ -1962,6 +2231,11 @@ std::wstring D3D12App::build_agent_snapshot_text() const
 
 void D3D12App::refresh_info_panel()
 {
+    const auto turn_packet = current_turn_packet();
+    const auto evidence_view = grannys_house_trials::playtest::make_evidence_board_view(scenario_.round_log());
+    const auto scenario_target = selected_scenario_target();
+    const auto scenario_actions = scenario_actions_for_selection();
+
     std::wostringstream text;
     text << L"Grass Field 001\r\n"
          << L"left click: inspect voxel\r\n"
@@ -1981,7 +2255,55 @@ void D3D12App::refresh_info_panel()
                  ? L"showing the authored 1-foot columns\r\n"
                  : display_grid_mode_ == DisplayGridMode::erosion_inch_columns
                     ? L"showing only the promoted 1-inch remainder above coarse-full blocks\r\n"
-                    : L"showing the hybrid adaptive terrain view\r\n");
+                    : L"showing the hybrid adaptive terrain view\r\n")
+         << L"\r\nscenario\r\n"
+         << L"  objective: " << widen(turn_packet.objective.view()) << L"\r\n"
+         << L"  active tester: " << widen(tester_role_name(turn_packet.role)) << L"\r\n"
+         << L"  focused target: "
+         << (scenario_target ? widen(grannys_house_trials::sim::to_string(*scenario_target)) : L"none") << L"\r\n"
+         << L"  hidden dependency: " << (turn_packet.hidden_dependency_revealed ? L"revealed" : L"still hidden") << L"\r\n"
+         << L"  round status: "
+         << (turn_packet.objective_completed ? L"completed"
+             : turn_packet.objective_failed ? L"failed"
+             : L"in progress")
+         << L"\r\n"
+         << L"  legal actions: ";
+
+    if (scenario_actions.empty())
+    {
+        text << L"none";
+    }
+    else
+    {
+        for (std::size_t index = 0; index < scenario_actions.size(); ++index)
+        {
+            if (index > 0)
+            {
+                text << L", ";
+            }
+            text << widen(scenario_actions[index].id.view());
+        }
+    }
+    text << L"\r\n";
+
+    if (!recent_scenario_events_.empty())
+    {
+        text << L"  recent events:\r\n";
+        for (const std::string &event : recent_scenario_events_)
+        {
+            text << L"    - " << widen(event) << L"\r\n";
+        }
+    }
+
+    if (!evidence_view.stats.empty())
+    {
+        text << L"  evidence board:\r\n";
+        for (const auto &stat : evidence_view.stats)
+        {
+            text << L"    - " << widen(grannys_house_trials::sim::to_string(stat.type))
+                 << L": " << stat.count << L"\r\n";
+        }
+    }
 
     if (!selected_voxel_)
     {
@@ -2064,7 +2386,10 @@ void D3D12App::refresh_info_panel()
          << L"  refined 1' blocks: " << refined_block_count << L"\r\n"
          << L"  selected ownership: "
          << widen(terrain_volume_ownership_name(selected_block_ownership)) << L"\r\n"
-         << L"  erosion cycles: " << erosion_field_.cycle_count();
+         << L"  erosion cycles: " << erosion_field_.cycle_count() << L"\r\n"
+         << L"\r\nscenario at selection\r\n"
+         << L"  target: "
+         << (scenario_target ? widen(grannys_house_trials::sim::to_string(*scenario_target)) : L"none") << L"\r\n";
 
     latest_agent_snapshot_ = build_agent_snapshot_text();
     text << L"\r\n\r\nagent snapshot json\r\n"
@@ -2080,6 +2405,109 @@ void D3D12App::refresh_info_panel()
           << widen(display_grid_mode_name(display_grid_mode_))
           << L" :: erosion " << erosion_field_.cycle_count();
     SetWindowTextW(hwnd_, title.str().c_str());
+}
+
+std::optional<grannys_house_trials::sim::TargetId> D3D12App::selected_scenario_target() const
+{
+    if (!selected_voxel_)
+    {
+        return std::nullopt;
+    }
+
+    return scenario_target_for_cell(
+        source_coarse_x_for_display_x(selected_voxel_->x),
+        source_coarse_z_for_display_z(selected_voxel_->z));
+}
+
+std::vector<grannys_house_trials::sim::LegalAction> D3D12App::scenario_actions_for_selection() const
+{
+    return scenario_.legal_actions(selected_scenario_target());
+}
+
+grannys_house_trials::playtest::TurnPacket D3D12App::current_turn_packet() const
+{
+    return grannys_house_trials::playtest::make_turn_packet(
+        scenario_,
+        active_tester_role_,
+        selected_scenario_target(),
+        recent_scenario_events_);
+}
+
+void D3D12App::refresh_scenario_action_ui()
+{
+    if (!scenario_action_combo_ || !run_action_button_)
+    {
+        return;
+    }
+
+    ComboBox_ResetContent(scenario_action_combo_);
+    const auto actions = scenario_actions_for_selection();
+    for (const auto &action : actions)
+    {
+        ComboBox_AddString(scenario_action_combo_, widen(action.id.str()).c_str());
+    }
+
+    const bool has_actions = !actions.empty();
+    ComboBox_SetCurSel(scenario_action_combo_, has_actions ? 0 : -1);
+    EnableWindow(run_action_button_, has_actions);
+}
+
+void D3D12App::run_selected_scenario_action()
+{
+    const int selection_index = ComboBox_GetCurSel(scenario_action_combo_);
+    if (selection_index < 0)
+    {
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+
+    const auto actions = scenario_actions_for_selection();
+    if (selection_index >= static_cast<int>(actions.size()))
+    {
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+
+    run_scenario_action(actions[static_cast<std::size_t>(selection_index)].id.str());
+}
+
+void D3D12App::run_scenario_action(std::string_view action_id)
+{
+    if (action_id == "reset_round")
+    {
+        recent_scenario_events_.clear();
+    }
+
+    const auto outcome = scenario_.apply_action(
+        grannys_house_trials::util::NonEmptyString("viewport_operator"),
+        action_id,
+        selected_scenario_target());
+
+    if (outcome.observations.empty())
+    {
+        recent_scenario_events_.push_back(
+            std::string(action_id) + (outcome.success ? " succeeded." : " failed."));
+    }
+    else
+    {
+        recent_scenario_events_.insert(
+            recent_scenario_events_.end(),
+            outcome.observations.begin(),
+            outcome.observations.end());
+    }
+
+    constexpr std::size_t max_recent_events = 8;
+    if (recent_scenario_events_.size() > max_recent_events)
+    {
+        recent_scenario_events_.erase(
+            recent_scenario_events_.begin(),
+            recent_scenario_events_.begin()
+                + static_cast<std::ptrdiff_t>(recent_scenario_events_.size() - max_recent_events));
+    }
+
+    rebuild_display_field_buffer();
+    refresh_scenario_action_ui();
+    refresh_info_panel();
 }
 
 std::optional<VoxelSelection> D3D12App::try_pick_voxel(POINT client_point) const
@@ -2662,6 +3090,7 @@ void D3D12App::on_mouse_up(MouseState::DragMode drag_mode, LPARAM lparam)
     {
         const POINT point{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
         selected_voxel_ = try_pick_voxel(point);
+        refresh_scenario_action_ui();
         refresh_info_panel();
     }
 
@@ -2784,6 +3213,7 @@ LRESULT D3D12App::handle_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
             return 0;
         case control_id_clear_selection:
             selected_voxel_.reset();
+            refresh_scenario_action_ui();
             refresh_info_panel();
             return 0;
         case control_id_display_grid_combo:
@@ -2818,6 +3248,21 @@ LRESULT D3D12App::handle_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
                     MessageBeep(MB_ICONWARNING);
                 }
             }
+            return 0;
+        case control_id_scenario_action_combo:
+            if (HIWORD(wparam) == CBN_SELCHANGE)
+            {
+                refresh_info_panel();
+            }
+            return 0;
+        case control_id_run_action:
+            run_selected_scenario_action();
+            return 0;
+        case control_id_advance_round:
+            run_scenario_action("advance_simulation");
+            return 0;
+        case control_id_reset_round:
+            run_scenario_action("reset_round");
             return 0;
         default:
             break;

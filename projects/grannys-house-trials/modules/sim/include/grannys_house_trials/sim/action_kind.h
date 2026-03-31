@@ -7,9 +7,13 @@ namespace grannys_house_trials::sim
 enum class ActionKind
 {
     Look,
-    Move,
     Inspect,
-    ClearBlockage,
+    InspectNeighborhood,
+    RouteWater,
+    DigChannel,
+    PackSoil,
+    AdvanceSimulation,
+    ResetRound,
     Wait,
 };
 
@@ -19,12 +23,20 @@ enum class ActionKind
     {
     case ActionKind::Look:
         return "look";
-    case ActionKind::Move:
-        return "move";
     case ActionKind::Inspect:
         return "inspect";
-    case ActionKind::ClearBlockage:
-        return "clear_blockage";
+    case ActionKind::InspectNeighborhood:
+        return "inspect_neighborhood";
+    case ActionKind::RouteWater:
+        return "route_water";
+    case ActionKind::DigChannel:
+        return "dig_channel";
+    case ActionKind::PackSoil:
+        return "pack_soil";
+    case ActionKind::AdvanceSimulation:
+        return "advance_simulation";
+    case ActionKind::ResetRound:
+        return "reset_round";
     case ActionKind::Wait:
         return "wait";
     }

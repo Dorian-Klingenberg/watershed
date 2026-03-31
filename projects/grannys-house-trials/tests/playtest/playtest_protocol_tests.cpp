@@ -58,13 +58,17 @@ TEST_CASE("TurnPacket mirrors the current Granny's Yard turn surface", "[playtes
     const TurnPacket packet = make_turn_packet(
         scenario,
         TesterRole::Builder,
+        TargetId::DrainMouth,
         {"Round start: the north bed is still dry."});
 
     REQUIRE(packet.role == TesterRole::Builder);
     REQUIRE(packet.current_anchor == AnchorId::Porch);
+    REQUIRE(packet.focused_target == TargetId::DrainMouth);
     REQUIRE(packet.objective.view() == "Deliver enough water to the north bed without soaking the cellar edge or softening the yard path.");
     REQUIRE(packet.recent_events.size() == static_cast<std::size_t>(1));
-    REQUIRE(has_action_id(packet.legal_actions, "move_path_edge"));
+    REQUIRE(has_action_id(packet.legal_actions, "route_water_source"));
+    REQUIRE_FALSE(packet.objective_completed);
+    REQUIRE_FALSE(packet.objective_failed);
 }
 
 TEST_CASE("TurnPacket reflects world changes after a risky intervention", "[playtest][turn_packet]")
@@ -72,22 +76,25 @@ TEST_CASE("TurnPacket reflects world changes after a risky intervention", "[play
     GrannysYardScenario scenario;
     const NonEmptyString actor("Builder");
 
-    REQUIRE(scenario.apply_action(actor, "move_path_edge").success);
-    REQUIRE(scenario.apply_action(actor, "move_terrace_cut").success);
-    REQUIRE(scenario.apply_action(actor, "clear_blockage_terrace_cut").success);
+    REQUIRE(scenario.apply_action(actor, "dig_shallow_channel", TargetId::TerraceCut).success);
+    REQUIRE(scenario.apply_action(actor, "route_water_source", TargetId::DrainMouth).success);
+    REQUIRE(scenario.apply_action(actor, "advance_simulation", TargetId::GardenBedNorth).success);
 
     const TurnPacket packet = make_turn_packet(
         scenario,
         TesterRole::SystemsAuditor,
+        TargetId::GardenBedNorth,
         {"Builder cleared the terrace cut."});
 
-    REQUIRE(packet.current_anchor == AnchorId::TerraceCut);
+    REQUIRE(packet.current_anchor == AnchorId::GardenBedNorth);
 
     const VisibleTarget *garden_bed = find_target(packet.visible_targets, TargetId::GardenBedNorth);
-    const VisibleTarget *terrace_cut = find_target(packet.visible_targets, TargetId::TerraceCut);
+    const VisibleTarget *cellar_edge = find_target(packet.visible_targets, TargetId::CellarEdge);
 
     REQUIRE(garden_bed != nullptr);
-    REQUIRE(terrace_cut != nullptr);
+    REQUIRE(cellar_edge != nullptr);
     REQUIRE(has_state(*garden_bed, TargetStateTag::Wet));
-    REQUIRE(has_state(*terrace_cut, TargetStateTag::Flowing));
+    REQUIRE(has_state(*cellar_edge, TargetStateTag::Wet));
+    REQUIRE(packet.objective_failed);
+    REQUIRE_FALSE(packet.recent_evidence.empty());
 }
