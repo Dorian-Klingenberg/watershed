@@ -452,6 +452,33 @@ Shell preference for agent tooling on this repo and this machine:
   unreliable or that your machine is flawed.
 - If WSL is not available, continue with the best local shell.
 
+Project status preference for milestone work:
+
+- Use the GitHub Project for intermediate milestone status updates.
+- Treat repo docs and in-repo notes as secondary mirrors, not the primary
+  source of milestone progress.
+- When tracking milestone movement, prefer updating project items first and
+  use the repository only for durable implementation or documentation changes.
+
+Consistency rule:
+
+- The repository remains the high-level source of truth.
+- The GitHub Project must stay consistent with the repository.
+- Completed tasks are static artifacts only after repo and project agree.
+- A task is not truly complete if it conflicts with the repository state.
+- Resolve conflicts by either updating the high-level source of truth or by
+  bringing the task scope back in line with the repository before marking it
+  complete.
+
+Task granularity note:
+
+- Project-level milestones should stay high level and durable.
+- Individual project tasks may store low-level implementation details, history,
+  and execution notes.
+- Multiple project tasks may belong to a single milestone.
+- Larger milestones may span multiple sprints and accumulate dozens of backlog
+  items before they are fully complete.
+
 The project is assumed to still be **in discovery and design exploration**.
 
 ---
