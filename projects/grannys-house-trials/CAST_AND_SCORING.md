@@ -155,3 +155,64 @@ Possible later additions:
 These are optional.
 The MVP only needs the evidence board plus host-awarded points.
 
+## Agent Architecture Decisions
+
+### Agent Personality Files
+
+Each agent has a workspace under `agents/<name>/` containing:
+
+| File | Purpose |
+|---|---|
+| `IDENTITY.md` | Quick-reference identity card (name, emoji, archetype) |
+| `SOUL.md` | Core personality, worldview, speech patterns, relationships |
+| `AGENTS.md` | Operating manual (session startup, heuristics, constraints) |
+| `MEMORY.md` | Rich narrative memories — LLM tier (testing, tuning, training data) |
+| `MEMORY.slm.md` | Dense behavioral triggers — SLM tier (inference-time system prompt) |
+
+Shared files live in `agents/shared/`:
+
+| File | Purpose |
+|---|---|
+| `TOOLS.md` | Action vocabulary, named anchors, trio dynamics, constraints |
+| `USER.md` | Scenario context (Granny's Yard) |
+
+### Dual-File Memory Convention
+
+- `MEMORY.md` is the source of truth. Rich narrative, full paragraphs, in-character voice.
+- `MEMORY.slm.md` is compressed from the LLM file. Tagged patterns, behavioral rules, voice markers.
+- IDENTITY, SOUL, and AGENTS are shared across both tiers (already concise enough).
+- When updating memories, update LLM first, then compress changes into SLM.
+
+### Runtime Independence
+
+These files are **model-agnostic personality specs**, not tied to any agent
+framework. They work with:
+
+- a raw OpenAI / Anthropic API call
+- a local SLM via Ollama or llama.cpp
+- a C++ heuristic engine implementing the behavioral rules directly
+- any future agent framework
+
+The C++ session owns round orchestration. Agents are reactive — one
+`Action` per tick, no persistent lifecycle.
+
+### Inference Strategy (Phased)
+
+Current plan, in order of priority:
+
+1. **Now:** C++ session + OpenAI API using SLM files as system prompt
+2. **If cost matters:** swap endpoint to local Ollama, same prompt structure
+3. **If quality matters at local scale:** LoRA fine-tune on the LLM memory files
+
+Nothing in the agent file structure needs to change across these transitions.
+
+### What Was Explicitly Dropped
+
+- **OpenClaw framework** — lifecycle features (BOOTSTRAP, HEARTBEAT, daily logs)
+  do not map to the reactive per-tick agent model. The file organization
+  convention was influenced by OpenClaw but is not dependent on it.
+- **Proactive agent behavior** — agents do not initiate; they respond to world
+  state each tick.
+- **Persistent cross-round memory updates** — the game session owns state. Agent
+  memories are static personality definitions, not accumulating logs.
+
