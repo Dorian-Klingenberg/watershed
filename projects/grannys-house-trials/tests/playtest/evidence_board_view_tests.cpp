@@ -10,6 +10,7 @@
 #include <algorithm>
 
 using grannys_house_trials::playtest::EvidenceBoardView;
+using grannys_house_trials::playtest::RoundResult;
 using grannys_house_trials::playtest::make_evidence_board_view;
 using grannys_house_trials::sim::EvidenceItem;
 using grannys_house_trials::sim::EvidenceType;
@@ -58,4 +59,5 @@ TEST_CASE("EvidenceBoardView aggregates evidence counts and highlights", "[playt
     REQUIRE(count_for(view, EvidenceType::HiddenDependencyRevealed) == static_cast<std::size_t>(1));
     REQUIRE(view.highlights.size() == static_cast<std::size_t>(3));
     REQUIRE(view.highlights.front() == "Builder: Water reached the north garden bed.");
+    REQUIRE(view.round_result == RoundResult::Active);
 }

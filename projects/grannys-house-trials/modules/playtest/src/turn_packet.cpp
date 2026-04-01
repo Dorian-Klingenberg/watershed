@@ -9,8 +9,15 @@ TurnPacket make_turn_packet(
     TesterRole role,
     std::optional<sim::TargetId> focused_target,
     std::vector<std::string> recent_events,
-    std::vector<std::string> human_notes)
+    std::vector<std::string> human_notes,
+    std::optional<RoundResult> round_result)
 {
+    const RoundResult effective_round_result = round_result.has_value()
+        ? *round_result
+        : scenario.state().objective_completed
+            ? RoundResult::Success
+            : scenario.state().objective_failed ? RoundResult::Failure : RoundResult::Active;
+
     std::vector<sim::EvidenceItem> recent_evidence;
     const auto &entries = scenario.round_log().entries();
     const std::size_t max_recent_evidence = std::min<std::size_t>(entries.size(), 6);
@@ -27,6 +34,7 @@ TurnPacket make_turn_packet(
         scenario.visible_targets(),
         scenario.legal_actions(focused_target),
         std::move(recent_evidence),
+        effective_round_result,
         scenario.state().hidden_cross_link_revealed,
         scenario.state().objective_completed,
         scenario.state().objective_failed,

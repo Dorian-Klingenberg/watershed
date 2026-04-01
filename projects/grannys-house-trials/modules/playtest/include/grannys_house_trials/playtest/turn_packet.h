@@ -1,6 +1,7 @@
 #pragma once
 
 #include "grannys_house_trials/playtest/tester_role.h"
+#include "grannys_house_trials/playtest/round_result.h"
 #include "grannys_house_trials/sim/anchor_id.h"
 #include "grannys_house_trials/sim/evidence_item.h"
 #include "grannys_house_trials/sim/grannys_yard_scenario.h"
@@ -24,6 +25,7 @@ struct TurnPacket
     std::vector<sim::VisibleTarget> visible_targets;
     std::vector<sim::LegalAction> legal_actions;
     std::vector<sim::EvidenceItem> recent_evidence;
+    RoundResult round_result = RoundResult::Active;
     bool hidden_dependency_revealed = false;
     bool objective_completed = false;
     bool objective_failed = false;
@@ -36,5 +38,6 @@ struct TurnPacket
     TesterRole role,
     std::optional<sim::TargetId> focused_target = std::nullopt,
     std::vector<std::string> recent_events = {},
-    std::vector<std::string> human_notes = {});
+    std::vector<std::string> human_notes = {},
+    std::optional<RoundResult> round_result = std::nullopt);
 } // namespace grannys_house_trials::playtest

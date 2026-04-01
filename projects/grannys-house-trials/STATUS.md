@@ -116,19 +116,20 @@ What is still intentionally deferred:
 
 ### Milestone 4: Evidence Board
 
-Status: `partial`
+Status: `complete`
 
 What is done:
 
 - round-log and evidence-related sim/playtest types
 - tested protocol and evidence-board projections in shared code
 - host UI text now surfaces recent scenario events and evidence counts
+- evidence board is visible in the main runnable
+- end-of-round summary flow freezes the board into terminal states
+- cleaner board layout and summary styling are in place for the current shell
 
-What is not done:
+What remains intentionally deferred:
 
-- a more intentional evidence-board UI in the main runnable
-- end-of-round summary flow
-- cleaner board layout and summary styling
+- richer evidence-board componentization for a future UI upgrade
 
 ### Milestone 5: Cast Layer
 

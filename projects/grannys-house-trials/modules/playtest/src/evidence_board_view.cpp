@@ -4,9 +4,10 @@
 
 namespace grannys_house_trials::playtest
 {
-EvidenceBoardView make_evidence_board_view(const sim::RoundLog &round_log)
+EvidenceBoardView make_evidence_board_view(const sim::RoundLog &round_log, RoundResult round_result)
 {
     EvidenceBoardView view{};
+    view.round_result = round_result;
 
     for (const sim::EvidenceItem &item : round_log.entries())
     {

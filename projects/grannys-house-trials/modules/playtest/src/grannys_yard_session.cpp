@@ -8,6 +8,21 @@ namespace grannys_house_trials::playtest
 {
 namespace
 {
+[[nodiscard]] RoundResult current_round_result(const grannys_house_trials::sim::GrannysYardState &state) noexcept
+{
+    if (state.objective_completed)
+    {
+        return RoundResult::Success;
+    }
+
+    if (state.objective_failed)
+    {
+        return RoundResult::Failure;
+    }
+
+    return RoundResult::Active;
+}
+
 [[nodiscard]] bool meaningful_state_changed(
     const grannys_house_trials::sim::GrannysYardState &before,
     const grannys_house_trials::sim::GrannysYardState &after) noexcept
@@ -46,6 +61,16 @@ void GrannysYardSession::set_active_tester_role(TesterRole role) noexcept
     active_tester_role_ = role;
 }
 
+bool GrannysYardSession::has_completed_round_summary() const noexcept
+{
+    return completed_round_summary_.has_value();
+}
+
+const std::optional<RoundSummary> &GrannysYardSession::completed_round_summary() const noexcept
+{
+    return completed_round_summary_;
+}
+
 std::vector<sim::LegalAction> GrannysYardSession::legal_actions(std::optional<sim::TargetId> focused_target) const
 {
     return scenario_.legal_actions(focused_target);
@@ -53,7 +78,42 @@ std::vector<sim::LegalAction> GrannysYardSession::legal_actions(std::optional<si
 
 TurnPacket GrannysYardSession::turn_packet(std::optional<sim::TargetId> focused_target) const
 {
-    return make_turn_packet(scenario_, active_tester_role_, focused_target, recent_events_, human_notes_);
+    if (completed_round_summary_.has_value())
+    {
+        return completed_round_summary_->packet.value();
+    }
+
+    return make_turn_packet(
+        scenario_,
+        active_tester_role_,
+        focused_target,
+        recent_events_,
+        human_notes_,
+        std::nullopt);
+}
+
+EvidenceBoardView GrannysYardSession::evidence_board_view() const
+{
+    if (completed_round_summary_.has_value())
+    {
+        return completed_round_summary_->evidence_board;
+    }
+
+    return make_evidence_board_view(scenario_.round_log(), current_live_round_result());
+}
+
+bool GrannysYardSession::can_accept_gameplay_actions() const noexcept
+{
+    return !completed_round_summary_.has_value() || scenario_.state().turn_count == 0;
+}
+
+RoundPresentation GrannysYardSession::round_presentation(std::optional<sim::TargetId> focused_target) const
+{
+    return RoundPresentation{
+        .packet = turn_packet(focused_target),
+        .evidence_board = evidence_board_view(),
+        .gameplay_actions_enabled = can_accept_gameplay_actions(),
+    };
 }
 
 sim::ActionOutcome GrannysYardSession::run_action(
@@ -61,18 +121,67 @@ sim::ActionOutcome GrannysYardSession::run_action(
     std::optional<sim::TargetId> focused_target,
     util::NonEmptyString actor)
 {
+    clear_completed_round_summary_if_starting_new_round(action_id);
+
+    if (action_id != "reset_round" && completed_round_summary_.has_value() && scenario_.state().turn_count > 0)
+    {
+        sim::ActionOutcome outcome;
+        outcome.observations.push_back("The round has ended. Reset it before taking more actions.");
+        return outcome;
+    }
+
     const auto before_state = scenario_.state();
     const auto outcome = scenario_.apply_action(actor, action_id, focused_target);
     const bool state_changed = meaningful_state_changed(before_state, scenario_.state());
     append_recent_events(action_id, focused_target, outcome, state_changed);
+
+    if (outcome.success)
+    {
+        const RoundResult live_round_result = current_live_round_result();
+        if (live_round_result != RoundResult::Active)
+        {
+            capture_completed_round_summary(live_round_result, focused_target);
+        }
+    }
+
     return outcome;
 }
 
 sim::ActionOutcome GrannysYardSession::reset_round(util::NonEmptyString actor)
 {
-    const auto outcome = run_action("reset_round", std::nullopt, std::move(actor));
+    const RoundResult prior_result = current_live_round_result();
+    std::optional<sim::TargetId> focused_target = std::nullopt;
+
+    if (prior_result == RoundResult::Active && scenario_.state().turn_count > 0)
+    {
+        capture_completed_round_summary(RoundResult::Aborted, focused_target);
+    }
+
+    const auto outcome = run_action("reset_round", focused_target, std::move(actor));
     recent_events_.clear();
     human_notes_.clear();
+
+    return outcome;
+}
+
+sim::ActionOutcome GrannysYardSession::end_round(
+    std::optional<sim::TargetId> focused_target,
+    util::NonEmptyString actor)
+{
+    (void)actor;
+
+    sim::ActionOutcome outcome;
+
+    if (completed_round_summary_.has_value())
+    {
+        outcome.observations.push_back("The round has already ended.");
+        outcome.success = true;
+        return outcome;
+    }
+
+    capture_completed_round_summary(RoundResult::Aborted, focused_target);
+    outcome.observations.push_back("The round has ended. Reset it to start a new attempt.");
+    outcome.success = true;
     return outcome;
 }
 
@@ -97,6 +206,38 @@ void GrannysYardSession::clear_recent_events() noexcept
 {
     recent_events_.clear();
     human_notes_.clear();
+}
+
+void GrannysYardSession::clear_completed_round_summary_if_starting_new_round(std::string_view action_id)
+{
+    if (action_id != "reset_round"
+        && completed_round_summary_.has_value()
+        && scenario_.state().turn_count == 0)
+    {
+        completed_round_summary_.reset();
+    }
+}
+
+void GrannysYardSession::capture_completed_round_summary(
+    RoundResult result,
+    std::optional<sim::TargetId> focused_target)
+{
+    RoundSummary summary{};
+    summary.result = result;
+    summary.packet = make_turn_packet(
+        scenario_,
+        active_tester_role_,
+        focused_target,
+        recent_events_,
+        human_notes_,
+        result);
+    summary.evidence_board = make_evidence_board_view(scenario_.round_log(), result);
+    completed_round_summary_ = std::move(summary);
+}
+
+RoundResult GrannysYardSession::current_live_round_result() const noexcept
+{
+    return current_round_result(scenario_.state());
 }
 
 void GrannysYardSession::append_recent_events(

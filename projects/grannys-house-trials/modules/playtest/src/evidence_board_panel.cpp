@@ -1,6 +1,7 @@
 #include "grannys_house_trials/playtest/evidence_board_panel.h"
 
 #include "grannys_house_trials/sim/evidence_type.h"
+#include "grannys_house_trials/playtest/round_result.h"
 
 #include <algorithm>
 #include <stdexcept>
@@ -172,6 +173,7 @@ std::wstring EvidenceBoardPanel::format_view() const
 {
     std::wostringstream text;
     text << L"Evidence Board\r\n";
+    text << L"Round status: " << widen(round_result_name(view_.round_result)) << L"\r\n";
 
     if (view_.stats.empty())
     {
@@ -197,6 +199,11 @@ std::wstring EvidenceBoardPanel::format_view() const
         {
             text << L"  - " << widen(view_.highlights[index]) << L"\r\n";
         }
+    }
+
+    if (view_.round_result != RoundResult::Active)
+    {
+        text << L"\r\nRound ended. Reset to start a new attempt.\r\n";
     }
 
     return text.str();

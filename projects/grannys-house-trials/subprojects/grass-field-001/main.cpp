@@ -62,6 +62,7 @@ enum ControlId : int
     control_id_scenario_action_combo = 1007,
     control_id_run_action = 1008,
     control_id_advance_round = 1009,
+    control_id_end_round = 1014,
     control_id_reset_round = 1010,
     control_id_field_size_combo = 1011,
     control_id_toggle_fog = 1012,
@@ -751,7 +752,6 @@ private:
     [[nodiscard]] std::optional<VoxelSelection> try_pick_voxel(POINT client_point) const;
     [[nodiscard]] std::optional<grannys_house_trials::sim::TargetId> selected_scenario_target() const;
     [[nodiscard]] std::vector<grannys_house_trials::sim::LegalAction> scenario_actions_for_selection() const;
-    [[nodiscard]] grannys_house_trials::playtest::TurnPacket current_turn_packet() const;
     void refresh_scenario_action_ui();
     void run_selected_scenario_action();
     void run_scenario_action(std::string_view action_id);
@@ -799,6 +799,7 @@ private:
     HWND scenario_action_combo_ = nullptr;
     HWND run_action_button_ = nullptr;
     HWND advance_round_button_ = nullptr;
+    HWND end_round_button_ = nullptr;
     HWND reset_round_button_ = nullptr;
     HWND info_panel_ = nullptr;
     HWND evidence_board_group_ = nullptr;
@@ -1903,6 +1904,20 @@ void D3D12App::create_ui()
         app_instance,
         nullptr);
 
+    end_round_button_ = CreateWindowExW(
+        0,
+        L"BUTTON",
+        L"End Round",
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        0,
+        0,
+        0,
+        0,
+        hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(control_id_end_round)),
+        app_instance,
+        nullptr);
+
     reset_round_button_ = CreateWindowExW(
         0,
         L"BUTTON",
@@ -1980,7 +1995,7 @@ void D3D12App::create_ui()
         || !field_size_label_ || !field_size_combo_
         || !clear_selection_button_ || !highlight_checkbox_ || !fog_checkbox_ || !packet_view_checkbox_ || !copy_agent_snapshot_button_
         || !scenario_group_ || !scenario_action_combo_ || !run_action_button_
-        || !advance_round_button_ || !reset_round_button_
+        || !advance_round_button_ || !end_round_button_ || !reset_round_button_
         || !selection_group_ || !info_panel_ || !evidence_board_group_ || !evidence_board_panel_.hwnd() || !viewport_hwnd_)
     {
         throw std::runtime_error("Could not create the host application controls.");
@@ -2030,6 +2045,7 @@ void D3D12App::create_ui()
         copy_agent_snapshot_button_,
         run_action_button_,
         advance_round_button_,
+        end_round_button_,
         reset_round_button_,
         info_panel_,
         evidence_board_group_,
@@ -2063,6 +2079,7 @@ void D3D12App::create_ui()
             copy_agent_snapshot_button_,
             run_action_button_,
             advance_round_button_,
+            end_round_button_,
             reset_round_button_,
             evidence_board_panel_.hwnd(),
         };
@@ -2141,7 +2158,8 @@ void D3D12App::layout_ui()
     MoveWindow(scenario_action_combo_, margin + 16, 396, sidebar_width - 48, 240, TRUE);
     MoveWindow(run_action_button_, margin + 16, 432, button_width, button_height, TRUE);
     MoveWindow(advance_round_button_, margin + 252, 432, button_width, button_height, TRUE);
-    MoveWindow(reset_round_button_, margin + 16, 474, sidebar_width - 48, button_height, TRUE);
+    MoveWindow(end_round_button_, margin + 16, 474, button_width, button_height, TRUE);
+    MoveWindow(reset_round_button_, margin + 252, 474, button_width, button_height, TRUE);
 
     MoveWindow(selection_group_, margin, 546, sidebar_width - (margin * 2), 996, TRUE);
     MoveWindow(copy_agent_snapshot_button_, margin + 16, 570, sidebar_width - 48, button_height, TRUE);
@@ -2152,18 +2170,21 @@ void D3D12App::layout_ui()
         sidebar_width - 48,
         928,
         TRUE);
-    MoveWindow(evidence_board_group_, margin, 884, sidebar_width - (margin * 2), 168, TRUE);
-    evidence_board_panel_.layout(margin + 16, 908, sidebar_width - 48, 136);
+    const int evidence_board_group_y = 1840 - 168 - 100;
+    const int evidence_board_panel_y = evidence_board_group_y + 24;
+    MoveWindow(evidence_board_group_, margin, evidence_board_group_y, sidebar_width - (margin * 2), 168, TRUE);
+    evidence_board_panel_.layout(margin + 16, evidence_board_panel_y, sidebar_width - 48, 136);
 
     MoveWindow(viewport_hwnd_, viewport_x, margin, viewport_width, viewport_height, TRUE);
 }
 
 std::wstring D3D12App::build_agent_snapshot_text() const
 {
-    const auto turn_packet = current_turn_packet();
-    const auto scenario_target = selected_scenario_target();
-    const auto evidence_view = grannys_house_trials::playtest::make_evidence_board_view(yard_session_.scenario().round_log());
-    const auto actions = scenario_actions_for_selection();
+    const auto presentation = yard_session_.round_presentation(selected_scenario_target());
+    const auto &turn_packet = presentation.packet;
+    const auto scenario_target = turn_packet.focused_target;
+    const auto &evidence_view = presentation.evidence_board;
+    const auto actions = turn_packet.legal_actions;
 
     std::wostringstream json;
     json << L"{\n"
@@ -2217,11 +2238,7 @@ std::wstring D3D12App::build_agent_snapshot_text() const
     }
 
     json << L",\n"
-         << L"  \"round_status\": \""
-         << (turn_packet.objective_completed ? L"completed"
-             : turn_packet.objective_failed ? L"failed"
-             : L"in progress")
-         << L"\",\n"
+         << L"  \"round_status\": \"" << widen(std::string(grannys_house_trials::playtest::round_result_name(turn_packet.round_result))) << L"\",\n"
          << L"  \"hidden_dependency_revealed\": " << (turn_packet.hidden_dependency_revealed ? L"true" : L"false") << L",\n"
          << L"  \"legal_actions\": [";
 
@@ -2266,6 +2283,7 @@ std::wstring D3D12App::build_agent_snapshot_text() const
          << L"    \"Inspect voxel\",\n"
          << L"    \"Run selected action\",\n"
          << L"    \"Advance round\",\n"
+         << L"    \"End round\",\n"
          << L"    \"Reset round\",\n"
          << L"    \"Change display grid\",\n"
          << L"    \"Change field size\",\n"
@@ -2278,11 +2296,13 @@ std::wstring D3D12App::build_agent_snapshot_text() const
 
 void D3D12App::refresh_info_panel()
 {
-    const auto turn_packet = current_turn_packet();
-    const auto evidence_view = grannys_house_trials::playtest::make_evidence_board_view(yard_session_.scenario().round_log());
+    const auto presentation = yard_session_.round_presentation(selected_scenario_target());
+    const auto &turn_packet = presentation.packet;
+    const auto &evidence_view = presentation.evidence_board;
     evidence_board_panel_.set_view(evidence_view);
-    const auto scenario_target = selected_scenario_target();
-    const auto scenario_actions = scenario_actions_for_selection();
+    const auto scenario_target = turn_packet.focused_target;
+    const bool gameplay_actions_enabled = presentation.gameplay_actions_enabled;
+    const auto scenario_actions = gameplay_actions_enabled ? scenario_actions_for_selection() : std::vector<grannys_house_trials::sim::LegalAction>{};
     const auto &token_events = turn_packet.recent_events;
     const auto &human_notes = turn_packet.human_notes;
     latest_agent_snapshot_ = build_agent_snapshot_text();
@@ -2292,6 +2312,7 @@ void D3D12App::refresh_info_panel()
     std::wostringstream text;
     text << L"Grass Field 001\r\n"
          << L"Mission: route water to the garden beds without flooding the cellar edge or softening the path.\r\n"
+         << L"Round status: " << widen(std::string(grannys_house_trials::playtest::round_result_name(turn_packet.round_result))) << L"\r\n"
          << L"FPS: " << std::fixed << std::setprecision(1) << fps_ << L"\r\n"
          << L"View: " << widen(display_grid_mode_name(display_grid_mode_))
          << L" | Erosion cycles: " << erosion_field_.cycle_count()
@@ -2305,25 +2326,43 @@ void D3D12App::refresh_info_panel()
         {
             text << L"Selection: none\r\n"
                  << L"Target: none\r\n"
-                 << L"Current state: waiting for a target or action\r\n"
-                 << L"Possible actions: click the 3D view to pick a target\r\n"
-                 << L"Packet size: 0 characters / 0 bytes\r\n"
+                 << L"Current state: " << (gameplay_actions_enabled ? L"waiting for a target or action" : L"round ended") << L"\r\n";
+            if (gameplay_actions_enabled)
+            {
+                text << L"Possible actions: click the 3D view to pick a target\r\n"
+                     << L"  - End Round to freeze the evidence board\r\n";
+            }
+            else
+            {
+                text << L"Round summary:\r\n"
+                     << L"  - the round has ended; reset to begin another attempt\r\n";
+            }
+            text << L"Packet size: 0 characters / 0 bytes\r\n"
                  << L"Clipboard payload: compact agent packet is empty until a target is selected\r\n";
         }
         else
         {
             text << L"Selection: none\r\n"
                  << L"Target: none\r\n"
-                 << L"Current state: waiting for a target or action\r\n"
-                 << L"Possible actions:\r\n"
-                 << L"  - Click the 3D view to pick a target\r\n"
-                 << L"  - Run Target Action to act on the selected target\r\n"
-                 << L"  - Advance Round to settle drainage one step\r\n"
-                 << L"  - Reset Round to restore the yard\r\n"
-                 << L"  - Display Grid to switch coarse / refined / hybrid\r\n"
-                 << L"  - Field Size to rebuild the square test field\r\n"
-                 << L"  - Copy Agent JSON to copy the compact agent snapshot\r\n"
-                 << L"\r\nState log:\r\n";
+                 << L"Current state: " << (gameplay_actions_enabled ? L"waiting for a target or action" : L"round ended") << L"\r\n";
+            if (gameplay_actions_enabled)
+            {
+                text << L"Possible actions:\r\n"
+                     << L"  - Click the 3D view to pick a target\r\n"
+                     << L"  - Run Target Action to act on the selected target\r\n"
+                     << L"  - Advance Round to settle drainage one step\r\n"
+                     << L"  - End Round to freeze the evidence board\r\n"
+                     << L"  - Reset Round to restore the yard\r\n"
+                     << L"  - Display Grid to switch coarse / refined / hybrid\r\n"
+                     << L"  - Field Size to rebuild the square test field\r\n"
+                     << L"  - Copy Agent JSON to copy the compact agent snapshot\r\n";
+            }
+            else
+            {
+                text << L"Round summary:\r\n"
+                     << L"  - the round has ended; reset to begin another attempt\r\n";
+            }
+            text << L"\r\nState log:\r\n";
             if (human_notes.empty())
             {
                 text << L"  - no recent notes yet\r\n";
@@ -2342,6 +2381,8 @@ void D3D12App::refresh_info_panel()
         title += widen(display_grid_mode_name(display_grid_mode_));
         SetWindowTextW(hwnd_, title.c_str());
         EnableWindow(copy_agent_snapshot_button_, FALSE);
+        EnableWindow(end_round_button_, gameplay_actions_enabled ? TRUE : FALSE);
+        EnableWindow(reset_round_button_, TRUE);
         return;
     }
 
@@ -2367,13 +2408,9 @@ void D3D12App::refresh_info_panel()
     {
         text << L"Selection: (" << selection.x << L", " << selection.y << L", " << selection.z << L")\r\n"
              << L"Target: " << (scenario_target ? widen(grannys_house_trials::sim::to_string(*scenario_target)) : L"none") << L"\r\n"
-             << L"Round status: "
-             << (turn_packet.objective_completed ? L"completed"
-                 : turn_packet.objective_failed ? L"failed"
-                 : L"in progress")
-             << L"\r\n"
+             << L"Round status: " << widen(std::string(grannys_house_trials::playtest::round_result_name(turn_packet.round_result))) << L"\r\n"
              << L"Packet size: " << packet_characters << L" characters / " << packet_bytes << L" bytes\r\n"
-             << L"Legal actions: " << scenario_actions.size() << L"\r\n"
+             << L"Legal actions: " << turn_packet.legal_actions.size() << L"\r\n"
              << L"Recent events: " << token_events.size() << L"\r\n"
              << L"Evidence items: " << evidence_view.stats.size() << L"\r\n"
              << L"\r\nAgent packet:\r\n"
@@ -2383,11 +2420,7 @@ void D3D12App::refresh_info_panel()
     {
         text << L"Selection: (" << selection.x << L", " << selection.y << L", " << selection.z << L")\r\n"
              << L"Target: " << (scenario_target ? widen(grannys_house_trials::sim::to_string(*scenario_target)) : L"none") << L"\r\n"
-             << L"Current state: "
-             << (turn_packet.objective_completed ? L"complete"
-                 : turn_packet.objective_failed ? L"failed"
-                 : L"in progress")
-             << L"\r\n"
+             << L"Current state: " << widen(std::string(grannys_house_trials::playtest::round_result_name(turn_packet.round_result))) << L"\r\n"
              << L"Hidden dependency: " << (turn_packet.hidden_dependency_revealed ? L"revealed" : L"still hidden") << L"\r\n"
              << L"Material: " << material_name << L"\r\n"
              << L"Height: " << cell.column_height_voxels << L" coarse voxels, top at " << coarse_top_height_inches << L" inches\r\n"
@@ -2398,7 +2431,11 @@ void D3D12App::refresh_info_panel()
              << L"Legal actions: " << scenario_actions.size() << L"\r\n"
              << L"\r\nPossible actions:\r\n";
 
-        if (scenario_actions.empty())
+        if (!gameplay_actions_enabled)
+        {
+            text << L"  round ended; reset to start a new attempt\r\n";
+        }
+        else if (scenario_actions.empty())
         {
             text << L"  none\r\n";
         }
@@ -2426,6 +2463,8 @@ void D3D12App::refresh_info_panel()
 
     SetWindowTextW(info_panel_, text.str().c_str());
     EnableWindow(copy_agent_snapshot_button_, true);
+    EnableWindow(end_round_button_, gameplay_actions_enabled ? TRUE : FALSE);
+    EnableWindow(reset_round_button_, TRUE);
 
     std::wostringstream title;
     title << L"Granny's House Trials :: Grass Field 001 :: "
@@ -2436,8 +2475,7 @@ void D3D12App::refresh_info_panel()
 
 void D3D12App::refresh_evidence_board()
 {
-    evidence_board_panel_.set_view(
-        grannys_house_trials::playtest::make_evidence_board_view(yard_session_.scenario().round_log()));
+    evidence_board_panel_.set_view(yard_session_.round_presentation(selected_scenario_target()).evidence_board);
 }
 
 std::optional<grannys_house_trials::sim::TargetId> D3D12App::selected_scenario_target() const
@@ -2457,11 +2495,6 @@ std::vector<grannys_house_trials::sim::LegalAction> D3D12App::scenario_actions_f
     return yard_session_.legal_actions(selected_scenario_target());
 }
 
-grannys_house_trials::playtest::TurnPacket D3D12App::current_turn_packet() const
-{
-    return yard_session_.turn_packet(selected_scenario_target());
-}
-
 void D3D12App::refresh_scenario_action_ui()
 {
     if (!scenario_action_combo_ || !run_action_button_)
@@ -2470,7 +2503,7 @@ void D3D12App::refresh_scenario_action_ui()
     }
 
     ComboBox_ResetContent(scenario_action_combo_);
-    const auto actions = scenario_actions_for_selection();
+    const auto actions = yard_session_.can_accept_gameplay_actions() ? scenario_actions_for_selection() : std::vector<grannys_house_trials::sim::LegalAction>{};
     for (const auto &action : actions)
     {
         const std::wstring item_text = legal_action_label(action) + L" [" + widen(action.id.str()) + L"]";
@@ -2479,6 +2512,7 @@ void D3D12App::refresh_scenario_action_ui()
 
     const bool has_actions = !actions.empty();
     ComboBox_SetCurSel(scenario_action_combo_, has_actions ? 0 : -1);
+    EnableWindow(scenario_action_combo_, has_actions);
     EnableWindow(run_action_button_, has_actions);
 }
 
@@ -2537,7 +2571,11 @@ void D3D12App::run_selected_scenario_action()
 
 void D3D12App::run_scenario_action(std::string_view action_id)
 {
-    if (action_id == "reset_round")
+    if (action_id == "end_round")
+    {
+        static_cast<void>(yard_session_.end_round(selected_scenario_target()));
+    }
+    else if (action_id == "reset_round")
     {
         static_cast<void>(yard_session_.reset_round());
     }
@@ -3340,6 +3378,9 @@ LRESULT D3D12App::handle_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
             return 0;
         case control_id_advance_round:
             run_scenario_action("advance_simulation");
+            return 0;
+        case control_id_end_round:
+            run_scenario_action("end_round");
             return 0;
         case control_id_reset_round:
             run_scenario_action("reset_round");

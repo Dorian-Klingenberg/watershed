@@ -1,4 +1,5 @@
 #include "grannys_house_trials/playtest/turn_packet.h"
+#include "grannys_house_trials/playtest/round_result.h"
 
 #include "grannys_house_trials/sim/grannys_yard_scenario.h"
 
@@ -7,6 +8,7 @@
 #include <algorithm>
 
 using grannys_house_trials::playtest::TesterRole;
+using grannys_house_trials::playtest::RoundResult;
 using grannys_house_trials::playtest::TurnPacket;
 using grannys_house_trials::playtest::make_turn_packet;
 using grannys_house_trials::sim::AnchorId;
@@ -67,6 +69,7 @@ TEST_CASE("TurnPacket mirrors the current Granny's Yard turn surface", "[playtes
     REQUIRE(packet.objective.view() == "Deliver enough water to the north bed without soaking the cellar edge or softening the yard path.");
     REQUIRE(packet.recent_events.size() == static_cast<std::size_t>(1));
     REQUIRE(has_action_id(packet.legal_actions, "route_water_source"));
+    REQUIRE(packet.round_result == RoundResult::Active);
     REQUIRE_FALSE(packet.objective_completed);
     REQUIRE_FALSE(packet.objective_failed);
 }
@@ -96,5 +99,6 @@ TEST_CASE("TurnPacket reflects world changes after a risky intervention", "[play
     REQUIRE(has_state(*garden_bed, TargetStateTag::Wet));
     REQUIRE(has_state(*cellar_edge, TargetStateTag::Wet));
     REQUIRE(packet.objective_failed);
+    REQUIRE(packet.round_result == RoundResult::Failure);
     REQUIRE_FALSE(packet.recent_evidence.empty());
 }

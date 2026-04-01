@@ -28,6 +28,7 @@ add_executable(
     playtest/playtest_protocol_tests.cpp
     playtest/evidence_board_view_tests.cpp
     playtest/grannys_yard_session_tests.cpp
+    playtest/round_result_tests.cpp
 )
 
 target_link_libraries(

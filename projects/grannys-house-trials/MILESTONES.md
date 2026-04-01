@@ -95,7 +95,7 @@ Implementation note:
 
 Current note:
 
-- Milestone 4 is now shifting from evidence plumbing into board presentation, summary layout, and cleanup polish
+- Milestone 4 is complete for the current thin-shell runnable; the next UI upgrade can revisit presentation polish without reopening the evidence-board milestone
 
 ## Milestone 5: Cast Layer
 
