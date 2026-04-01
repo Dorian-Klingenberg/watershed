@@ -14,7 +14,8 @@
     "one hidden dependency",
     "high-level agent actions",
     "factual evidence capture",
-    "host-judged points later, not yet"
+    "session boundary instead of god-object main.cpp",
+    "Milestone 4 evidence-board polish next"
   ],
   "do_not_build_yet": [
     "full arbitrary voxel marcher",
@@ -53,10 +54,18 @@
       "focused target",
       "legal actions",
       "recent evidence",
-      "recent events",
+      "recent events (tokenized, first no-op only until the world changes)",
       "objective_completed",
       "objective_failed",
       "hidden_dependency_revealed"
+    ]
+  },
+  "human_ui": {
+    "notes": [
+      "human-readable summary text",
+      "possible actions in plain English",
+      "recent notes instead of raw event spam",
+      "agent packet remains available for copy/export"
     ]
   },
   "evidence_model": {
@@ -74,7 +83,8 @@
     "Keep the current D3D12 grass-field harness.",
     "Use shared sim/playtest code for scenario truth and agent packets.",
     "Treat the viewport as presentation, not the subject.",
-    "Keep shader/render novelty on pause unless it directly unblocks the mechanic."
+    "Keep shader/render novelty on pause unless it directly unblocks the mechanic.",
+    "The yard round now belongs to playtest::GrannysYardSession, not main.cpp."
   ],
   "canonical_docs": {
     "root_readme": "README.md",
@@ -84,5 +94,11 @@
     "scenario": "SCENARIO_001_GRANNYS_YARD.md",
     "playtest_protocol": "PLAYTEST_PROTOCOL_V0.md",
     "cast_and_scoring": "CAST_AND_SCORING.md"
-  }
+  },
+  "startup_order": [
+    "AGENTS.md",
+    "projects/grannys-house-trials/AGENT_CONTEXT.json",
+    "projects/grannys-house-trials/STATUS.md",
+    "projects/grannys-house-trials/README.md"
+  ]
 }

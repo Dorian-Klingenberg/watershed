@@ -37,6 +37,21 @@ The project should prove:
 3. tester personalities can expose different truths about the same mechanic
 4. useful development insight can come from a structured in-world session
 
+Current architecture direction:
+
+- `main.cpp` is only the host shell for the runnable
+- `playtest::GrannysYardSession` owns the round/session boundary
+- the next prototype work should deepen the drainage round, not widen the
+  renderer surface
+- the next presentation step is a dedicated evidence-board child window fed
+  by the shared playtest evidence view
+
+Milestone note:
+
+- Milestone 3 is now the mechanically working drainage round milestone
+- the next step is Milestone 4: evidence board presentation and round summary
+- keep `main.cpp` thin and let the session boundary remain the round seam
+
 Machine-readable agent context lives at:
 
 - [AGENT_CONTEXT.json](/D:/Repos/Games/TheGame/projects/grannys-house-trials/AGENT_CONTEXT.json)
@@ -65,6 +80,11 @@ The minimum viable version should include:
 - a round log / evidence board
 - a host-judged scoring screen
 - a reliable reset
+
+Implementation note:
+
+- the round log exists and is already surfaced in the host shell
+- the scoring screen is still intentionally deferred to later milestone work
 
 ## Design Pillars
 
@@ -170,6 +190,12 @@ Renderer status note:
 - it does not yet use a full arbitrary voxel ray marcher or cube marcher
 - the next renderer experiments should extend that path without committing to a
   complete arbitrary 3D traversal architecture too early
+
+Milestone 3 note:
+
+- the round logic has been refactored behind a dedicated session component
+- that is the architectural seam to build on for the drainage mechanic,
+  evidence recording, and future driver apps
 
 ## Immediate Success Condition
 

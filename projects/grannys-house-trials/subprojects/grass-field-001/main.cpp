@@ -12,6 +12,8 @@
 
 #include "grannys_house_trials/sim/adaptive_terrain_ownership_field.h"
 #include "grannys_house_trials/gfx/orbit_camera.h"
+#include "grannys_house_trials/playtest/evidence_board_panel.h"
+#include "grannys_house_trials/playtest/grannys_yard_session.h"
 #include "grannys_house_trials/playtest/evidence_board_view.h"
 #include "grannys_house_trials/playtest/turn_packet.h"
 #include "grannys_house_trials/sim/gravity_erosion_field.h"
@@ -22,6 +24,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -45,8 +48,7 @@ constexpr UINT frame_count = 2;
 constexpr float pi = 3.1415926535f;
 constexpr wchar_t main_window_class_name[] = L"GrannysHouseTrialsGrassField001";
 constexpr wchar_t viewport_window_class_name[] = L"GrannysHouseTrialsGrassFieldViewport";
-constexpr int default_field_width = 100;
-constexpr int default_field_depth = 100;
+constexpr int default_field_size = 100;
 constexpr float default_voxel_size_feet = 1.0f;
 
 enum ControlId : int
@@ -61,6 +63,9 @@ enum ControlId : int
     control_id_run_action = 1008,
     control_id_advance_round = 1009,
     control_id_reset_round = 1010,
+    control_id_field_size_combo = 1011,
+    control_id_toggle_fog = 1012,
+    control_id_toggle_packet_view = 1013,
 };
 
 enum class DisplayGridMode
@@ -78,6 +83,7 @@ struct SceneConstants
     XMUINT4 field_info{};
     XMUINT4 selection_info{};
     XMUINT4 refinement_info{};
+    XMUINT4 display_info{};
 };
 
 struct MouseState
@@ -166,6 +172,35 @@ struct GpuRefinedPatchMetadata
     }
 
     return "unknown display grid";
+}
+
+[[nodiscard]] std::wstring legal_action_label(const grannys_house_trials::sim::LegalAction &action)
+{
+    using grannys_house_trials::sim::ActionKind;
+
+    switch (action.kind)
+    {
+    case ActionKind::Inspect:
+        return L"Inspect target";
+    case ActionKind::InspectNeighborhood:
+        return L"Inspect nearby area";
+    case ActionKind::RouteWater:
+        return L"Route water source";
+    case ActionKind::DigChannel:
+        return L"Dig shallow channel";
+    case ActionKind::PackSoil:
+        return L"Pack soil";
+    case ActionKind::AdvanceSimulation:
+        return L"Advance round";
+    case ActionKind::ResetRound:
+        return L"Reset round";
+    case ActionKind::Look:
+        return L"Look";
+    case ActionKind::Wait:
+        return L"Wait";
+    }
+
+    return std::wstring(action.id.view().begin(), action.id.view().end());
 }
 
 [[nodiscard]] constexpr std::string_view tester_role_name(grannys_house_trials::playtest::TesterRole role) noexcept
@@ -703,12 +738,16 @@ private:
     void create_assets();
     void update();
     void render();
+    void update_fps_counter();
     void wait_for_gpu();
     void move_to_next_frame();
     void create_ui();
     void layout_ui();
     void refresh_info_panel();
+    void refresh_evidence_board();
     [[nodiscard]] std::wstring build_agent_snapshot_text() const;
+    void refresh_field_size_ui();
+    void apply_field_size(int field_size);
     [[nodiscard]] std::optional<VoxelSelection> try_pick_voxel(POINT client_point) const;
     [[nodiscard]] std::optional<grannys_house_trials::sim::TargetId> selected_scenario_target() const;
     [[nodiscard]] std::vector<grannys_house_trials::sim::LegalAction> scenario_actions_for_selection() const;
@@ -750,7 +789,11 @@ private:
     HWND clear_selection_button_ = nullptr;
     HWND display_grid_label_ = nullptr;
     HWND display_grid_combo_ = nullptr;
+    HWND field_size_label_ = nullptr;
+    HWND field_size_combo_ = nullptr;
     HWND highlight_checkbox_ = nullptr;
+    HWND fog_checkbox_ = nullptr;
+    HWND packet_view_checkbox_ = nullptr;
     HWND copy_agent_snapshot_button_ = nullptr;
     HWND scenario_group_ = nullptr;
     HWND scenario_action_combo_ = nullptr;
@@ -758,21 +801,27 @@ private:
     HWND advance_round_button_ = nullptr;
     HWND reset_round_button_ = nullptr;
     HWND info_panel_ = nullptr;
+    HWND evidence_board_group_ = nullptr;
     UINT width_ = 1280;
     UINT height_ = 720;
     MouseState mouse_{};
-    grannys_house_trials::gfx::OrbitCamera camera_{make_default_camera(default_field_width, default_field_depth)};
-    grannys_house_trials::sim::GrassField field_{default_field_width, default_field_depth, default_voxel_size_feet};
+    int field_size_ = default_field_size;
+    grannys_house_trials::gfx::OrbitCamera camera_{make_default_camera(default_field_size, default_field_size)};
+    grannys_house_trials::sim::GrassField field_{default_field_size, default_field_size, default_voxel_size_feet};
     grannys_house_trials::sim::GravityErosionField erosion_field_{field_};
     grannys_house_trials::sim::AdaptiveTerrainOwnershipField ownership_field_{field_, erosion_field_};
     grannys_house_trials::sim::SparseRefinedPatchField refined_patch_field_{field_, erosion_field_, ownership_field_};
-    grannys_house_trials::sim::GrannysYardScenario scenario_{};
+    grannys_house_trials::playtest::GrannysYardSession yard_session_{};
     DisplayGridMode display_grid_mode_ = DisplayGridMode::coarse_foot_columns;
     std::optional<VoxelSelection> selected_voxel_;
     bool highlight_selection_ = true;
-    grannys_house_trials::playtest::TesterRole active_tester_role_ = grannys_house_trials::playtest::TesterRole::Builder;
+    bool fog_enabled_ = true;
+    bool packet_view_enabled_ = false;
     std::wstring latest_agent_snapshot_;
-    std::vector<std::string> recent_scenario_events_{};
+    grannys_house_trials::playtest::EvidenceBoardPanel evidence_board_panel_{};
+    double fps_ = 0.0;
+    std::chrono::steady_clock::time_point fps_sample_start_{};
+    std::uint64_t fps_sample_frames_ = 0;
     HFONT ui_font_ = nullptr;
     HFONT info_font_ = nullptr;
 
@@ -887,8 +936,8 @@ bool D3D12App::initialize(HINSTANCE instance)
     RegisterClassW(&viewport_class);
     debug_log("[grass-field-001] viewport window class registered");
 
-    constexpr LONG desired_client_width = 1560;
-    constexpr LONG desired_client_height = 920;
+    constexpr LONG desired_client_width = 2200;
+    constexpr LONG desired_client_height = 1840;
     RECT window_rect{0, 0, desired_client_width, desired_client_height};
     AdjustWindowRect(&window_rect, window_style, FALSE);
 
@@ -1392,15 +1441,15 @@ void D3D12App::rebuild_display_field_buffer()
 
     if (display_grid_mode_ == DisplayGridMode::coarse_foot_columns)
     {
-        display_cells = build_coarse_field_buffer_data(field_, scenario_, max_column_height_voxels);
+        display_cells = build_coarse_field_buffer_data(field_, yard_session_.scenario(), max_column_height_voxels);
     }
     else if (display_grid_mode_ == DisplayGridMode::erosion_inch_columns)
     {
-        display_cells = build_coarse_field_buffer_data(field_, scenario_, max_column_height_voxels);
+        display_cells = build_coarse_field_buffer_data(field_, yard_session_.scenario(), max_column_height_voxels);
     }
     else
     {
-        display_cells = build_hybrid_field_buffer_data(field_, scenario_, ownership_field_, max_column_height_voxels);
+        display_cells = build_hybrid_field_buffer_data(field_, yard_session_.scenario(), ownership_field_, max_column_height_voxels);
     }
 
     if (display_grid_mode_ != DisplayGridMode::coarse_foot_columns)
@@ -1561,8 +1610,38 @@ void D3D12App::update()
     constant_buffer_data_->refinement_info = {
         static_cast<std::uint32_t>(erosion_field_.patch_resolution()),
         static_cast<std::uint32_t>(refined_patch_field_.patch_count()),
+        fog_enabled_ ? 1u : 0u,
+        0u};
+    constant_buffer_data_->display_info = {
+        fog_enabled_ ? 1u : 0u,
+        0u,
         0u,
         0u};
+
+    update_fps_counter();
+}
+
+void D3D12App::update_fps_counter()
+{
+    const auto now = std::chrono::steady_clock::now();
+    if (fps_sample_start_ == std::chrono::steady_clock::time_point{})
+    {
+        fps_sample_start_ = now;
+        fps_sample_frames_ = 0;
+        fps_ = 0.0;
+        return;
+    }
+
+    ++fps_sample_frames_;
+    const auto elapsed_seconds = std::chrono::duration<double>(now - fps_sample_start_).count();
+    if (elapsed_seconds < 0.5)
+    {
+        return;
+    }
+
+    fps_ = elapsed_seconds > 0.0 ? static_cast<double>(fps_sample_frames_) / elapsed_seconds : 0.0;
+    fps_sample_start_ = now;
+    fps_sample_frames_ = 0;
 }
 
 void D3D12App::create_ui()
@@ -1586,7 +1665,7 @@ void D3D12App::create_ui()
     hint_label_ = CreateWindowExW(
         0,
         L"STATIC",
-        L"A standard host shell around the D3D viewport.\r\nSwitch between authored coarse, refined 1-inch remainder, and hybrid adaptive terrain views. Left drag pans, right drag orbits, left click inspects.",
+        L"Host shell around the D3D viewport.\r\nUse the controls to run the drainage test, inspect a target, and read the state log.",
         WS_CHILD | WS_VISIBLE,
         0,
         0,
@@ -1600,7 +1679,7 @@ void D3D12App::create_ui()
     camera_group_ = CreateWindowExW(
         0,
         L"BUTTON",
-        L"Controls",
+        L"View Controls",
         WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
         0,
         0,
@@ -1681,6 +1760,34 @@ void D3D12App::create_ui()
         app_instance,
         nullptr);
 
+    field_size_label_ = CreateWindowExW(
+        0,
+        L"STATIC",
+        L"Field Size",
+        WS_CHILD | WS_VISIBLE,
+        0,
+        0,
+        0,
+        0,
+        hwnd_,
+        nullptr,
+        app_instance,
+        nullptr);
+
+    field_size_combo_ = CreateWindowExW(
+        0,
+        WC_COMBOBOXW,
+        L"",
+        WS_CHILD | WS_VISIBLE | WS_VSCROLL | CBS_DROPDOWNLIST,
+        0,
+        0,
+        0,
+        0,
+        hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(control_id_field_size_combo)),
+        app_instance,
+        nullptr);
+
     highlight_checkbox_ = CreateWindowExW(
         0,
         L"BUTTON",
@@ -1694,6 +1801,37 @@ void D3D12App::create_ui()
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(control_id_toggle_highlight)),
         app_instance,
         nullptr);
+    Button_SetCheck(highlight_checkbox_, highlight_selection_ ? BST_CHECKED : BST_UNCHECKED);
+
+    fog_checkbox_ = CreateWindowExW(
+        0,
+        L"BUTTON",
+        L"Fog Enabled",
+        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+        0,
+        0,
+        0,
+        0,
+        hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(control_id_toggle_fog)),
+        app_instance,
+        nullptr);
+    Button_SetCheck(fog_checkbox_, fog_enabled_ ? BST_CHECKED : BST_UNCHECKED);
+
+    packet_view_checkbox_ = CreateWindowExW(
+        0,
+        L"BUTTON",
+        L"Agent Packet View",
+        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+        0,
+        0,
+        0,
+        0,
+        hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(control_id_toggle_packet_view)),
+        app_instance,
+        nullptr);
+    Button_SetCheck(packet_view_checkbox_, packet_view_enabled_ ? BST_CHECKED : BST_UNCHECKED);
 
     copy_agent_snapshot_button_ = CreateWindowExW(
         0,
@@ -1712,7 +1850,7 @@ void D3D12App::create_ui()
     scenario_group_ = CreateWindowExW(
         0,
         L"BUTTON",
-        L"Scenario",
+        L"Round Controls",
         WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
         0,
         0,
@@ -1779,10 +1917,24 @@ void D3D12App::create_ui()
         app_instance,
         nullptr);
 
+    evidence_board_group_ = CreateWindowExW(
+        0,
+        L"BUTTON",
+        L"Evidence Board",
+        WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
+        0,
+        0,
+        0,
+        0,
+        hwnd_,
+        nullptr,
+        app_instance,
+        nullptr);
+
     selection_group_ = CreateWindowExW(
         0,
         L"BUTTON",
-        L"Selected Voxel",
+        L"Selected Target",
         WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
         0,
         0,
@@ -1807,6 +1959,8 @@ void D3D12App::create_ui()
         app_instance,
         nullptr);
 
+    evidence_board_panel_.create(hwnd_, app_instance);
+
     viewport_hwnd_ = CreateWindowExW(
         WS_EX_CLIENTEDGE,
         viewport_window_class_name,
@@ -1823,10 +1977,11 @@ void D3D12App::create_ui()
 
     if (!title_label_ || !hint_label_ || !camera_group_ || !reset_camera_button_
         || !step_erosion_button_ || !display_grid_label_ || !display_grid_combo_
-        || !clear_selection_button_ || !highlight_checkbox_ || !copy_agent_snapshot_button_
+        || !field_size_label_ || !field_size_combo_
+        || !clear_selection_button_ || !highlight_checkbox_ || !fog_checkbox_ || !packet_view_checkbox_ || !copy_agent_snapshot_button_
         || !scenario_group_ || !scenario_action_combo_ || !run_action_button_
         || !advance_round_button_ || !reset_round_button_
-        || !selection_group_ || !info_panel_ || !viewport_hwnd_)
+        || !selection_group_ || !info_panel_ || !evidence_board_group_ || !evidence_board_panel_.hwnd() || !viewport_hwnd_)
     {
         throw std::runtime_error("Could not create the host application controls.");
     }
@@ -1870,11 +2025,14 @@ void D3D12App::create_ui()
         display_grid_combo_,
         scenario_action_combo_,
         highlight_checkbox_,
+        fog_checkbox_,
+        packet_view_checkbox_,
         copy_agent_snapshot_button_,
         run_action_button_,
         advance_round_button_,
         reset_round_button_,
         info_panel_,
+        evidence_board_group_,
     };
 
     for (HWND control : themed_controls)
@@ -1889,18 +2047,24 @@ void D3D12App::create_ui()
             hint_label_,
             camera_group_,
             scenario_group_,
+            evidence_board_group_,
             selection_group_,
             reset_camera_button_,
             step_erosion_button_,
             clear_selection_button_,
             display_grid_label_,
             display_grid_combo_,
+            field_size_label_,
+            field_size_combo_,
             scenario_action_combo_,
             highlight_checkbox_,
+            fog_checkbox_,
+            packet_view_checkbox_,
             copy_agent_snapshot_button_,
             run_action_button_,
             advance_round_button_,
             reset_round_button_,
+            evidence_board_panel_.hwnd(),
         };
 
         for (HWND control : ui_controls)
@@ -1914,16 +2078,28 @@ void D3D12App::create_ui()
         SendMessage(info_panel_, WM_SETFONT, reinterpret_cast<WPARAM>(info_font_), TRUE);
     }
 
+    if (ui_font_)
+    {
+        SendMessage(evidence_board_group_, WM_SETFONT, reinterpret_cast<WPARAM>(ui_font_), TRUE);
+    }
+
     Button_SetCheck(highlight_checkbox_, BST_CHECKED);
     ComboBox_AddString(display_grid_combo_, L"Coarse 1-foot");
     ComboBox_AddString(display_grid_combo_, L"Refined 1-inch");
     ComboBox_AddString(display_grid_combo_, L"Hybrid adaptive");
     ComboBox_SetCurSel(display_grid_combo_, static_cast<int>(display_grid_mode_));
+    ComboBox_AddString(field_size_combo_, L"Small test field (50 x 50)");
+    ComboBox_AddString(field_size_combo_, L"Standard test field (100 x 100)");
+    ComboBox_AddString(field_size_combo_, L"Larger test field (150 x 150)");
+    ComboBox_AddString(field_size_combo_, L"Stress test field (200 x 200)");
+    ComboBox_AddString(field_size_combo_, L"Large garden test (1000 x 1000)");
+    ComboBox_SetCurSel(field_size_combo_, 1);
     EnableWindow(copy_agent_snapshot_button_, FALSE);
     EnableWindow(run_action_button_, FALSE);
     EnableWindow(advance_round_button_, TRUE);
     EnableWindow(reset_round_button_, TRUE);
     refresh_scenario_action_ui();
+    refresh_field_size_ui();
     layout_ui();
 }
 
@@ -1938,10 +2114,10 @@ void D3D12App::layout_ui()
     GetClientRect(hwnd_, &client_rect);
 
     const int margin = 16;
-    const int sidebar_width = 360;
+    const int sidebar_width = 460;
     const int content_gap = 20;
     const int button_height = 34;
-    const int button_width = 150;
+    const int button_width = 190;
     const int viewport_x = sidebar_width + content_gap;
     const int viewport_width = std::max<int>(320, static_cast<int>(client_rect.right) - viewport_x - margin);
     const int viewport_height = std::max<int>(320, static_cast<int>(client_rect.bottom) - (margin * 2));
@@ -1949,372 +2125,218 @@ void D3D12App::layout_ui()
     MoveWindow(title_label_, margin, margin, sidebar_width - (margin * 2), 26, TRUE);
     MoveWindow(hint_label_, margin, 48, sidebar_width - (margin * 2), 68, TRUE);
 
-    MoveWindow(camera_group_, margin, 128, sidebar_width - (margin * 2), 166, TRUE);
+    MoveWindow(camera_group_, margin, 128, sidebar_width - (margin * 2), 196, TRUE);
     MoveWindow(reset_camera_button_, margin + 16, 160, button_width, button_height, TRUE);
-    MoveWindow(step_erosion_button_, margin + 176, 160, button_width, button_height, TRUE);
-    MoveWindow(clear_selection_button_, margin + 16, 202, button_width, button_height, TRUE);
-    MoveWindow(display_grid_label_, margin + 176, 206, button_width, 20, TRUE);
-    MoveWindow(display_grid_combo_, margin + 176, 226, button_width, 240, TRUE);
-    MoveWindow(highlight_checkbox_, margin + 16, 244, sidebar_width - 48, 24, TRUE);
+    MoveWindow(step_erosion_button_, margin + 232, 160, button_width, button_height, TRUE);
+    MoveWindow(clear_selection_button_, margin + 16, 206, button_width, button_height, TRUE);
+    MoveWindow(display_grid_label_, margin + 232, 206, button_width, 20, TRUE);
+    MoveWindow(display_grid_combo_, margin + 232, 228, button_width, 240, TRUE);
+    MoveWindow(field_size_label_, margin + 16, 248, 90, 20, TRUE);
+    MoveWindow(field_size_combo_, margin + 116, 244, button_width, 240, TRUE);
+    MoveWindow(highlight_checkbox_, margin + 16, 292, sidebar_width - 48, 24, TRUE);
+    MoveWindow(fog_checkbox_, margin + 16, 316, sidebar_width - 48, 24, TRUE);
+    MoveWindow(packet_view_checkbox_, margin + 16, 340, sidebar_width - 48, 24, TRUE);
 
-    MoveWindow(scenario_group_, margin, 308, sidebar_width - (margin * 2), 138, TRUE);
-    MoveWindow(scenario_action_combo_, margin + 16, 340, sidebar_width - 48, 240, TRUE);
-    MoveWindow(run_action_button_, margin + 16, 372, button_width, button_height, TRUE);
-    MoveWindow(advance_round_button_, margin + 176, 372, button_width, button_height, TRUE);
-    MoveWindow(reset_round_button_, margin + 16, 414, sidebar_width - 48, button_height, TRUE);
+    MoveWindow(scenario_group_, margin, 372, sidebar_width - (margin * 2), 164, TRUE);
+    MoveWindow(scenario_action_combo_, margin + 16, 396, sidebar_width - 48, 240, TRUE);
+    MoveWindow(run_action_button_, margin + 16, 432, button_width, button_height, TRUE);
+    MoveWindow(advance_round_button_, margin + 252, 432, button_width, button_height, TRUE);
+    MoveWindow(reset_round_button_, margin + 16, 474, sidebar_width - 48, button_height, TRUE);
 
-    MoveWindow(selection_group_, margin, 458, sidebar_width - (margin * 2), client_rect.bottom - 474, TRUE);
-    MoveWindow(copy_agent_snapshot_button_, margin + 16, 490, sidebar_width - 48, button_height, TRUE);
+    MoveWindow(selection_group_, margin, 546, sidebar_width - (margin * 2), 996, TRUE);
+    MoveWindow(copy_agent_snapshot_button_, margin + 16, 570, sidebar_width - 48, button_height, TRUE);
     MoveWindow(
         info_panel_,
         margin + 16,
-        532,
+        612,
         sidebar_width - 48,
-        std::max<int>(110, static_cast<int>(client_rect.bottom) - 564),
+        928,
         TRUE);
+    MoveWindow(evidence_board_group_, margin, 884, sidebar_width - (margin * 2), 168, TRUE);
+    evidence_board_panel_.layout(margin + 16, 908, sidebar_width - 48, 136);
 
     MoveWindow(viewport_hwnd_, viewport_x, margin, viewport_width, viewport_height, TRUE);
 }
 
 std::wstring D3D12App::build_agent_snapshot_text() const
 {
+    const auto turn_packet = current_turn_packet();
+    const auto scenario_target = selected_scenario_target();
+    const auto evidence_view = grannys_house_trials::playtest::make_evidence_board_view(yard_session_.scenario().round_log());
+    const auto actions = scenario_actions_for_selection();
+
+    std::wostringstream json;
+    json << L"{\n"
+         << L"  \"schema\": \"grannys_house_trials.grass_field.agent_snapshot.v4\",\n"
+         << L"  \"mission\": \"Drain the yard without flooding the cellar edge or softening the path.\",\n"
+         << L"  \"display_grid\": \"" << widen(display_grid_mode_name(display_grid_mode_)) << L"\",\n"
+         << L"  \"field_size\": { \"width\": " << field_.width() << L", \"depth\": " << field_.depth() << L" },\n"
+         << L"  \"selection\": ";
+
     if (!selected_voxel_)
     {
-        return L"";
-    }
-
-    const auto &selection = *selected_voxel_;
-    const int coarse_x = source_coarse_x_for_display_x(selection.x);
-    const int coarse_z = source_coarse_z_for_display_z(selection.z);
-    const int local_x_inches = source_local_x_inches_for_display_x(selection.x);
-    const int local_z_inches = source_local_z_inches_for_display_z(selection.z);
-    const auto &cell = field_.at(coarse_x, coarse_z);
-    const bool has_detail_patch = field_.has_detail_patch(coarse_x, coarse_z);
-    const int coarse_top_height_inches = field_.coarse_top_height_inches_at(coarse_x, coarse_z);
-    const int patch_resolution = erosion_field_.patch_resolution();
-    const int patch_center = patch_resolution / 2;
-    const int selected_block_y =
-        display_grid_mode_ == DisplayGridMode::coarse_foot_columns
-            ? selection.y
-            : selection.y / patch_resolution;
-    const int erosion_min_height_inches = erosion_field_.patch_min_height_inches_at(coarse_x, coarse_z);
-    const int erosion_max_height_inches = erosion_field_.patch_max_height_inches_at(coarse_x, coarse_z);
-    const int erosion_center_height_inches = erosion_field_.fine_top_height_inches_at(
-        coarse_x,
-        coarse_z,
-        patch_center,
-        patch_center);
-    const int selected_fine_height_inches = erosion_field_.fine_top_height_inches_at(
-        coarse_x,
-        coarse_z,
-        local_x_inches,
-        local_z_inches);
-    const bool erosion_varies_from_coarse = erosion_field_.patch_varies_from_coarse_at(coarse_x, coarse_z);
-    const int coarse_full_block_count = ownership_field_.full_block_count_at(coarse_x, coarse_z);
-    const int refined_block_count = ownership_field_.refined_block_count_at(coarse_x, coarse_z);
-    const auto selected_block_ownership = ownership_field_.ownership_at(coarse_x, coarse_z, selected_block_y);
-
-    std::ostringstream json;
-    json << "{\n"
-         << "  \"schema\": \"grannys_house_trials.grass_field.selection_snapshot.v2\",\n"
-         << "  \"world\": {\n"
-         << "    \"project\": \"grannys-house-trials\",\n"
-         << "    \"subproject\": \"grass-field-001\",\n"
-         << "    \"field_width\": " << field_.width() << ",\n"
-         << "    \"field_depth\": " << field_.depth() << ",\n"
-         << "    \"voxel_size_feet\": " << std::fixed << std::setprecision(2) << field_.voxel_size_feet() << ",\n"
-         << "    \"display_grid\": \"" << escape_json_string(display_grid_mode_name(display_grid_mode_)) << "\",\n"
-         << "    \"coarse_grid\": \"1-foot interaction columns\",\n"
-         << "    \"detail_grid\": \"1-inch surface cells seeded from coarse columns and authored detail patches\",\n"
-         << "    \"erosion_model\": {\n"
-         << "      \"type\": \"gravity_relaxation\",\n"
-         << "      \"cycle_count\": " << erosion_field_.cycle_count() << ",\n"
-          << "      \"settle_step_inches\": 1,\n"
-         << "      \"renderer_note\": \""
-         << escape_json_string(
-                display_grid_mode_ == DisplayGridMode::coarse_foot_columns
-                    ? "The viewport is currently raycasting the authored 1-foot coarse columns."
-                    : display_grid_mode_ == DisplayGridMode::erosion_inch_columns
-                        ? "The viewport is currently raycasting only the promoted 1-inch remainder above fully coarse-owned 1-foot blocks."
-                        : "The viewport is currently raycasting the hybrid adaptive terrain view: coarse-owned volume reads as 1-foot blocks while promoted top slabs read as inch-scale detail.")
-         << "\"\n"
-         << "    },\n"
-         << "    \"discoverability_note\": \"This prototype exposes the selected coarse voxel, its authored inch-scale seed data, and the current gravity-settled 1-inch surface state for that patch.\"\n"
-         << "  },\n"
-         << "  \"camera\": {\n"
-         << "    \"yaw_degrees\": " << std::fixed << std::setprecision(2) << camera_.yaw_degrees() << ",\n"
-         << "    \"pitch_degrees\": " << camera_.pitch_degrees() << ",\n"
-         << "    \"distance\": " << camera_.distance() << ",\n"
-         << "    \"focus\": {\n"
-         << "      \"x\": " << camera_.focus_x() << ",\n"
-         << "      \"y\": " << camera_.focus_y() << ",\n"
-         << "      \"z\": " << camera_.focus_z() << "\n"
-         << "    }\n"
-         << "  },\n"
-         << "  \"selection\": {\n"
-         << "    \"display_x\": " << selection.x << ",\n"
-         << "    \"display_y\": " << selection.y << ",\n"
-         << "    \"display_z\": " << selection.z << ",\n"
-         << "    \"source_coarse_x\": " << coarse_x << ",\n"
-         << "    \"source_coarse_z\": " << coarse_z << ",\n"
-         << "    \"source_local_x_inches\": " << local_x_inches << ",\n"
-         << "    \"source_local_z_inches\": " << local_z_inches << ",\n"
-         << "    \"source_block_y\": " << selected_block_y << ",\n"
-         << "    \"material\": \"" << escape_json_string(grannys_house_trials::sim::terrain_material_name(cell.material)) << "\",\n"
-          << "    \"column_height_voxels\": " << cell.column_height_voxels << ",\n"
-         << "    \"coarse_top_height_inches\": " << coarse_top_height_inches << ",\n"
-         << "    \"is_homestead_pad\": " << (cell.is_homestead_pad ? "true" : "false") << ",\n"
-          << "    \"is_garden_bed\": " << (cell.garden.is_garden_bed ? "true" : "false") << ",\n"
-          << "    \"garden\": {\n"
-          << "      \"soil_moisture\": " << cell.garden.soil_moisture << ",\n"
-          << "      \"fertility\": " << cell.garden.fertility << ",\n"
-          << "      \"sunlight\": " << cell.garden.sunlight << ",\n"
-          << "      \"weed_pressure\": " << cell.garden.weed_pressure << "\n"
-         << "    },\n"
-         << "    \"detail_patch_source\": {\n"
-         << "      \"present\": " << (has_detail_patch ? "true" : "false");
-
-    if (has_detail_patch)
-    {
-        const auto &detail_patch = field_.detail_patch_at(coarse_x, coarse_z);
-        json << ",\n"
-             << "      \"resolution\": " << field_.detail_patch_resolution() << ",\n"
-             << "      \"coarse_top_height_inches\": " << coarse_top_height_inches << ",\n"
-             << "      \"fine_center_height_inches\": "
-             << field_.fine_top_height_inches_at(coarse_x, coarse_z, field_.detail_patch_resolution() / 2, field_.detail_patch_resolution() / 2)
-             << ",\n"
-             << "      \"top_offset_inches\": [\n";
-
-        for (int local_z_inches = 0; local_z_inches < field_.detail_patch_resolution(); ++local_z_inches)
-        {
-            json << "        [";
-            for (int local_x_inches = 0; local_x_inches < field_.detail_patch_resolution(); ++local_x_inches)
-            {
-                if (local_x_inches > 0)
-                {
-                    json << ", ";
-                }
-                json << detail_patch.offset_at(local_x_inches, local_z_inches);
-            }
-            json << "]";
-            if (local_z_inches + 1 < field_.detail_patch_resolution())
-            {
-                json << ",";
-            }
-            json << "\n";
-        }
-
-        json << "      ]\n";
+        json << L"null";
     }
     else
     {
-        json << "\n";
+        const auto &selection = *selected_voxel_;
+        const int coarse_x = source_coarse_x_for_display_x(selection.x);
+        const int coarse_z = source_coarse_z_for_display_z(selection.z);
+        const auto &cell = field_.at(coarse_x, coarse_z);
+        const int patch_resolution = erosion_field_.patch_resolution();
+        const int selected_block_y =
+            display_grid_mode_ == DisplayGridMode::coarse_foot_columns
+                ? selection.y
+                : selection.y / patch_resolution;
+        const auto selected_block_ownership = ownership_field_.ownership_at(coarse_x, coarse_z, selected_block_y);
+
+        json << L"{\n"
+             << L"    \"x\": " << selection.x << L",\n"
+             << L"    \"y\": " << selection.y << L",\n"
+             << L"    \"z\": " << selection.z << L",\n"
+             << L"    \"source_coarse\": { \"x\": " << coarse_x << L", \"z\": " << coarse_z << L" },\n"
+             << L"    \"material\": \"" << widen(escape_json_string(grannys_house_trials::sim::terrain_material_name(cell.material))) << L"\",\n"
+             << L"    \"column_height_voxels\": " << cell.column_height_voxels << L",\n"
+             << L"    \"garden_bed\": " << (cell.garden.is_garden_bed ? L"true" : L"false") << L",\n"
+             << L"    \"homestead_pad\": " << (cell.is_homestead_pad ? L"true" : L"false") << L",\n"
+             << L"    \"ownership\": \"" << widen(terrain_volume_ownership_name(selected_block_ownership)) << L"\"\n"
+             << L"  }";
     }
 
-    json << "    },\n"
-         << "    \"erosion_surface\": {\n"
-         << "      \"cycle_count\": " << erosion_field_.cycle_count() << ",\n"
-         << "      \"resolution\": " << patch_resolution << ",\n"
-         << "      \"current_patch_min_height_inches\": " << erosion_min_height_inches << ",\n"
-         << "      \"current_patch_max_height_inches\": " << erosion_max_height_inches << ",\n"
-         << "      \"current_center_height_inches\": " << erosion_center_height_inches << ",\n"
-         << "      \"selected_column_top_height_inches\": " << selected_fine_height_inches << ",\n"
-         << "      \"varies_from_coarse\": " << (erosion_varies_from_coarse ? "true" : "false") << ",\n"
-         << "      \"coarse_full_block_count\": " << coarse_full_block_count << ",\n"
-         << "      \"refined_block_count\": " << refined_block_count << ",\n"
-         << "      \"selected_block_ownership\": \""
-         << escape_json_string(terrain_volume_ownership_name(selected_block_ownership))
-         << "\"\n"
-         << "    }\n";
+    json << L",\n"
+         << L"  \"objective\": \"" << widen(escape_json_string(turn_packet.objective.view())) << L"\",\n"
+         << L"  \"focused_target\": ";
 
-    const auto turn_packet = current_turn_packet();
-    json << "  },\n"
-         << "  \"scenario\": {\n"
-         << "    \"objective\": \"" << escape_json_string(turn_packet.objective.view()) << "\",\n"
-         << "    \"focused_target\": "
-         << (turn_packet.focused_target
-                 ? "\"" + escape_json_string(grannys_house_trials::sim::to_string(*turn_packet.focused_target)) + "\""
-                 : "null")
-         << ",\n"
-         << "    \"tester_role\": \"" << escape_json_string(tester_role_name(turn_packet.role)) << "\",\n"
-         << "    \"hidden_dependency_revealed\": " << (turn_packet.hidden_dependency_revealed ? "true" : "false") << ",\n"
-         << "    \"objective_completed\": " << (turn_packet.objective_completed ? "true" : "false") << ",\n"
-         << "    \"objective_failed\": " << (turn_packet.objective_failed ? "true" : "false") << ",\n"
-         << "    \"legal_actions\": [";
+    if (scenario_target)
+    {
+        json << L"\"" << widen(escape_json_string(grannys_house_trials::sim::to_string(*scenario_target))) << L"\"";
+    }
+    else
+    {
+        json << L"null";
+    }
 
-    for (std::size_t index = 0; index < turn_packet.legal_actions.size(); ++index)
+    json << L",\n"
+         << L"  \"round_status\": \""
+         << (turn_packet.objective_completed ? L"completed"
+             : turn_packet.objective_failed ? L"failed"
+             : L"in progress")
+         << L"\",\n"
+         << L"  \"hidden_dependency_revealed\": " << (turn_packet.hidden_dependency_revealed ? L"true" : L"false") << L",\n"
+         << L"  \"legal_actions\": [";
+
+    for (std::size_t index = 0; index < actions.size(); ++index)
     {
         if (index > 0)
         {
-            json << ", ";
+            json << L", ";
         }
-        json << "\"" << escape_json_string(turn_packet.legal_actions[index].id.str()) << "\"";
+        json << L"\"" << widen(escape_json_string(actions[index].id.str())) << L"\"";
     }
 
-    json << "],\n"
-         << "    \"recent_evidence\": [\n";
+    json << L"],\n"
+         << L"  \"evidence\": {\n";
 
-    for (std::size_t index = 0; index < turn_packet.recent_evidence.size(); ++index)
+    for (std::size_t index = 0; index < evidence_view.stats.size(); ++index)
     {
-        const auto &evidence = turn_packet.recent_evidence[index];
-        json << "      {\n"
-             << "        \"type\": \"" << escape_json_string(grannys_house_trials::sim::to_string(evidence.type)) << "\",\n"
-             << "        \"actor\": \"" << escape_json_string(evidence.actor.view()) << "\",\n"
-             << "        \"description\": \"" << escape_json_string(evidence.description.view()) << "\"\n"
-             << "      }";
-
-        if (index + 1 < turn_packet.recent_evidence.size())
+        const auto &stat = evidence_view.stats[index];
+        json << L"    \"" << widen(grannys_house_trials::sim::to_string(stat.type)) << L"\": " << stat.count;
+        if (index + 1 < evidence_view.stats.size())
         {
-            json << ",";
+            json << L",";
         }
-        json << "\n";
+        json << L"\n";
     }
 
-    json << "    ],\n"
-         << "    \"recent_events\": [\n";
+    json << L"  },\n"
+         << L"  \"recent_events\": [";
 
-    for (std::size_t index = 0; index < turn_packet.recent_events.size(); ++index)
+    const auto &events = turn_packet.recent_events;
+    for (std::size_t index = 0; index < events.size(); ++index)
     {
-        json << "      \"" << escape_json_string(turn_packet.recent_events[index]) << "\"";
-        if (index + 1 < turn_packet.recent_events.size())
+        if (index > 0)
         {
-            json << ",";
+            json << L", ";
         }
-        json << "\n";
+        json << L"\"" << widen(escape_json_string(events[index])) << L"\"";
     }
 
-    json << "    ]\n";
+    json << L"],\n"
+         << L"  \"commands\": [\n"
+         << L"    \"Inspect voxel\",\n"
+         << L"    \"Run selected action\",\n"
+         << L"    \"Advance round\",\n"
+         << L"    \"Reset round\",\n"
+         << L"    \"Change display grid\",\n"
+         << L"    \"Change field size\",\n"
+         << L"    \"Copy agent JSON\"\n"
+         << L"  ]\n"
+         << L"}\n";
 
-    json << "  },\n"
-         << "  \"discoverable_neighborhood\": [\n";
-
-    bool first_cell = true;
-    for (int z = std::max(0, coarse_z - 2); z <= std::min(field_.depth() - 1, coarse_z + 2); ++z)
-    {
-        for (int x = std::max(0, coarse_x - 2); x <= std::min(field_.width() - 1, coarse_x + 2); ++x)
-        {
-            const auto &neighbor = field_.at(x, z);
-
-            if (!first_cell)
-            {
-                json << ",\n";
-            }
-
-            first_cell = false;
-            json << "    {\n"
-                 << "      \"x\": " << x << ",\n"
-                 << "      \"z\": " << z << ",\n"
-                 << "      \"top_y\": " << (neighbor.column_height_voxels - 1) << ",\n"
-                 << "      \"material\": \"" << escape_json_string(grannys_house_trials::sim::terrain_material_name(neighbor.material)) << "\",\n"
-                 << "      \"column_height_voxels\": " << neighbor.column_height_voxels << ",\n"
-                 << "      \"is_homestead_pad\": " << (neighbor.is_homestead_pad ? "true" : "false") << ",\n"
-                 << "      \"is_garden_bed\": " << (neighbor.garden.is_garden_bed ? "true" : "false") << ",\n"
-                 << "      \"coarse_full_block_count\": " << ownership_field_.full_block_count_at(x, z) << ",\n"
-                 << "      \"refined_block_count\": " << ownership_field_.refined_block_count_at(x, z) << ",\n"
-                 << "      \"erosion_patch_min_height_inches\": " << erosion_field_.patch_min_height_inches_at(x, z) << ",\n"
-                 << "      \"erosion_patch_max_height_inches\": " << erosion_field_.patch_max_height_inches_at(x, z) << ",\n"
-                 << "      \"erosion_varies_from_coarse\": "
-                 << (erosion_field_.patch_varies_from_coarse_at(x, z) ? "true" : "false") << ",\n"
-                 << "      \"soil_moisture\": " << neighbor.garden.soil_moisture << ",\n"
-                 << "      \"fertility\": " << neighbor.garden.fertility << ",\n"
-                 << "      \"sunlight\": " << neighbor.garden.sunlight << ",\n"
-                 << "      \"weed_pressure\": " << neighbor.garden.weed_pressure << "\n"
-                 << "    }";
-        }
-    }
-
-    json << "\n  ]\n"
-         << "}\n";
-
-    return widen(json.str());
+    return json.str();
 }
 
 void D3D12App::refresh_info_panel()
 {
     const auto turn_packet = current_turn_packet();
-    const auto evidence_view = grannys_house_trials::playtest::make_evidence_board_view(scenario_.round_log());
+    const auto evidence_view = grannys_house_trials::playtest::make_evidence_board_view(yard_session_.scenario().round_log());
+    evidence_board_panel_.set_view(evidence_view);
     const auto scenario_target = selected_scenario_target();
     const auto scenario_actions = scenario_actions_for_selection();
+    const auto &token_events = turn_packet.recent_events;
+    const auto &human_notes = turn_packet.human_notes;
+    latest_agent_snapshot_ = build_agent_snapshot_text();
+    const std::size_t packet_characters = latest_agent_snapshot_.size();
+    const std::size_t packet_bytes = packet_characters * sizeof(wchar_t);
 
     std::wostringstream text;
     text << L"Grass Field 001\r\n"
-         << L"left click: inspect voxel\r\n"
-         << L"left drag: pan field\r\n"
-         << L"right drag: orbit camera\r\n"
-         << L"display selector: coarse / refined / hybrid\r\n"
-         << L"step erosion: button or E key\r\n"
-         << L"wheel: zoom\r\n"
-         << L"darker areas: shadow, occlusion, moisture, and distance haze\r\n"
-         << L"lighter color bleed: approximate indirect bounce lighting\r\n"
-         << L"display grid:   " << widen(display_grid_mode_name(display_grid_mode_)) << L"\r\n"
-         << L"\r\nerosion\r\n"
-         << L"  cycles stepped: " << erosion_field_.cycle_count() << L"\r\n"
-         << L"  settle step:    1 inch per cycle\r\n"
-         << L"  renderer:       "
-         << (display_grid_mode_ == DisplayGridMode::coarse_foot_columns
-                 ? L"showing the authored 1-foot columns\r\n"
-                 : display_grid_mode_ == DisplayGridMode::erosion_inch_columns
-                    ? L"showing only the promoted 1-inch remainder above coarse-full blocks\r\n"
-                    : L"showing the hybrid adaptive terrain view\r\n")
-         << L"\r\nscenario\r\n"
-         << L"  objective: " << widen(turn_packet.objective.view()) << L"\r\n"
-         << L"  active tester: " << widen(tester_role_name(turn_packet.role)) << L"\r\n"
-         << L"  focused target: "
-         << (scenario_target ? widen(grannys_house_trials::sim::to_string(*scenario_target)) : L"none") << L"\r\n"
-         << L"  hidden dependency: " << (turn_packet.hidden_dependency_revealed ? L"revealed" : L"still hidden") << L"\r\n"
-         << L"  round status: "
-         << (turn_packet.objective_completed ? L"completed"
-             : turn_packet.objective_failed ? L"failed"
-             : L"in progress")
-         << L"\r\n"
-         << L"  legal actions: ";
-
-    if (scenario_actions.empty())
-    {
-        text << L"none";
-    }
-    else
-    {
-        for (std::size_t index = 0; index < scenario_actions.size(); ++index)
-        {
-            if (index > 0)
-            {
-                text << L", ";
-            }
-            text << widen(scenario_actions[index].id.view());
-        }
-    }
-    text << L"\r\n";
-
-    if (!recent_scenario_events_.empty())
-    {
-        text << L"  recent events:\r\n";
-        for (const std::string &event : recent_scenario_events_)
-        {
-            text << L"    - " << widen(event) << L"\r\n";
-        }
-    }
-
-    if (!evidence_view.stats.empty())
-    {
-        text << L"  evidence board:\r\n";
-        for (const auto &stat : evidence_view.stats)
-        {
-            text << L"    - " << widen(grannys_house_trials::sim::to_string(stat.type))
-                 << L": " << stat.count << L"\r\n";
-        }
-    }
+         << L"Mission: route water to the garden beds without flooding the cellar edge or softening the path.\r\n"
+         << L"FPS: " << std::fixed << std::setprecision(1) << fps_ << L"\r\n"
+         << L"View: " << widen(display_grid_mode_name(display_grid_mode_))
+         << L" | Erosion cycles: " << erosion_field_.cycle_count()
+         << L" | Fog: " << (fog_enabled_ ? L"on" : L"off") << L"\r\n"
+         << L"Packet view: " << (packet_view_enabled_ ? L"compact agent packet" : L"human summary") << L"\r\n";
 
     if (!selected_voxel_)
     {
         latest_agent_snapshot_.clear();
-        text << L"\r\nNo voxel selected yet.\r\n"
-             << L"\r\nTry:\r\n"
-             << L"  1. click inside the 3D viewport\r\n"
-             << L"  2. use the Display Grid selector to compare coarse, fine, and hybrid\r\n"
-             << L"  3. click Step Erosion to settle the inch grid once\r\n"
-             << L"  4. left drag to pan or right drag to orbit\r\n"
-             << L"  5. use the checkbox above to toggle highlight";
+        if (packet_view_enabled_)
+        {
+            text << L"Selection: none\r\n"
+                 << L"Target: none\r\n"
+                 << L"Current state: waiting for a target or action\r\n"
+                 << L"Possible actions: click the 3D view to pick a target\r\n"
+                 << L"Packet size: 0 characters / 0 bytes\r\n"
+                 << L"Clipboard payload: compact agent packet is empty until a target is selected\r\n";
+        }
+        else
+        {
+            text << L"Selection: none\r\n"
+                 << L"Target: none\r\n"
+                 << L"Current state: waiting for a target or action\r\n"
+                 << L"Possible actions:\r\n"
+                 << L"  - Click the 3D view to pick a target\r\n"
+                 << L"  - Run Target Action to act on the selected target\r\n"
+                 << L"  - Advance Round to settle drainage one step\r\n"
+                 << L"  - Reset Round to restore the yard\r\n"
+                 << L"  - Display Grid to switch coarse / refined / hybrid\r\n"
+                 << L"  - Field Size to rebuild the square test field\r\n"
+                 << L"  - Copy Agent JSON to copy the compact agent snapshot\r\n"
+                 << L"\r\nState log:\r\n";
+            if (human_notes.empty())
+            {
+                text << L"  - no recent notes yet\r\n";
+            }
+            else
+            {
+                for (const auto &note : human_notes)
+                {
+                    text << L"  - " << widen(note) << L"\r\n";
+                }
+            }
+        }
+
         SetWindowTextW(info_panel_, text.str().c_str());
         std::wstring title = L"Granny's House Trials :: Grass Field 001 :: ";
         title += widen(display_grid_mode_name(display_grid_mode_));
@@ -2326,85 +2348,96 @@ void D3D12App::refresh_info_panel()
     const auto &selection = *selected_voxel_;
     const int coarse_x = source_coarse_x_for_display_x(selection.x);
     const int coarse_z = source_coarse_z_for_display_z(selection.z);
-    const int local_x_inches = source_local_x_inches_for_display_x(selection.x);
-    const int local_z_inches = source_local_z_inches_for_display_z(selection.z);
     const auto &cell = field_.at(coarse_x, coarse_z);
     const std::wstring material_name = widen(grannys_house_trials::sim::terrain_material_name(cell.material));
     const bool has_detail_patch = field_.has_detail_patch(coarse_x, coarse_z);
     const int coarse_top_height_inches = field_.coarse_top_height_inches_at(coarse_x, coarse_z);
+    const int selected_fine_height = erosion_field_.fine_top_height_inches_at(
+        coarse_x,
+        coarse_z,
+        source_local_x_inches_for_display_x(selection.x),
+        source_local_z_inches_for_display_z(selection.z));
     const int patch_resolution = erosion_field_.patch_resolution();
-    const int patch_center = patch_resolution / 2;
     const int selected_block_y =
         display_grid_mode_ == DisplayGridMode::coarse_foot_columns
             ? selection.y
             : selection.y / patch_resolution;
-    const int erosion_min_height = erosion_field_.patch_min_height_inches_at(coarse_x, coarse_z);
-    const int erosion_max_height = erosion_field_.patch_max_height_inches_at(coarse_x, coarse_z);
-    const int erosion_center_height = erosion_field_.fine_top_height_inches_at(
-        coarse_x,
-        coarse_z,
-        patch_center,
-        patch_center);
-    const int selected_fine_height = erosion_field_.fine_top_height_inches_at(
-        coarse_x,
-        coarse_z,
-        local_x_inches,
-        local_z_inches);
-    const bool erosion_varies_from_coarse = erosion_field_.patch_varies_from_coarse_at(coarse_x, coarse_z);
-    const int coarse_full_block_count = ownership_field_.full_block_count_at(coarse_x, coarse_z);
-    const int refined_block_count = ownership_field_.refined_block_count_at(coarse_x, coarse_z);
     const auto selected_block_ownership = ownership_field_.ownership_at(coarse_x, coarse_z, selected_block_y);
+    if (packet_view_enabled_)
+    {
+        text << L"Selection: (" << selection.x << L", " << selection.y << L", " << selection.z << L")\r\n"
+             << L"Target: " << (scenario_target ? widen(grannys_house_trials::sim::to_string(*scenario_target)) : L"none") << L"\r\n"
+             << L"Round status: "
+             << (turn_packet.objective_completed ? L"completed"
+                 : turn_packet.objective_failed ? L"failed"
+                 : L"in progress")
+             << L"\r\n"
+             << L"Packet size: " << packet_characters << L" characters / " << packet_bytes << L" bytes\r\n"
+             << L"Legal actions: " << scenario_actions.size() << L"\r\n"
+             << L"Recent events: " << token_events.size() << L"\r\n"
+             << L"Evidence items: " << evidence_view.stats.size() << L"\r\n"
+             << L"\r\nAgent packet:\r\n"
+             << latest_agent_snapshot_;
+    }
+    else
+    {
+        text << L"Selection: (" << selection.x << L", " << selection.y << L", " << selection.z << L")\r\n"
+             << L"Target: " << (scenario_target ? widen(grannys_house_trials::sim::to_string(*scenario_target)) : L"none") << L"\r\n"
+             << L"Current state: "
+             << (turn_packet.objective_completed ? L"complete"
+                 : turn_packet.objective_failed ? L"failed"
+                 : L"in progress")
+             << L"\r\n"
+             << L"Hidden dependency: " << (turn_packet.hidden_dependency_revealed ? L"revealed" : L"still hidden") << L"\r\n"
+             << L"Material: " << material_name << L"\r\n"
+             << L"Height: " << cell.column_height_voxels << L" coarse voxels, top at " << coarse_top_height_inches << L" inches\r\n"
+             << L"Ownership: " << widen(terrain_volume_ownership_name(selected_block_ownership)) << L"\r\n"
+             << L"Detail patch: " << (has_detail_patch ? L"yes" : L"no") << L"\r\n"
+             << L"Settled top: " << selected_fine_height << L" inches\r\n"
+             << L"Packet size: " << packet_characters << L" characters / " << packet_bytes << L" bytes\r\n"
+             << L"Legal actions: " << scenario_actions.size() << L"\r\n"
+             << L"\r\nPossible actions:\r\n";
 
-    text << L"\r\nselected voxel\r\n"
-         << L"  display grid:   " << widen(display_grid_mode_name(display_grid_mode_)) << L"\r\n"
-         << L"  x: " << selection.x << L"\r\n"
-         << L"  y: " << selection.y << L"\r\n"
-         << L"  z: " << selection.z << L"\r\n"
-         << L"  source coarse:  (" << coarse_x << L"," << coarse_z << L")\r\n"
-         << L"  source local:   (" << local_x_inches << L"," << local_z_inches << L") inches\r\n"
-         << L"  source block y: " << selected_block_y << L"\r\n"
-         << L"\r\ncolumn\r\n"
-         << L"  material: " << material_name << L"\r\n"
-         << L"  height voxels: " << cell.column_height_voxels << L"\r\n"
-         << L"  coarse top inches: " << coarse_top_height_inches << L"\r\n"
-         << L"  homestead pad: " << (cell.is_homestead_pad ? L"yes" : L"no") << L"\r\n"
-         << L"  garden bed: " << (cell.garden.is_garden_bed ? L"yes" : L"no") << L"\r\n"
-         << L"\r\ngarden attributes\r\n"
-         << std::fixed << std::setprecision(2)
-         << L"  soil moisture: " << cell.garden.soil_moisture << L"\r\n"
-         << L"  fertility:     " << cell.garden.fertility << L"\r\n"
-         << L"  sunlight:      " << cell.garden.sunlight << L"\r\n"
-         << L"  weed pressure: " << cell.garden.weed_pressure
-         << L"\r\n\r\nsurface detail\r\n"
-         << L"  authored patch: " << (has_detail_patch ? L"yes" : L"no") << L"\r\n"
-         << L"  resolution:     " << patch_resolution << L"x" << patch_resolution << L" at 1 inch\r\n"
-         << L"  current range:  " << erosion_min_height << L" to " << erosion_max_height << L" inches\r\n"
-         << L"  center height:  " << erosion_center_height << L" inches\r\n"
-         << L"  selected top:   " << selected_fine_height << L" inches\r\n"
-         << L"  varies:         " << (erosion_varies_from_coarse ? L"yes" : L"no") << L"\r\n"
-         << L"  full 1' blocks: " << coarse_full_block_count << L"\r\n"
-         << L"  refined 1' blocks: " << refined_block_count << L"\r\n"
-         << L"  selected ownership: "
-         << widen(terrain_volume_ownership_name(selected_block_ownership)) << L"\r\n"
-         << L"  erosion cycles: " << erosion_field_.cycle_count() << L"\r\n"
-         << L"\r\nscenario at selection\r\n"
-         << L"  target: "
-         << (scenario_target ? widen(grannys_house_trials::sim::to_string(*scenario_target)) : L"none") << L"\r\n";
+        if (scenario_actions.empty())
+        {
+            text << L"  none\r\n";
+        }
+        else
+        {
+            for (const auto &action : scenario_actions)
+            {
+                text << L"  - " << legal_action_label(action) << L"\r\n";
+            }
+        }
 
-    latest_agent_snapshot_ = build_agent_snapshot_text();
-    text << L"\r\n\r\nagent snapshot json\r\n"
-         << L"-------------------\r\n"
-         << latest_agent_snapshot_;
+        text << L"\r\nState log:\r\n";
+        if (human_notes.empty())
+        {
+            text << L"  - no recent events yet\r\n";
+        }
+        else
+        {
+            for (const std::string &note : human_notes)
+            {
+                text << L"  - " << widen(note) << L"\r\n";
+            }
+        }
+    }
 
     SetWindowTextW(info_panel_, text.str().c_str());
-    EnableWindow(copy_agent_snapshot_button_, TRUE);
+    EnableWindow(copy_agent_snapshot_button_, true);
 
     std::wostringstream title;
-    title << L"Granny's House Trials :: Grass Field 001 :: voxel ("
-          << selection.x << L"," << selection.y << L"," << selection.z << L") :: "
-          << widen(display_grid_mode_name(display_grid_mode_))
+    title << L"Granny's House Trials :: Grass Field 001 :: "
+          << (packet_view_enabled_ ? L"agent packet view" : L"human summary")
           << L" :: erosion " << erosion_field_.cycle_count();
     SetWindowTextW(hwnd_, title.str().c_str());
+}
+
+void D3D12App::refresh_evidence_board()
+{
+    evidence_board_panel_.set_view(
+        grannys_house_trials::playtest::make_evidence_board_view(yard_session_.scenario().round_log()));
 }
 
 std::optional<grannys_house_trials::sim::TargetId> D3D12App::selected_scenario_target() const
@@ -2421,16 +2454,12 @@ std::optional<grannys_house_trials::sim::TargetId> D3D12App::selected_scenario_t
 
 std::vector<grannys_house_trials::sim::LegalAction> D3D12App::scenario_actions_for_selection() const
 {
-    return scenario_.legal_actions(selected_scenario_target());
+    return yard_session_.legal_actions(selected_scenario_target());
 }
 
 grannys_house_trials::playtest::TurnPacket D3D12App::current_turn_packet() const
 {
-    return grannys_house_trials::playtest::make_turn_packet(
-        scenario_,
-        active_tester_role_,
-        selected_scenario_target(),
-        recent_scenario_events_);
+    return yard_session_.turn_packet(selected_scenario_target());
 }
 
 void D3D12App::refresh_scenario_action_ui()
@@ -2444,12 +2473,47 @@ void D3D12App::refresh_scenario_action_ui()
     const auto actions = scenario_actions_for_selection();
     for (const auto &action : actions)
     {
-        ComboBox_AddString(scenario_action_combo_, widen(action.id.str()).c_str());
+        const std::wstring item_text = legal_action_label(action) + L" [" + widen(action.id.str()) + L"]";
+        ComboBox_AddString(scenario_action_combo_, item_text.c_str());
     }
 
     const bool has_actions = !actions.empty();
     ComboBox_SetCurSel(scenario_action_combo_, has_actions ? 0 : -1);
     EnableWindow(run_action_button_, has_actions);
+}
+
+void D3D12App::refresh_field_size_ui()
+{
+    if (!field_size_combo_)
+    {
+        return;
+    }
+
+    const int current_size = field_.width();
+    const int current_index = current_size <= 50 ? 0 : current_size <= 100 ? 1 : current_size <= 150 ? 2 : current_size <= 200 ? 3 : 4;
+    ComboBox_SetCurSel(field_size_combo_, current_index);
+}
+
+void D3D12App::apply_field_size(int field_size)
+{
+    field_size = std::clamp(field_size, 50, 1000);
+    if (field_size == field_.width() && field_size == field_.depth())
+    {
+        return;
+    }
+
+    field_size_ = field_size;
+    field_ = grannys_house_trials::sim::GrassField(field_size_, field_size_, default_voxel_size_feet);
+    erosion_field_ = grannys_house_trials::sim::GravityErosionField(field_);
+    ownership_field_ = grannys_house_trials::sim::AdaptiveTerrainOwnershipField(field_, erosion_field_);
+    refined_patch_field_ = grannys_house_trials::sim::SparseRefinedPatchField(field_, erosion_field_, ownership_field_);
+    camera_ = make_default_camera(field_size_, field_size_);
+    selected_voxel_.reset();
+    static_cast<void>(yard_session_.reset_round());
+    rebuild_display_field_buffer();
+    refresh_field_size_ui();
+    refresh_scenario_action_ui();
+    refresh_info_panel();
 }
 
 void D3D12App::run_selected_scenario_action()
@@ -2468,41 +2532,22 @@ void D3D12App::run_selected_scenario_action()
         return;
     }
 
-    run_scenario_action(actions[static_cast<std::size_t>(selection_index)].id.str());
+    run_scenario_action(actions[static_cast<std::size_t>(selection_index)].id.view());
 }
 
 void D3D12App::run_scenario_action(std::string_view action_id)
 {
     if (action_id == "reset_round")
     {
-        recent_scenario_events_.clear();
+        static_cast<void>(yard_session_.reset_round());
     }
-
-    const auto outcome = scenario_.apply_action(
-        grannys_house_trials::util::NonEmptyString("viewport_operator"),
-        action_id,
-        selected_scenario_target());
-
-    if (outcome.observations.empty())
+    else if (action_id == "advance_simulation")
     {
-        recent_scenario_events_.push_back(
-            std::string(action_id) + (outcome.success ? " succeeded." : " failed."));
+        static_cast<void>(yard_session_.advance_round(selected_scenario_target()));
     }
     else
     {
-        recent_scenario_events_.insert(
-            recent_scenario_events_.end(),
-            outcome.observations.begin(),
-            outcome.observations.end());
-    }
-
-    constexpr std::size_t max_recent_events = 8;
-    if (recent_scenario_events_.size() > max_recent_events)
-    {
-        recent_scenario_events_.erase(
-            recent_scenario_events_.begin(),
-            recent_scenario_events_.begin()
-                + static_cast<std::ptrdiff_t>(recent_scenario_events_.size() - max_recent_events));
+        static_cast<void>(yard_session_.run_action(action_id, selected_scenario_target()));
     }
 
     rebuild_display_field_buffer();
@@ -3236,8 +3281,43 @@ LRESULT D3D12App::handle_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
                 }
             }
             return 0;
+        case control_id_field_size_combo:
+            if (HIWORD(wparam) == CBN_SELCHANGE)
+            {
+                const int selection = ComboBox_GetCurSel(field_size_combo_);
+                switch (selection)
+                {
+                case 0:
+                    apply_field_size(50);
+                    break;
+                case 1:
+                    apply_field_size(100);
+                    break;
+                case 2:
+                    apply_field_size(150);
+                    break;
+                case 3:
+                    apply_field_size(200);
+                    break;
+                case 4:
+                    apply_field_size(1000);
+                    break;
+                default:
+                    break;
+                }
+            }
+            return 0;
         case control_id_toggle_highlight:
             highlight_selection_ = Button_GetCheck(highlight_checkbox_) == BST_CHECKED;
+            refresh_info_panel();
+            return 0;
+        case control_id_toggle_fog:
+            fog_enabled_ = Button_GetCheck(fog_checkbox_) == BST_CHECKED;
+            refresh_info_panel();
+            return 0;
+        case control_id_toggle_packet_view:
+            packet_view_enabled_ = Button_GetCheck(packet_view_checkbox_) == BST_CHECKED;
+            refresh_info_panel();
             return 0;
         case control_id_copy_agent_snapshot:
             if (!latest_agent_snapshot_.empty())

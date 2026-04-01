@@ -448,7 +448,8 @@ Shell preference for agent tooling on this repo and this machine:
 - Use Windows shells only when the task specifically requires Windows-native
   behavior or the tool is explicitly Windows-only.
 - This is a practical reliability preference for the current mixed-toolchain
-  setup, not a statement that Windows is inherently unreliable.
+  setup on this machine, not a statement that Windows is inherently
+  unreliable or that your machine is flawed.
 - If WSL is not available, continue with the best local shell.
 
 The project is assumed to still be **in discovery and design exploration**.

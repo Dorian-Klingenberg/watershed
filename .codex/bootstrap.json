@@ -30,6 +30,8 @@
       "Prefer the compact AGENT_CONTEXT.json for agent startup.",
       "Do not load broad docs unless a task needs them.",
       "Do not expand into unrelated experiments by default.",
+      "Prefer WSL/bash-native shells for repo inspection, build, and test work when available on this machine.",
+      "Use Windows shells only when the task requires Windows-native behavior or the tool is Windows-only.",
       "Check transactions before making structured repository changes."
     ]
   },

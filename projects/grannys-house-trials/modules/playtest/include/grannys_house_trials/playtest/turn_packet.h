@@ -28,11 +28,13 @@ struct TurnPacket
     bool objective_completed = false;
     bool objective_failed = false;
     std::vector<std::string> recent_events;
+    std::vector<std::string> human_notes;
 };
 
 [[nodiscard]] TurnPacket make_turn_packet(
     const sim::GrannysYardScenario &scenario,
     TesterRole role,
     std::optional<sim::TargetId> focused_target = std::nullopt,
-    std::vector<std::string> recent_events = {});
+    std::vector<std::string> recent_events = {},
+    std::vector<std::string> human_notes = {});
 } // namespace grannys_house_trials::playtest

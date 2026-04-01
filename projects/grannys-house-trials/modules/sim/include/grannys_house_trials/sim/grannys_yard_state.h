@@ -20,5 +20,7 @@ struct GrannysYardState
     bool objective_failed = false;
     unsigned int turn_count = 0;
     unsigned int simulation_step_count = 0;
+
+    [[nodiscard]] bool operator==(const GrannysYardState &) const = default;
 };
 } // namespace grannys_house_trials::sim

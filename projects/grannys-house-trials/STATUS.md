@@ -16,6 +16,15 @@ This should be kept current as the project evolves.
 hidden infrastructure, record meaningful evidence, and support a real
 drainage/repair round without losing the larger world-first identity.
 
+Current architectural boundary:
+
+- the round logic now lives behind `playtest::GrannysYardSession`
+- `main.cpp` is the host shell and viewport presentation layer
+- the session owns the drainage round state, legal actions, evidence, and
+  packet projection
+- the runnable now has a dedicated evidence-board child window fed from the
+  shared playtest evidence view
+
 Machine-readable context:
 
 - [AGENT_CONTEXT.json](/D:/Repos/Games/TheGame/projects/grannys-house-trials/AGENT_CONTEXT.json)
@@ -34,6 +43,8 @@ In plain terms:
   the runnable
 - the first full in-world testing round is still incomplete, but the first
   real drainage mechanic loop now exists in the app
+- the drainage round has been moved behind a dedicated session component so
+  it can be reused by future tools and driver apps
 
 ## Milestone Status
 
@@ -68,7 +79,12 @@ Primary runnable:
 
 ### Milestone 3: First Testable Mechanic
 
-Status: `partial`
+Status: `complete`
+
+Current focus:
+
+- keep the drainage round stable and inspectable
+- avoid reopening renderer scope unless it directly helps the mechanic
 
 What is done:
 
@@ -82,14 +98,20 @@ What is done:
   - target-aware legal actions
   - resettable round state
 - runnable UI controls for target actions, round advance, and round reset
+- a field-size selector for square preset sizes that resets the field and
+  scenario together
 - agent packet output that now includes objective, focused target, legal
-  actions, recent evidence, recent events, and success/failure flags
+  actions, recent evidence, compact tokenized recent events that keep only
+  the first no-op activity until the yard state changes, and success/failure
+  flags
+- dedicated `playtest::GrannysYardSession` component to keep round orchestration
+  out of the host shell
 
-What is not done:
+What is still intentionally deferred:
 
-- stronger visual world feedback for the round beyond the current moisture /
-  inspector overlays
-- a more complete action set beyond the first high-level route / dig / pack /
+- richer evidence-board presentation
+- host scoring / winner judgment
+- a broader action vocabulary beyond the current route / dig / pack /
   inspect loop
 
 ### Milestone 4: Evidence Board
@@ -106,6 +128,7 @@ What is not done:
 
 - a more intentional evidence-board UI in the main runnable
 - end-of-round summary flow
+- cleaner board layout and summary styling
 
 ### Milestone 5: Cast Layer
 
@@ -173,11 +196,12 @@ not more renderer novelty by default.
 
 The strongest next step is:
 
-> connect the existing Granny's Yard scenario and playtest protocol to the
-> runnable so one real test round can be inspected, acted on, and judged
+> move into Milestone 4 by making the evidence board and round summary more
+> intentional, while keeping the session boundary stable
 
 In practical terms, that likely means:
 
 - improve the readability and feedback of the existing water-routing round
 - surface evidence in a more deliberate board-style presentation
-- build the first host-judged round summary
+- keep extracting host-shell responsibilities out of `main.cpp` when they
+  clearly belong to the session or shared playtest layer

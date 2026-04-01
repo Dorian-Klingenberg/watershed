@@ -61,6 +61,17 @@ Success condition:
 - the yard can produce at least two meaningfully different outcomes from
   different interventions
 
+Status:
+
+- complete
+
+Current note:
+
+- Milestone 3 is now satisfied by the dedicated `playtest::GrannysYardSession`
+  plus the host-shell controls in `grass-field-001`
+- keep the round behavior stable and reusable rather than expanding the
+  renderer further
+
 ## Milestone 4: Evidence Board
 
 Deliverables:
@@ -80,6 +91,11 @@ Implementation note:
 - keep the shared tester-facing packet and evidence surface in a dedicated `playtest` module
 - keep world legality and hidden-structure truth in `sim`
 - do not create a driver subproject yet
+- the runnable now has a dedicated `playtest::EvidenceBoardPanel` child window for the board view
+
+Current note:
+
+- Milestone 4 is now shifting from evidence plumbing into board presentation, summary layout, and cleanup polish
 
 ## Milestone 5: Cast Layer
 
@@ -122,6 +138,12 @@ Success condition:
   goal, the failure, and the ruling
 
 ## Current Recommendation
+
+Move into:
+
+- Milestone 4 evidence-board presentation
+- clearer round summaries
+- better host-facing evidence readability
 
 Do not move into:
 

@@ -27,6 +27,7 @@ add_executable(
     gfx/orbit_camera_tests.cpp
     playtest/playtest_protocol_tests.cpp
     playtest/evidence_board_view_tests.cpp
+    playtest/grannys_yard_session_tests.cpp
 )
 
 target_link_libraries(

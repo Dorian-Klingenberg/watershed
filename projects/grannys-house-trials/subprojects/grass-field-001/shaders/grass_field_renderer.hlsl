@@ -10,6 +10,7 @@ cbuffer SceneConstants : register(b0)
     uint4 fieldInfo;
     uint4 selectionInfo;
     uint4 refinementInfo;
+    uint4 displayInfo;
 };
 
 struct FieldCell
@@ -943,7 +944,7 @@ float4 ShadePixel(VSOutput input, uint displayMode)
         }
     }
 
-    const float haze = saturate((hit.distance - 85.0) / 130.0);
+    const float haze = displayInfo.x != 0u ? saturate((hit.distance - 85.0) / 130.0) : 0.0;
     return float4(lerp(color, skyColor, haze), 1.0);
 }
 

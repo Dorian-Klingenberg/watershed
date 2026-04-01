@@ -28,6 +28,20 @@ It is a focused project intended to discover whether the "testing as show
 format" concept belongs in the larger game development process and possibly
 in the eventual audience-facing format.
 
+Current architectural step:
+
+- the Granny's Yard round is now owned by a dedicated
+  `playtest::GrannysYardSession`
+- `main.cpp` should stay focused on the host shell, viewport, and UI plumbing
+- the session owns the round state, legal actions, evidence projection, and
+  turn packet generation
+- the compact packet keeps tokenized recent events, but repeated no-op
+  activity is only logged once until the yard actually changes
+- the runnable now includes a dedicated evidence-board child window that
+  reads the playtest evidence view
+- Milestone 3 is the working drainage round now, so the next focus is
+  evidence-board polish rather than more renderer architecture
+
 ## Relationship To The Broader Repo
 
 This project inherits its world and systems assumptions from the shared repo
@@ -100,6 +114,13 @@ implementation moves quickly.
 The first arc is Granny's House, treated as a small campaign zone rather than
 a one-off joke map.
 
+Current milestone focus:
+
+- Milestone 3 is the active path again
+- the next major success is a mechanically solid drainage round, not more
+  renderer novelty
+- the host shell should remain a presentation layer around the shared session
+
 The first round should likely center on a yard-scale water problem, such as
 getting water to garden beds without flooding the cellar edge or softening the
 path around the house.
@@ -120,8 +141,10 @@ hosts the first real mechanic harness:
 - inspectable by mouse so the viewer can surface shared voxel facts without
   building the whole game UI first
 - a shared Granny's Yard drainage scenario with target-aware legal actions,
-  recent evidence, and objective/failure state exposed through the host UI and
-  the agent packet
+  recent evidence, compact tokenized recent events, and objective/failure state
+  exposed through the host UI and the agent packet
+- the round logic has been pulled behind a dedicated session component so the
+  host app no longer owns the test-round orchestration directly
 
 Current renderer status:
 
@@ -145,6 +168,10 @@ Current renderer status:
 - the same runnable now also hosts the first yard-scale drainage loop:
   route water to the north bed without soaking the cellar edge or softening
   the path, with target-aware actions and factual evidence capture
+- the yard round is intentionally implemented as a session boundary so it can
+  be reused by future driver apps, tests, and agent-facing tooling
+- the square yard size is now configurable in the host UI, and changing it
+  resets the field and scenario together
 - it is still not a complete arbitrary voxel ray marcher, cube marcher, or
   fully general shader-side voxel traversal renderer
 - a fuller arbitrary voxel traversal path is still intended, but has not been

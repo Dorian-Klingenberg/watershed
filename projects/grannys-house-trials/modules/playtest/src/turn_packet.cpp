@@ -8,7 +8,8 @@ TurnPacket make_turn_packet(
     const sim::GrannysYardScenario &scenario,
     TesterRole role,
     std::optional<sim::TargetId> focused_target,
-    std::vector<std::string> recent_events)
+    std::vector<std::string> recent_events,
+    std::vector<std::string> human_notes)
 {
     std::vector<sim::EvidenceItem> recent_evidence;
     const auto &entries = scenario.round_log().entries();
@@ -30,6 +31,7 @@ TurnPacket make_turn_packet(
         scenario.state().objective_completed,
         scenario.state().objective_failed,
         std::move(recent_events),
+        std::move(human_notes),
     };
 }
 } // namespace grannys_house_trials::playtest

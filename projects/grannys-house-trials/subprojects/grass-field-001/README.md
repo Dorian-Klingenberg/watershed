@@ -59,6 +59,8 @@ The field now has:
   `1-inch` steps while keeping the coarse field as the authored world
 - a display selector with three modes:
   `coarse 1-foot`, `refined 1-inch`, and `hybrid adaptive`
+- a field-size selector for square yard sizes, currently with quick presets
+  for `50 x 50`, `100 x 100`, `150 x 150`, and `200 x 200`
 - shader-side column raycast rendering for the visible field
 - perlin-noise-driven column heights between `1` and `5` voxels
 - a flattened homestead pad
@@ -83,6 +85,7 @@ Current controls:
 - `Step Erosion`: advance the inch-scale gravity settling simulation by one cycle
 - `Clear Selection`: clear the current voxel selection
 - `Display Grid`: choose between authored coarse, refined `1-inch` remainder, and hybrid adaptive views
+- `Field Size`: change the square yard size; this resets the field and the scenario
 - `Run Target Action`: execute the currently selected legal action for the selected target
 - `Advance Round`: advance the shared drainage simulation one step
 - `Reset Round`: restore the scenario to its initial state
@@ -106,14 +109,15 @@ Host UI:
 - selection details shown directly in the host window, including current
   erosion-cycle information and inch-scale height ranges
 - scenario details shown directly in the host window, including the current
-  objective, focused target, legal actions, recent events, evidence counts,
-  and round success/failure state
+  objective, focused target, legal actions, compact tokenized recent events
+  that suppress repeated no-op activity until the yard changes, evidence
+  counts, and round success/failure state
 - selection details now also show the hybrid ownership breakdown for the
   selected coarse column: how many `1-foot` blocks remain full/coarse and how
   many top blocks have been promoted to inch refinement
 - agent-facing JSON shown in the host window and copyable to the clipboard,
   now including objective text, focused target, legal actions, recent
-  evidence, recent events, and current round outcome flags
+  evidence, compact tokenized recent events, and current round outcome flags
 
 Current erosion/render boundary:
 

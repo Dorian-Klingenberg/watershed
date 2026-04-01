@@ -18,6 +18,7 @@ Launcher guidance:
 - Copilot or related WSL CLI agents should also start from the same bootstrap
   and treat the compact agent context as the first load target.
 - Prefer WSL/bash-equivalent shells over Windows shells when doing build,
-  test, or repository inspection work unless the task requires Windows-native
-  behavior. This is just a practical preference for this repo/tooling mix, not
-  a general claim about Windows.
+  test, or repository inspection work on this machine unless the task requires
+  Windows-native behavior. This is just a practical preference for this
+  repo/tooling mix and current machine state, not a general claim about
+  Windows or the machine itself.

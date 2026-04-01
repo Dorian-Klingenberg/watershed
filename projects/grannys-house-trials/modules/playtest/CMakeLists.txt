@@ -3,6 +3,7 @@ add_library(
   STATIC
     src/turn_packet.cpp
     src/evidence_board_view.cpp
+    src/evidence_board_panel.cpp
 )
 
 add_library(grannys_house_trials::playtest ALIAS grannys_house_trials_playtest)

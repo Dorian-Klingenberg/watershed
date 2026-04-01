@@ -22,8 +22,8 @@ Use this repository-local bootstrap and keep context narrow.
 
 ## Shell Preference
 
-- Prefer WSL/bash-equivalent shells over Windows shells for reliability in
-  this repo's current tooling mix
+- Prefer WSL/bash-equivalent shells over Windows shells for repo inspection,
+  build, and test work on this machine.
 - Use Windows shells only for Windows-specific UI, debugger, or toolchain
-  tasks that need them. This is a preference, not a general criticism of
-  Windows.
+  tasks that need them. This is a preference for the current tooling mix, not
+  a claim that Windows or the machine is unreliable.

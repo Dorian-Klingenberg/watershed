@@ -12,6 +12,8 @@ add_library(
     modules/sim/src/grannys_yard_scenario.cpp
     modules/playtest/src/turn_packet.cpp
     modules/playtest/src/evidence_board_view.cpp
+    modules/playtest/src/evidence_board_panel.cpp
+    modules/playtest/src/grannys_yard_session.cpp
     modules/gfx/src/orbit_camera.cpp
 )
 
