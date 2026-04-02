@@ -12,6 +12,7 @@
 
 #include "grannys_house_trials/sim/adaptive_terrain_ownership_field.h"
 #include "grannys_house_trials/gfx/orbit_camera.h"
+#include "grannys_house_trials/playtest/agent_command.h"
 #include "grannys_house_trials/playtest/evidence_board_panel.h"
 #include "grannys_house_trials/playtest/grannys_yard_session.h"
 #include "grannys_house_trials/playtest/evidence_board_view.h"
@@ -67,6 +68,7 @@ enum ControlId : int
     control_id_field_size_combo = 1011,
     control_id_toggle_fog = 1012,
     control_id_toggle_packet_view = 1013,
+    control_id_run_agent_json = 1015,
 };
 
 enum class DisplayGridMode
@@ -434,6 +436,69 @@ void debug_log(std::string_view message)
     return true;
 }
 
+[[nodiscard]] std::optional<std::wstring> read_text_from_clipboard(HWND owner)
+{
+    if (!OpenClipboard(owner))
+    {
+        return std::nullopt;
+    }
+
+    HGLOBAL clipboard_data = GetClipboardData(CF_UNICODETEXT);
+    if (!clipboard_data)
+    {
+        CloseClipboard();
+        return std::nullopt;
+    }
+
+    const wchar_t *text = static_cast<const wchar_t *>(GlobalLock(clipboard_data));
+    if (!text)
+    {
+        CloseClipboard();
+        return std::nullopt;
+    }
+
+    const std::wstring result(text);
+    GlobalUnlock(clipboard_data);
+    CloseClipboard();
+    return result;
+}
+
+[[nodiscard]] std::optional<std::string> narrow_from_wide(std::wstring_view text)
+{
+    if (text.empty())
+    {
+        return std::string{};
+    }
+
+    const int buffer_size = WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        text.data(),
+        static_cast<int>(text.size()),
+        nullptr,
+        0,
+        nullptr,
+        nullptr);
+
+    if (buffer_size <= 0)
+    {
+        return std::nullopt;
+    }
+
+    std::string result(static_cast<std::size_t>(buffer_size), '\0');
+    WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        text.data(),
+        static_cast<int>(text.size()),
+        result.data(),
+        buffer_size,
+        nullptr,
+        nullptr);
+
+    return result;
+}
+
 [[nodiscard]] std::vector<GpuFieldCell> build_coarse_field_buffer_data(
     const grannys_house_trials::sim::GrassField &field,
     const grannys_house_trials::sim::GrannysYardScenario &scenario,
@@ -755,6 +820,7 @@ private:
     void refresh_scenario_action_ui();
     void run_selected_scenario_action();
     void run_scenario_action(std::string_view action_id);
+    void apply_agent_json_from_clipboard();
     void rebuild_display_field_buffer();
     void ensure_field_buffer_capacity(UINT required_cells);
     void ensure_refined_patch_buffer_capacity(UINT lookup_count, UINT patch_count, UINT height_count);
@@ -795,6 +861,7 @@ private:
     HWND fog_checkbox_ = nullptr;
     HWND packet_view_checkbox_ = nullptr;
     HWND copy_agent_snapshot_button_ = nullptr;
+    HWND run_agent_json_button_ = nullptr;
     HWND scenario_group_ = nullptr;
     HWND scenario_action_combo_ = nullptr;
     HWND run_action_button_ = nullptr;
@@ -1848,6 +1915,20 @@ void D3D12App::create_ui()
         app_instance,
         nullptr);
 
+    run_agent_json_button_ = CreateWindowExW(
+        0,
+        L"BUTTON",
+        L"Apply Agent JSON",
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        0,
+        0,
+        0,
+        0,
+        hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(control_id_run_agent_json)),
+        app_instance,
+        nullptr);
+
     scenario_group_ = CreateWindowExW(
         0,
         L"BUTTON",
@@ -1993,7 +2074,7 @@ void D3D12App::create_ui()
     if (!title_label_ || !hint_label_ || !camera_group_ || !reset_camera_button_
         || !step_erosion_button_ || !display_grid_label_ || !display_grid_combo_
         || !field_size_label_ || !field_size_combo_
-        || !clear_selection_button_ || !highlight_checkbox_ || !fog_checkbox_ || !packet_view_checkbox_ || !copy_agent_snapshot_button_
+        || !clear_selection_button_ || !highlight_checkbox_ || !fog_checkbox_ || !packet_view_checkbox_ || !copy_agent_snapshot_button_ || !run_agent_json_button_
         || !scenario_group_ || !scenario_action_combo_ || !run_action_button_
         || !advance_round_button_ || !end_round_button_ || !reset_round_button_
         || !selection_group_ || !info_panel_ || !evidence_board_group_ || !evidence_board_panel_.hwnd() || !viewport_hwnd_)
@@ -2043,6 +2124,7 @@ void D3D12App::create_ui()
         fog_checkbox_,
         packet_view_checkbox_,
         copy_agent_snapshot_button_,
+        run_agent_json_button_,
         run_action_button_,
         advance_round_button_,
         end_round_button_,
@@ -2077,6 +2159,7 @@ void D3D12App::create_ui()
             fog_checkbox_,
             packet_view_checkbox_,
             copy_agent_snapshot_button_,
+            run_agent_json_button_,
             run_action_button_,
             advance_round_button_,
             end_round_button_,
@@ -2112,6 +2195,7 @@ void D3D12App::create_ui()
     ComboBox_AddString(field_size_combo_, L"Large garden test (1000 x 1000)");
     ComboBox_SetCurSel(field_size_combo_, 1);
     EnableWindow(copy_agent_snapshot_button_, FALSE);
+    EnableWindow(run_agent_json_button_, TRUE);
     EnableWindow(run_action_button_, FALSE);
     EnableWindow(advance_round_button_, TRUE);
     EnableWindow(reset_round_button_, TRUE);
@@ -2163,13 +2247,10 @@ void D3D12App::layout_ui()
 
     MoveWindow(selection_group_, margin, 546, sidebar_width - (margin * 2), 996, TRUE);
     MoveWindow(copy_agent_snapshot_button_, margin + 16, 570, sidebar_width - 48, button_height, TRUE);
-    MoveWindow(
-        info_panel_,
-        margin + 16,
-        612,
-        sidebar_width - 48,
-        928,
-        TRUE);
+    MoveWindow(run_agent_json_button_, margin + 16, 612, sidebar_width - 48, button_height, TRUE);
+    const int info_panel_y = 654;
+    const int info_panel_height = 886;
+    MoveWindow(info_panel_, margin + 16, info_panel_y, sidebar_width - 48, info_panel_height, TRUE);
     const int evidence_board_group_y = 1840 - 168 - 100;
     const int evidence_board_panel_y = evidence_board_group_y + 24;
     MoveWindow(evidence_board_group_, margin, evidence_board_group_y, sidebar_width - (margin * 2), 168, TRUE);
@@ -2252,6 +2333,28 @@ std::wstring D3D12App::build_agent_snapshot_text() const
     }
 
     json << L"],\n"
+         << L"  \"recommended_actions\": [";
+
+    const auto &recommended_actions = turn_packet.recommended_actions;
+    for (std::size_t index = 0; index < recommended_actions.size(); ++index)
+    {
+        if (index > 0)
+        {
+            json << L", ";
+        }
+        json << L"{\"action_id\":\""
+             << widen(escape_json_string(recommended_actions[index].action_id.str()))
+             << L"\"";
+        if (recommended_actions[index].target.has_value())
+        {
+            json << L",\"target\":\""
+                 << widen(escape_json_string(grannys_house_trials::sim::to_string(*recommended_actions[index].target)))
+                 << L"\"";
+        }
+        json << L"}";
+    }
+
+    json << L"],\n"
          << L"  \"evidence\": {\n";
 
     for (std::size_t index = 0; index < evidence_view.stats.size(); ++index)
@@ -2287,7 +2390,8 @@ std::wstring D3D12App::build_agent_snapshot_text() const
          << L"    \"Reset round\",\n"
          << L"    \"Change display grid\",\n"
          << L"    \"Change field size\",\n"
-         << L"    \"Copy agent JSON\"\n"
+         << L"    \"Copy agent JSON\",\n"
+         << L"    \"Apply Agent JSON\"\n"
          << L"  ]\n"
          << L"}\n";
 
@@ -2355,7 +2459,8 @@ void D3D12App::refresh_info_panel()
                      << L"  - Reset Round to restore the yard\r\n"
                      << L"  - Display Grid to switch coarse / refined / hybrid\r\n"
                      << L"  - Field Size to rebuild the square test field\r\n"
-                     << L"  - Copy Agent JSON to copy the compact agent snapshot\r\n";
+                     << L"  - Copy Agent JSON to copy the compact agent snapshot\r\n"
+                     << L"  - Apply Agent JSON to run a clipboard command\r\n";
             }
             else
             {
@@ -2588,6 +2693,150 @@ void D3D12App::run_scenario_action(std::string_view action_id)
         static_cast<void>(yard_session_.run_action(action_id, selected_scenario_target()));
     }
 
+    rebuild_display_field_buffer();
+    refresh_scenario_action_ui();
+    refresh_info_panel();
+}
+
+void D3D12App::apply_agent_json_from_clipboard()
+{
+    const auto maybe_clipboard = read_text_from_clipboard(hwnd_);
+    if (!maybe_clipboard)
+    {
+        MessageBoxW(hwnd_, L"Clipboard does not contain text.", L"Agent JSON", MB_OK | MB_ICONWARNING);
+        return;
+    }
+
+    const auto utf8_payload = narrow_from_wide(*maybe_clipboard);
+    if (!utf8_payload)
+    {
+        MessageBoxW(hwnd_, L"Could not convert clipboard text to UTF-8.", L"Agent JSON", MB_OK | MB_ICONERROR);
+        return;
+    }
+
+    std::string parse_error;
+    const auto command = grannys_house_trials::playtest::parse_agent_command(*utf8_payload, parse_error);
+    if (!command)
+    {
+        std::wstring message = L"Failed to parse agent command:\r\n";
+        message += widen(parse_error);
+        MessageBoxW(hwnd_, message.c_str(), L"Agent JSON", MB_OK | MB_ICONERROR);
+        return;
+    }
+
+    if (command->selection)
+    {
+        const int selection_x = command->selection->x;
+        const int selection_y = command->selection->y;
+        const int selection_z = command->selection->z;
+
+        if (selection_x < 0 || selection_x >= render_grid_width()
+            || selection_z < 0 || selection_z >= render_grid_depth())
+        {
+            MessageBoxW(hwnd_, L"Selection coordinates are outside the current display grid.", L"Agent JSON", MB_OK | MB_ICONERROR);
+            return;
+        }
+
+        const int column_base = display_column_base_voxels_at(selection_x, selection_z);
+        const int column_top = display_column_height_voxels_at(selection_x, selection_z);
+        if (column_top <= column_base)
+        {
+            MessageBoxW(hwnd_, L"Selection coordinates point to an empty column.", L"Agent JSON", MB_OK | MB_ICONERROR);
+            return;
+        }
+
+        if (selection_y < column_base || selection_y >= column_top)
+        {
+            MessageBoxW(hwnd_, L"selection_y is outside the selected column height range.", L"Agent JSON", MB_OK | MB_ICONERROR);
+            return;
+        }
+
+        selected_voxel_ = VoxelSelection{selection_x, selection_y, selection_z};
+    }
+
+    auto selection_for_target = [this](grannys_house_trials::sim::TargetId target) -> std::optional<VoxelSelection> {
+        const int grid_width = render_grid_width();
+        const int grid_depth = render_grid_depth();
+
+        int min_x = std::numeric_limits<int>::max();
+        int max_x = std::numeric_limits<int>::min();
+        int min_z = std::numeric_limits<int>::max();
+        int max_z = std::numeric_limits<int>::min();
+        bool found = false;
+
+        for (int z = 0; z < grid_depth; ++z)
+        {
+            for (int x = 0; x < grid_width; ++x)
+            {
+                const auto cell_target = scenario_target_for_cell(x, z);
+                if (!cell_target || *cell_target != target)
+                {
+                    continue;
+                }
+
+                min_x = std::min(min_x, x);
+                max_x = std::max(max_x, x);
+                min_z = std::min(min_z, z);
+                max_z = std::max(max_z, z);
+                found = true;
+            }
+        }
+
+        if (!found)
+        {
+            return std::nullopt;
+        }
+
+        const int selection_x = (min_x + max_x) / 2;
+        const int selection_z = (min_z + max_z) / 2;
+        const int column_base = display_column_base_voxels_at(selection_x, selection_z);
+        const int column_top = display_column_height_voxels_at(selection_x, selection_z);
+        if (column_top <= column_base)
+        {
+            return std::nullopt;
+        }
+
+        return VoxelSelection{selection_x, column_top - 1, selection_z};
+    };
+
+    std::optional<grannys_house_trials::sim::TargetId> action_target = command->target;
+    if (!action_target)
+    {
+        constexpr std::string_view move_prefix = "move_";
+        const std::string_view action_id_view(command->action_id);
+        if (action_id_view.rfind(move_prefix, 0) == 0)
+        {
+            action_target = grannys_house_trials::sim::from_string(action_id_view.substr(move_prefix.size()));
+        }
+    }
+
+    // Keep clipboard-driven targeted commands aligned with right-click selection state.
+    if (!command->selection && action_target && command->action_id != "select_block")
+    {
+        if (const auto maybe_selection = selection_for_target(*action_target))
+        {
+            selected_voxel_ = *maybe_selection;
+        }
+    }
+
+    if (command->action_id == "select_block")
+    {
+        if (!command->selection)
+        {
+            MessageBoxW(
+                hwnd_,
+                L"select_block requires selection_x, selection_y, and selection_z.",
+                L"Agent JSON",
+                MB_OK | MB_ICONERROR);
+            return;
+        }
+
+        refresh_scenario_action_ui();
+        refresh_info_panel();
+        return;
+    }
+
+    static_cast<void>(yard_session_.run_action(command->action_id, command->target));
     rebuild_display_field_buffer();
     refresh_scenario_action_ui();
     refresh_info_panel();
@@ -3366,6 +3615,9 @@ LRESULT D3D12App::handle_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
                     MessageBeep(MB_ICONWARNING);
                 }
             }
+            return 0;
+        case control_id_run_agent_json:
+            apply_agent_json_from_clipboard();
             return 0;
         case control_id_scenario_action_combo:
             if (HIWORD(wparam) == CBN_SELCHANGE)

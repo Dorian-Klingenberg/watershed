@@ -21,3 +21,5 @@ target_link_libraries(
     dxgi
     d3dcompiler
 )
+
+set_property(TARGET voxel_d3d12_001 PROPERTY FOLDER "Experiments")

@@ -39,6 +39,30 @@ namespace
         || before.objective_completed != after.objective_completed
         || before.objective_failed != after.objective_failed;
 }
+
+[[nodiscard]] std::string to_action_hint(const RecommendedAction &action)
+{
+    std::string hint = action.action_id.str();
+    if (action.target.has_value())
+    {
+        hint += " @ ";
+        hint += sim::to_string(*action.target);
+    }
+
+    return hint;
+}
+
+[[nodiscard]] std::vector<std::string> to_action_hints(const std::vector<RecommendedAction> &actions)
+{
+    std::vector<std::string> hints;
+    hints.reserve(actions.size());
+    for (const auto &action : actions)
+    {
+        hints.push_back(to_action_hint(action));
+    }
+
+    return hints;
+}
 } // namespace
 
 const sim::GrannysYardScenario &GrannysYardSession::scenario() const noexcept
@@ -94,12 +118,18 @@ TurnPacket GrannysYardSession::turn_packet(std::optional<sim::TargetId> focused_
 
 EvidenceBoardView GrannysYardSession::evidence_board_view() const
 {
+    const auto packet = turn_packet();
+
     if (completed_round_summary_.has_value())
     {
-        return completed_round_summary_->evidence_board;
+        auto view = completed_round_summary_->evidence_board;
+        view.recommended_actions = to_action_hints(packet.recommended_actions);
+        return view;
     }
 
-    return make_evidence_board_view(scenario_.round_log(), current_live_round_result());
+    auto view = make_evidence_board_view(scenario_.round_log(), current_live_round_result());
+    view.recommended_actions = to_action_hints(packet.recommended_actions);
+    return view;
 }
 
 bool GrannysYardSession::can_accept_gameplay_actions() const noexcept
@@ -109,9 +139,13 @@ bool GrannysYardSession::can_accept_gameplay_actions() const noexcept
 
 RoundPresentation GrannysYardSession::round_presentation(std::optional<sim::TargetId> focused_target) const
 {
+    auto packet = turn_packet(focused_target);
+    auto board = evidence_board_view();
+    board.recommended_actions = to_action_hints(packet.recommended_actions);
+
     return RoundPresentation{
-        .packet = turn_packet(focused_target),
-        .evidence_board = evidence_board_view(),
+        .packet = std::move(packet),
+        .evidence_board = std::move(board),
         .gameplay_actions_enabled = can_accept_gameplay_actions(),
     };
 }
@@ -232,6 +266,7 @@ void GrannysYardSession::capture_completed_round_summary(
         human_notes_,
         result);
     summary.evidence_board = make_evidence_board_view(scenario_.round_log(), result);
+    summary.evidence_board.recommended_actions = to_action_hints(summary.packet->recommended_actions);
     completed_round_summary_ = std::move(summary);
 }
 

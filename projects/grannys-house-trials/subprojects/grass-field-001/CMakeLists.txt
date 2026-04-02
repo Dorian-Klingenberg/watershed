@@ -84,3 +84,6 @@ target_link_libraries(
     dwmapi
     uxtheme
 )
+
+set_property(TARGET grannys_house_trials_grass_field_001 PROPERTY FOLDER "Granny's House Trials/Subprojects")
+set_property(TARGET grannys_house_trials_grass_field_001_shaders PROPERTY FOLDER "Granny's House Trials/Subprojects")

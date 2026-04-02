@@ -12,3 +12,5 @@ add_executable(
   simulator.cpp
   dashboard.cpp
 )
+
+set_property(TARGET tide_logic_regulator_002_experiment PROPERTY FOLDER "Experiments")

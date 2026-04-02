@@ -20,4 +20,6 @@ target_include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+set_property(TARGET voxel_infrastructure_004_experiment PROPERTY FOLDER "Experiments")
+
 add_subdirectory(subexperiments/voxel-d3d12-001)

@@ -29,3 +29,6 @@ add_executable(
 )
 
 add_test(NAME scalar_field_flooding_tests COMMAND scalar_field_flooding_tests)
+
+set_property(TARGET scalar_field_flooding_experiment PROPERTY FOLDER "Experiments")
+set_property(TARGET scalar_field_flooding_tests PROPERTY FOLDER "Experiments")

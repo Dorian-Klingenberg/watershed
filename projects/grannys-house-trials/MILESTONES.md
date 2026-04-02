@@ -155,3 +155,33 @@ Do not move into:
 - driver applications under `subprojects/`
 
 until Milestone 6 is working.
+
+---
+
+## Infrastructure Support Tasks
+
+### D3D12 Renderer Module Extraction
+
+This is not a milestone, but a supporting infrastructure task that enables faster iteration and cleaner architecture.
+
+**Goal**: Extract the D3D12 rendering infrastructure from grass-field-001 into a reusable, RAII-based shared module.
+
+**Why now**:
+- grass-field-001 and grass-field-002 both contain duplicate D3D12 device management code
+- Each new subproject replicates complex device/swap-chain/frame-sync boilerplate
+- A shared component reduces ~600 LOC of copy-paste code per subproject
+- Extraction supports the principle: "Keep source grouped by domain"
+
+**Scope**:
+- Extract, don't refactor: Take existing proven code from grass-field-001
+- Module focus: Device management, frame sync, GPU buffers, pipeline creation
+- No simulation or domain logic included
+- Full RAII and exception safety semantics
+
+**Relationship to milestones**:
+- Supports **Milestone 2** (renderer stability and reusability)
+- Reduces technical debt in **M3+** runnables
+- Required before scaling to multiple subprojects
+- Does **not** block any active milestone
+
+**For more details**: See [STATUS.md](STATUS.md#d3d12-renderer-module-extraction) and [modules/gfx/d3d12_renderer/ARCHITECTURE.md](./modules/gfx/d3d12_renderer/ARCHITECTURE.md)

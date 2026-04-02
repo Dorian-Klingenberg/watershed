@@ -11,6 +11,7 @@ add_library(
     modules/sim/src/round_log.cpp
     modules/sim/src/grannys_yard_scenario.cpp
     modules/playtest/src/turn_packet.cpp
+    modules/playtest/src/agent_command.cpp
     modules/playtest/src/evidence_board_view.cpp
     modules/playtest/src/evidence_board_panel.cpp
     modules/playtest/src/grannys_yard_session.cpp
@@ -18,6 +19,8 @@ add_library(
 )
 
 add_library(grannys_house_trials::core ALIAS grannys_house_trials)
+
+set_property(TARGET grannys_house_trials PROPERTY FOLDER "Granny's House Trials")
 
 target_include_directories(
   grannys_house_trials

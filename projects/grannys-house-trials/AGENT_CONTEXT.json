@@ -53,11 +53,17 @@
       "objective",
       "focused target",
       "legal actions",
+      "recommended_actions (ordered hint command objects)",
       "recent evidence",
       "recent events (tokenized, first no-op only until the world changes)",
       "objective_completed",
       "objective_failed",
       "hidden_dependency_revealed"
+    ],
+    "command_format": [
+      "\"action_id\": any legal action id from the current packet",
+      "\"target\": optional visible target id (use null for area-level actions)",
+      "\"selection_x\"/\"selection_y\"/\"selection_z\": optional block selection coordinates (required together for \"select_block\")"
     ]
   },
   "human_ui": {

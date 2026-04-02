@@ -69,6 +69,9 @@ TEST_CASE("TurnPacket mirrors the current Granny's Yard turn surface", "[playtes
     REQUIRE(packet.objective.view() == "Deliver enough water to the north bed without soaking the cellar edge or softening the yard path.");
     REQUIRE(packet.recent_events.size() == static_cast<std::size_t>(1));
     REQUIRE(has_action_id(packet.legal_actions, "route_water_source"));
+    REQUIRE_FALSE(packet.recommended_actions.empty());
+    REQUIRE(packet.recommended_actions.front().action_id.view() == "inspect_neighborhood");
+    REQUIRE(packet.recommended_actions.front().target == TargetId::DrainMouth);
     REQUIRE(packet.round_result == RoundResult::Active);
     REQUIRE_FALSE(packet.objective_completed);
     REQUIRE_FALSE(packet.objective_failed);
@@ -101,4 +104,7 @@ TEST_CASE("TurnPacket reflects world changes after a risky intervention", "[play
     REQUIRE(packet.objective_failed);
     REQUIRE(packet.round_result == RoundResult::Failure);
     REQUIRE_FALSE(packet.recent_evidence.empty());
+    REQUIRE(packet.recommended_actions.size() == static_cast<std::size_t>(1));
+    REQUIRE(packet.recommended_actions.front().action_id.view() == "reset_round");
+    REQUIRE_FALSE(packet.recommended_actions.front().target.has_value());
 }

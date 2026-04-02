@@ -51,6 +51,24 @@ if (warned_by_james)
     dismiss_and_proceed()
 ```
 
+## Scenario Modes
+
+### `mode: fail_fast` (default for harness testing)
+
+Goal: produce a reliable, explainable objective failure quickly.
+
+Behavior contract:
+- Prefer `route_water_source` as early as possible.
+- Advance simulation before doing local diagnostics.
+- Avoid `close_water_source` unless the round is already unrecoverable.
+- Avoid precise shaping actions (`dig_shallow_channel`, `pack_*`) unless no other actions exist.
+- Favor high-throughput actions over containment actions.
+
+Expected outcome:
+- `failure reproduced` evidence appears early.
+- Water misses the north bed or causes collateral in path/cellar-adjacent zones.
+- Round fails in a way that is narratively obvious and reproducible.
+
 ## Failure Mode
 
 - Creates overflow cascades

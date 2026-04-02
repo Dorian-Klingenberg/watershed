@@ -19,6 +19,7 @@ struct EvidenceBoardView
 {
     std::vector<EvidenceBoardStat> stats;
     std::vector<std::string> highlights;
+    std::vector<std::string> recommended_actions;
     RoundResult round_result = RoundResult::Active;
 };
 

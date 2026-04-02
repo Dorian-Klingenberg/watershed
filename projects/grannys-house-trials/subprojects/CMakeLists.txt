@@ -4,3 +4,4 @@
 # of creating more compiled subsystem targets.
 
 add_subdirectory(grass-field-001)
+add_subdirectory(grass-field-002)

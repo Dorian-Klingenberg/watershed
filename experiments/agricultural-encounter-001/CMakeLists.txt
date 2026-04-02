@@ -13,3 +13,5 @@ add_executable(
   localized_intervention.cpp
   console_ui.cpp
 )
+
+set_property(TARGET agricultural_encounter_001_experiment PROPERTY FOLDER "Experiments")

@@ -16,6 +16,12 @@
 
 namespace grannys_house_trials::playtest
 {
+struct RecommendedAction
+{
+    util::NonEmptyString action_id;
+    std::optional<sim::TargetId> target;
+};
+
 struct TurnPacket
 {
     TesterRole role;
@@ -29,6 +35,7 @@ struct TurnPacket
     bool hidden_dependency_revealed = false;
     bool objective_completed = false;
     bool objective_failed = false;
+    std::vector<RecommendedAction> recommended_actions;
     std::vector<std::string> recent_events;
     std::vector<std::string> human_notes;
 };

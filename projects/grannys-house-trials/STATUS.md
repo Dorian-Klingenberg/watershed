@@ -149,6 +149,55 @@ What is not done:
 
 Status: `not started`
 
+---
+
+## Technical Infrastructure Tasks
+
+### D3D12 Renderer Module Extraction
+
+Status: `Phase 1 complete` (Architecture & documentation)
+
+**Purpose**: Extract grass-field-001's Direct3D12 rendering pipeline into a production-grade shared component with full RAII semantics, exception safety, and Windows integration.
+
+**Documentation**:
+- [modules/gfx/d3d12_renderer/ARCHITECTURE.md](./modules/gfx/d3d12_renderer/ARCHITECTURE.md) - Complete design and API reference
+- [modules/gfx/d3d12_renderer/README.md](./modules/gfx/d3d12_renderer/README.md) - Quick reference
+
+**Rationale**:
+- grass-field-001 and grass-field-002 both duplicate D3D12 device/swap chain/frame management code
+- Extraction follows project principle: "Keep source grouped by domain, not by speculative build architecture"
+- RAII-based design ensures robust cleanup and exception safety across all consumers
+- Shared component enables faster iteration on new subprojects
+
+**Phase breakdown**:
+
+**Phase 1 (Complete):**
+  - ✓ Architecture document and design review
+  - ✓ CMake integration planning
+  - ✓ Core class interfaces designed
+
+**Phase 2 (Planned):**
+  - Header declarations for `D3D12Context`, `GraphicsFrame`, `DeviceResources`, `PipelineBuilder`
+  - Implementation of core classes (~1000 LOC)
+  - Unit tests with Catch2 (~500 LOC)
+  - Timeline: 8-12 hours
+
+**Phase 3 (Planned):**
+  - Refactor grass-field-001 to use module
+  - Equivalence validation (pixel output matching)
+  - Remove ~600 LOC of inline boilerplate
+  - Timeline: 4-6 hours
+
+**Phase 4 (Future):**
+  - grass-field-002 adoption
+  - New subproject integration
+  - Performance profiling hooks
+
+**Impact on milestones**:
+- Supports Milestone 2 (renderer stability and reuse)
+- Reduces technical debt in M3+ runnables
+- No impact on M3 completion, only on iteration speed for future subprojects
+
 Not yet built:
 
 - manual point-award flow

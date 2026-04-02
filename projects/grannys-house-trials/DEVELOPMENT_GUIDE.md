@@ -21,7 +21,8 @@ simple decisions.
   terrain representations
 - `modules/playtest`: tester-facing turn packets, transcripts, and
   evidence-board projections
-- `modules/gfx`: render-adjacent but platform-agnostic types
+- `modules/gfx`: render-adjacent but platform-agnostic types (camera, constants)
+  - `modules/gfx/d3d12_renderer`: RAII-based Direct3D12 device/buffer/pipeline management (Phase 1: architecture only)
 - `subprojects/`: focused runnable slices that reuse the shared project code
 - `tests/`: one Catch2 test executable with all current unit tests
 
@@ -168,3 +169,52 @@ Current renderer status:
 - it is not yet a complete arbitrary voxel ray marcher or cube marcher
 - future rendering slices can build outward from this path instead of returning
   to CPU mesh emission
+
+## Graphics/Rendering Patterns
+
+### The D3D12 Renderer Module
+
+New subprojects that need Direct3D12 rendering should use the shared `modules/gfx/d3d12_renderer/` module rather than copying device/frame management code.
+
+**When to use**:
+- You need a D3D12 rendering context in a new subproject
+- You want RAII-based device management with exception safety
+- You need GPU buffer allocation, pipeline state creation, or frame synchronization
+
+**How to use**:
+
+See [modules/gfx/d3d12_renderer/ARCHITECTURE.md](modules/gfx/d3d12_renderer/ARCHITECTURE.md) for complete API reference and examples.
+
+**What the module provides**:
+- `D3D12Context`: Device, swap chain, frame management (RAII)
+- `GraphicsFrame`: Per-frame command list and state transitions
+- `DeviceResources` and `GPUBuffer<T>`: Typed GPU buffer allocation
+- `PipelineBuilder`: Shader loading and PSO caching
+
+**What you provide**:
+- HWND for rendering
+- Scene constants and data marshaling
+- Shader files (pre-compiled `.cso` blobs)
+- Render loop orchestration
+
+**Example**:
+```cpp
+// Create context
+D3D12Context graphics(hwnd, 1280, 720);
+
+// Create pipeline
+PipelineBuilder builder;
+auto pso = builder.build_pipeline(graphics.device(), "my_pipeline", {...});
+
+// Main loop
+while (running) {
+    GraphicsFrame frame(&graphics, graphics.current_frame_index());
+    frame.begin();
+    // ... record GPU commands ...
+    frame.end();
+    frame.execute();
+    graphics.present();
+}
+```
+
+**Current status**: Module is in Phase 1 (architecture complete, implementation beginning). See [STATUS.md](STATUS.md#d3d12-renderer-module-extraction) for timeline.

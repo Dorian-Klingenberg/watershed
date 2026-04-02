@@ -206,6 +206,20 @@ std::wstring EvidenceBoardPanel::format_view() const
         text << L"\r\nRound ended. Reset to start a new attempt.\r\n";
     }
 
+    text << L"\r\nRecommended next actions\r\n";
+    if (view_.recommended_actions.empty())
+    {
+        text << L"  - none\r\n";
+    }
+    else
+    {
+        const std::size_t cap = std::min<std::size_t>(view_.recommended_actions.size(), 6);
+        for (std::size_t index = 0; index < cap; ++index)
+        {
+            text << L"  - " << widen(view_.recommended_actions[index]) << L"\r\n";
+        }
+    }
+
     return text.str();
 }
 } // namespace grannys_house_trials::playtest

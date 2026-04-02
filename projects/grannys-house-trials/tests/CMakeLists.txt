@@ -12,6 +12,10 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(Catch2)
 
+# Keep Catch2 out of the main project list in VS
+set_property(TARGET Catch2 PROPERTY FOLDER "_Dependencies")
+set_property(TARGET Catch2WithMain PROPERTY FOLDER "_Dependencies")
+
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(Catch)
 
@@ -26,8 +30,10 @@ add_executable(
     sim/sparse_refined_patch_field_tests.cpp
     gfx/orbit_camera_tests.cpp
     playtest/playtest_protocol_tests.cpp
+    playtest/agent_command_tests.cpp
     playtest/evidence_board_view_tests.cpp
     playtest/grannys_yard_session_tests.cpp
+    playtest/scenario_001_script_regression_tests.cpp
     playtest/round_result_tests.cpp
 )
 
@@ -37,6 +43,8 @@ target_link_libraries(
     Catch2::Catch2WithMain
     grannys_house_trials::core
 )
+
+set_property(TARGET grannys_house_trials_tests PROPERTY FOLDER "Granny's House Trials")
 
 catch_discover_tests(
   grannys_house_trials_tests

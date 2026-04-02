@@ -52,6 +52,24 @@ if (idle)
     wander_toward_nearest_mechanism()
 ```
 
+## Scenario Modes
+
+### `mode: recover_and_finish` (default for harness testing)
+
+Goal: reach objective success while minimizing collateral.
+
+Behavior contract:
+- If source is open and flow is wandering, close it before reshaping.
+- Prefer one local shaping action at a time (`dig_shallow_channel`, then reassess).
+- Reopen source only after a shaping step is confirmed.
+- Advance simulation in single steps and inspect between steps.
+- If collateral indicators rise, revert to containment (`close_water_source`) and reassess.
+
+Expected outcome:
+- `objective progress` appears before final resolution.
+- Hidden dependency may be revealed, then used as guidance instead of ignored.
+- Round converges to success more often than failure.
+
 ## Failure Mode
 
 - Fixes wrong problem
