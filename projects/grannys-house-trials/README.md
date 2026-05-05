@@ -177,6 +177,18 @@ Current renderer status:
 - a fuller arbitrary voxel traversal path is still intended, but has not been
   built yet
 
+Renderer parity contract for 001/002:
+
+- `grass-field-001` and `grass-field-002` must use the same world-renderer
+  implementation path.
+- `grass-field-002` may add UI and interaction overlays, but it must not
+  introduce a separate world draw pipeline, shader set, or alternate scene
+  geometry model.
+- If a rendering change is needed, implement it in the shared renderer path
+  first, then consume it from both subprojects.
+- Before marking renderer work complete, visually compare 001 and 002 world
+  output under the same scenario state and confirm parity.
+
 The first cast structure is:
 
 - the Builder

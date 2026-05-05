@@ -29,6 +29,7 @@ add_executable(
     sim/adaptive_terrain_ownership_field_tests.cpp
     sim/sparse_refined_patch_field_tests.cpp
     gfx/orbit_camera_tests.cpp
+    gfx/ui_frame_renderer_tests.cpp
     playtest/playtest_protocol_tests.cpp
     playtest/agent_command_tests.cpp
     playtest/evidence_board_view_tests.cpp
@@ -42,6 +43,8 @@ target_link_libraries(
   PRIVATE
     Catch2::Catch2WithMain
     grannys_house_trials::core
+    d3d12
+    dxgi
 )
 
 set_property(TARGET grannys_house_trials_tests PROPERTY FOLDER "Granny's House Trials")

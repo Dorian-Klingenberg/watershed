@@ -12,6 +12,9 @@
 
 #include "grannys_house_trials/sim/adaptive_terrain_ownership_field.h"
 #include "grannys_house_trials/gfx/orbit_camera.h"
+#include "grannys_house_trials/gfx/d3d12_context.h"
+#include "grannys_house_trials/gfx/ui_frame_renderer.h"
+#include "grannys_house_trials/gfx/device_resources.h"
 #include "grannys_house_trials/playtest/agent_command.h"
 #include "grannys_house_trials/playtest/evidence_board_panel.h"
 #include "grannys_house_trials/playtest/grannys_yard_session.h"
@@ -799,14 +802,11 @@ public:
 private:
     bool initialize(HINSTANCE instance);
     void initialize_pipeline();
-    void create_window_size_dependent_resources();
-    void resize_window_size_dependent_resources(UINT width, UINT height);
+    void on_viewport_resized(UINT width, UINT height);
     void create_assets();
     void update();
     void render();
     void update_fps_counter();
-    void wait_for_gpu();
-    void move_to_next_frame();
     void create_ui();
     void layout_ui();
     void refresh_info_panel();
@@ -893,25 +893,19 @@ private:
     HFONT ui_font_ = nullptr;
     HFONT info_font_ = nullptr;
 
-    ComPtr<IDXGIFactory4> factory_;
-    ComPtr<ID3D12Device> device_;
-    ComPtr<ID3D12CommandQueue> command_queue_;
-    ComPtr<IDXGISwapChain3> swap_chain_;
-    ComPtr<ID3D12DescriptorHeap> rtv_heap_;
+    // Graphics rendering (D3D12 module)
+    std::optional<grannys_house_trials::gfx::D3D12Context> context_;
+    grannys_house_trials::gfx::UIFrameRenderer ui_frame_renderer_;
+
     ComPtr<ID3D12DescriptorHeap> cbv_heap_;
     ComPtr<ID3D12DescriptorHeap> dsv_heap_;
-    ComPtr<ID3D12Resource> render_targets_[frame_count];
     ComPtr<ID3D12Resource> depth_stencil_;
-    FrameContext frames_[frame_count];
-    UINT rtv_descriptor_size_ = 0;
     UINT cbv_srv_descriptor_size_ = 0;
-    UINT frame_index_ = 0;
 
     ComPtr<ID3D12RootSignature> root_signature_;
     ComPtr<ID3D12PipelineState> coarse_pipeline_state_;
     ComPtr<ID3D12PipelineState> refined_pipeline_state_;
     ComPtr<ID3D12PipelineState> hybrid_pipeline_state_;
-    ComPtr<ID3D12GraphicsCommandList> command_list_;
 
     ComPtr<ID3D12Resource> field_buffer_;
     UINT field_buffer_capacity_cells_ = 0;
@@ -929,10 +923,6 @@ private:
 
     ComPtr<ID3D12Resource> constant_buffer_;
     SceneConstants *constant_buffer_data_ = nullptr;
-
-    ComPtr<ID3D12Fence> fence_;
-    UINT64 fence_value_ = 1;
-    HANDLE fence_event_ = nullptr;
 };
 
 int D3D12App::run(HINSTANCE instance)
@@ -962,7 +952,7 @@ int D3D12App::run(HINSTANCE instance)
         render();
     }
 
-    wait_for_gpu();
+    // D3D12Context destructor handles GPU synchronization and cleanup via RAII
     if (ui_font_)
     {
         DeleteObject(ui_font_);
@@ -973,7 +963,6 @@ int D3D12App::run(HINSTANCE instance)
         DeleteObject(info_font_);
         info_font_ = nullptr;
     }
-    CloseHandle(fence_event_);
     return static_cast<int>(message.wParam);
 }
 
@@ -1056,111 +1045,32 @@ bool D3D12App::initialize(HINSTANCE instance)
 void D3D12App::initialize_pipeline()
 {
     debug_log("[grass-field-001] initialize_pipeline begin");
-    throw_if_failed(CreateDXGIFactory1(IID_PPV_ARGS(&factory_)), "Could not create DXGI factory.");
-    throw_if_failed(
-        D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device_)),
-        "Could not create D3D12 device.");
 
-    D3D12_COMMAND_QUEUE_DESC queue_desc{};
-    queue_desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-    throw_if_failed(
-        device_->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&command_queue_)),
-        "Could not create command queue.");
+    // Create D3D12Context (handles: factory, device, queue, swap chain, RTV heap, frame sync)
+    context_.emplace(viewport_hwnd_, width_, height_, frame_count);
+    debug_log("[grass-field-001] D3D12Context created");
 
-    DXGI_SWAP_CHAIN_DESC1 swap_desc{};
-    swap_desc.BufferCount = frame_count;
-    swap_desc.Width = width_;
-    swap_desc.Height = height_;
-    swap_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    swap_desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    swap_desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-    swap_desc.SampleDesc.Count = 1;
-
-    ComPtr<IDXGISwapChain1> swap_chain;
-    throw_if_failed(
-        factory_->CreateSwapChainForHwnd(
-            command_queue_.Get(),
-            viewport_hwnd_,
-            &swap_desc,
-            nullptr,
-            nullptr,
-            &swap_chain),
-        "Could not create swap chain.");
-    throw_if_failed(
-        swap_chain.As(&swap_chain_),
-        "Could not upgrade swap chain interface.");
-    frame_index_ = swap_chain_->GetCurrentBackBufferIndex();
-
-    D3D12_DESCRIPTOR_HEAP_DESC rtv_heap_desc{};
-    rtv_heap_desc.NumDescriptors = frame_count;
-    rtv_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-    throw_if_failed(
-        device_->CreateDescriptorHeap(&rtv_heap_desc, IID_PPV_ARGS(&rtv_heap_)),
-        "Could not create RTV heap.");
-    rtv_descriptor_size_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
+    // Create CBV/SRV/UAV heap for field buffers and constants
     D3D12_DESCRIPTOR_HEAP_DESC cbv_heap_desc{};
     cbv_heap_desc.NumDescriptors = 4;
     cbv_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     cbv_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     throw_if_failed(
-        device_->CreateDescriptorHeap(&cbv_heap_desc, IID_PPV_ARGS(&cbv_heap_)),
+        context_->device()->CreateDescriptorHeap(&cbv_heap_desc, IID_PPV_ARGS(&cbv_heap_)),
         "Could not create CBV heap.");
-    cbv_srv_descriptor_size_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    cbv_srv_descriptor_size_ = context_->device()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    debug_log("[grass-field-001] CBV/SRV/UAV heap created");
 
+    // Create DSV heap for depth stencil
     D3D12_DESCRIPTOR_HEAP_DESC dsv_heap_desc{};
     dsv_heap_desc.NumDescriptors = 1;
     dsv_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
     throw_if_failed(
-        device_->CreateDescriptorHeap(&dsv_heap_desc, IID_PPV_ARGS(&dsv_heap_)),
+        context_->device()->CreateDescriptorHeap(&dsv_heap_desc, IID_PPV_ARGS(&dsv_heap_)),
         "Could not create DSV heap.");
+    debug_log("[grass-field-001] DSV heap created");
 
-    for (UINT index = 0; index < frame_count; ++index)
-    {
-        throw_if_failed(
-            device_->CreateCommandAllocator(
-                D3D12_COMMAND_LIST_TYPE_DIRECT,
-                IID_PPV_ARGS(&frames_[index].allocator)),
-            "Could not create command allocator.");
-    }
-
-    create_window_size_dependent_resources();
-
-    throw_if_failed(
-        device_->CreateCommandList(
-            0,
-            D3D12_COMMAND_LIST_TYPE_DIRECT,
-            frames_[0].allocator.Get(),
-            nullptr,
-            IID_PPV_ARGS(&command_list_)),
-        "Could not create command list.");
-    throw_if_failed(command_list_->Close(), "Could not close initial command list.");
-
-    throw_if_failed(
-        device_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence_)),
-        "Could not create fence.");
-    fence_event_ = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-
-    if (!fence_event_)
-    {
-        throw std::runtime_error("Could not create fence event.");
-    }
-
-    debug_log("[grass-field-001] initialize_pipeline complete");
-}
-
-void D3D12App::create_window_size_dependent_resources()
-{
-    D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle = rtv_heap_->GetCPUDescriptorHandleForHeapStart();
-    for (UINT index = 0; index < frame_count; ++index)
-    {
-        throw_if_failed(
-            swap_chain_->GetBuffer(index, IID_PPV_ARGS(&render_targets_[index])),
-            "Could not acquire render target.");
-        device_->CreateRenderTargetView(render_targets_[index].Get(), nullptr, rtv_handle);
-        rtv_handle.ptr += rtv_descriptor_size_;
-    }
-
+    // Create depth stencil buffer
     D3D12_HEAP_PROPERTIES depth_heap{};
     depth_heap.Type = D3D12_HEAP_TYPE_DEFAULT;
 
@@ -1181,7 +1091,7 @@ void D3D12App::create_window_size_dependent_resources()
     depth_clear.DepthStencil.Stencil = 0;
 
     throw_if_failed(
-        device_->CreateCommittedResource(
+        context_->device()->CreateCommittedResource(
             &depth_heap,
             D3D12_HEAP_FLAG_NONE,
             &depth_desc,
@@ -1189,52 +1099,49 @@ void D3D12App::create_window_size_dependent_resources()
             &depth_clear,
             IID_PPV_ARGS(&depth_stencil_)),
         "Could not create depth buffer.");
+    debug_log("[grass-field-001] Depth stencil resource created");
 
     D3D12_DEPTH_STENCIL_VIEW_DESC dsv_desc{};
     dsv_desc.Format = DXGI_FORMAT_D32_FLOAT;
     dsv_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
     dsv_desc.Flags = D3D12_DSV_FLAG_NONE;
-    device_->CreateDepthStencilView(
+    context_->device()->CreateDepthStencilView(
         depth_stencil_.Get(),
         &dsv_desc,
         dsv_heap_->GetCPUDescriptorHandleForHeapStart());
+    debug_log("[grass-field-001] Depth stencil view created");
+
+    // Create constant buffer for scene constants
+    const UINT64 constant_buffer_size = (sizeof(SceneConstants) + 255) & ~255;
+    constant_buffer_ = create_upload_buffer(
+        context_->device(),
+        constant_buffer_size,
+        "Could not create constant buffer.");
+    
+    D3D12_RANGE read_range{0, 0};
+    throw_if_failed(
+        constant_buffer_->Map(0, &read_range, reinterpret_cast<void **>(&constant_buffer_data_)),
+        "Could not map constant buffer.");
+    debug_log("[grass-field-001] Constant buffer created and mapped");
+
+    debug_log("[grass-field-001] initialize_pipeline complete");
 }
 
-void D3D12App::resize_window_size_dependent_resources(UINT width, UINT height)
+void D3D12App::on_viewport_resized(UINT width, UINT height)
 {
-    if (!swap_chain_ || width == 0 || height == 0)
+    if (width == 0 || height == 0)
     {
         return;
     }
 
-    if (width_ == width && height_ == height)
-    {
-        return;
-    }
-
-    wait_for_gpu();
-
+    // Keep local dimensions in sync with the viewport so UI/picking math remains consistent.
     width_ = width;
     height_ = height;
 
-    for (auto &render_target : render_targets_)
+    if (context_ && context_->supports_resize())
     {
-        render_target.Reset();
+        context_->resize(width_, height_);
     }
-
-    depth_stencil_.Reset();
-
-    throw_if_failed(
-        swap_chain_->ResizeBuffers(
-            frame_count,
-            width_,
-            height_,
-            DXGI_FORMAT_R8G8B8A8_UNORM,
-            0),
-        "Could not resize swap chain buffers.");
-
-    frame_index_ = swap_chain_->GetCurrentBackBufferIndex();
-    create_window_size_dependent_resources();
 }
 
 void D3D12App::create_assets()
@@ -1279,7 +1186,7 @@ void D3D12App::create_assets()
             &errors),
         "Could not serialize root signature.");
     throw_if_failed(
-        device_->CreateRootSignature(
+        context_->device()->CreateRootSignature(
             0,
             signature->GetBufferPointer(),
             signature->GetBufferSize(),
@@ -1321,7 +1228,7 @@ void D3D12App::create_assets()
         pipeline_desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
         pipeline_desc.SampleDesc.Count = 1;
         throw_if_failed(
-            device_->CreateGraphicsPipelineState(&pipeline_desc, IID_PPV_ARGS(&pipeline_state)),
+            context_->device()->CreateGraphicsPipelineState(&pipeline_desc, IID_PPV_ARGS(&pipeline_state)),
             "Could not create graphics pipeline.");
     };
 
@@ -1332,7 +1239,7 @@ void D3D12App::create_assets()
 
     field_buffer_capacity_cells_ = static_cast<UINT>(field_.cell_count());
     field_buffer_ = create_upload_buffer(
-        device_.Get(),
+        context_->device(),
         static_cast<UINT64>(field_buffer_capacity_cells_) * sizeof(GpuFieldCell),
         "Could not create field buffer.");
 
@@ -1347,27 +1254,17 @@ void D3D12App::create_assets()
     refined_patch_height_capacity_ = initial_height_count;
 
     refined_patch_lookup_buffer_ = create_upload_buffer(
-        device_.Get(),
+        context_->device(),
         static_cast<UINT64>(refined_patch_lookup_capacity_) * sizeof(std::int32_t),
         "Could not create refined patch lookup buffer.");
     refined_patch_metadata_buffer_ = create_upload_buffer(
-        device_.Get(),
+        context_->device(),
         static_cast<UINT64>(refined_patch_capacity_) * sizeof(GpuRefinedPatchMetadata),
         "Could not create refined patch metadata buffer.");
     refined_patch_height_buffer_ = create_upload_buffer(
-        device_.Get(),
+        context_->device(),
         static_cast<UINT64>(refined_patch_height_capacity_) * sizeof(std::uint32_t),
         "Could not create refined patch height buffer.");
-
-    constant_buffer_ = create_upload_buffer(
-        device_.Get(),
-        (sizeof(SceneConstants) + 255) & ~255,
-        "Could not create constant buffer.");
-
-    D3D12_RANGE read_range{0, 0};
-    throw_if_failed(
-        constant_buffer_->Map(0, &read_range, reinterpret_cast<void **>(&constant_buffer_data_)),
-        "Could not map constant buffer.");
 
     debug_log("[grass-field-001] rebuilding initial display buffers");
     rebuild_display_field_buffer();
@@ -1463,7 +1360,7 @@ void D3D12App::ensure_field_buffer_capacity(UINT required_cells)
     }
 
     field_buffer_ = create_upload_buffer(
-        device_.Get(),
+        context_->device(),
         static_cast<UINT64>(required_cells) * sizeof(GpuFieldCell),
         "Could not grow field buffer.");
     field_buffer_capacity_cells_ = required_cells;
@@ -1474,7 +1371,7 @@ void D3D12App::ensure_refined_patch_buffer_capacity(UINT lookup_count, UINT patc
     if (lookup_count > refined_patch_lookup_capacity_)
     {
         refined_patch_lookup_buffer_ = create_upload_buffer(
-            device_.Get(),
+            context_->device(),
             static_cast<UINT64>(lookup_count) * sizeof(std::int32_t),
             "Could not grow refined patch lookup buffer.");
         refined_patch_lookup_capacity_ = lookup_count;
@@ -1483,7 +1380,7 @@ void D3D12App::ensure_refined_patch_buffer_capacity(UINT lookup_count, UINT patc
     if (patch_count > refined_patch_capacity_)
     {
         refined_patch_metadata_buffer_ = create_upload_buffer(
-            device_.Get(),
+            context_->device(),
             static_cast<UINT64>(patch_count) * sizeof(GpuRefinedPatchMetadata),
             "Could not grow refined patch metadata buffer.");
         refined_patch_capacity_ = patch_count;
@@ -1492,7 +1389,7 @@ void D3D12App::ensure_refined_patch_buffer_capacity(UINT lookup_count, UINT patc
     if (height_count > refined_patch_height_capacity_)
     {
         refined_patch_height_buffer_ = create_upload_buffer(
-            device_.Get(),
+            context_->device(),
             static_cast<UINT64>(height_count) * sizeof(std::uint32_t),
             "Could not grow refined patch height buffer.");
         refined_patch_height_capacity_ = height_count;
@@ -1533,9 +1430,9 @@ void D3D12App::rebuild_display_field_buffer()
     field_origin_z_ = -static_cast<float>(render_grid_depth()) * display_voxel_size_feet_ * 0.5f;
     max_column_height_voxels_ = max_column_height_voxels;
 
-    if (command_queue_ && fence_ && fence_event_)
+    if (context_)
     {
-        wait_for_gpu();
+        context_->wait_for_gpu();
     }
 
     ensure_field_buffer_capacity(field_cell_count_);
@@ -1594,22 +1491,22 @@ void D3D12App::rebuild_display_field_buffer()
     srv_desc.Buffer.StructureByteStride = sizeof(GpuFieldCell);
     srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
     D3D12_CPU_DESCRIPTOR_HANDLE descriptor = cbv_heap_->GetCPUDescriptorHandleForHeapStart();
-    device_->CreateShaderResourceView(field_buffer_.Get(), &srv_desc, descriptor);
+    context_->device()->CreateShaderResourceView(field_buffer_.Get(), &srv_desc, descriptor);
 
     descriptor.ptr += cbv_srv_descriptor_size_;
     srv_desc.Buffer.NumElements = static_cast<UINT>(refined_patch_gpu_data.lookup.size());
     srv_desc.Buffer.StructureByteStride = sizeof(std::int32_t);
-    device_->CreateShaderResourceView(refined_patch_lookup_buffer_.Get(), &srv_desc, descriptor);
+    context_->device()->CreateShaderResourceView(refined_patch_lookup_buffer_.Get(), &srv_desc, descriptor);
 
     descriptor.ptr += cbv_srv_descriptor_size_;
     srv_desc.Buffer.NumElements = static_cast<UINT>(refined_patch_gpu_data.metadata.size());
     srv_desc.Buffer.StructureByteStride = sizeof(GpuRefinedPatchMetadata);
-    device_->CreateShaderResourceView(refined_patch_metadata_buffer_.Get(), &srv_desc, descriptor);
+    context_->device()->CreateShaderResourceView(refined_patch_metadata_buffer_.Get(), &srv_desc, descriptor);
 
     descriptor.ptr += cbv_srv_descriptor_size_;
     srv_desc.Buffer.NumElements = static_cast<UINT>(refined_patch_gpu_data.heights.size());
     srv_desc.Buffer.StructureByteStride = sizeof(std::uint32_t);
-    device_->CreateShaderResourceView(refined_patch_height_buffer_.Get(), &srv_desc, descriptor);
+    context_->device()->CreateShaderResourceView(refined_patch_height_buffer_.Get(), &srv_desc, descriptor);
     debug_log("[grass-field-001] rebuild_display_field_buffer complete");
 }
 
@@ -3317,89 +3214,28 @@ std::optional<VoxelSelection> D3D12App::try_pick_voxel(POINT client_point) const
 
 void D3D12App::render()
 {
-    if (width_ == 0 || height_ == 0 || IsIconic(hwnd_))
+    if (width_ == 0 || height_ == 0 || IsIconic(hwnd_) || !context_)
     {
         return;
     }
 
-    throw_if_failed(
-        frames_[frame_index_].allocator->Reset(),
-        "Could not reset command allocator.");
-    throw_if_failed(
-        command_list_->Reset(frames_[frame_index_].allocator.Get(), active_pipeline_state()),
-        "Could not reset command list.");
-
-    D3D12_RESOURCE_BARRIER barrier{};
-    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrier.Transition.pResource = render_targets_[frame_index_].Get();
-    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    command_list_->ResourceBarrier(1, &barrier);
-
-    D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(width_), static_cast<float>(height_), 0.0f, 1.0f};
-    D3D12_RECT scissor{0, 0, static_cast<LONG>(width_), static_cast<LONG>(height_)};
-    command_list_->RSSetViewports(1, &viewport);
-    command_list_->RSSetScissorRects(1, &scissor);
-
-    D3D12_CPU_DESCRIPTOR_HANDLE rtv = rtv_heap_->GetCPUDescriptorHandleForHeapStart();
-    rtv.ptr += frame_index_ * rtv_descriptor_size_;
-    D3D12_CPU_DESCRIPTOR_HANDLE dsv = dsv_heap_->GetCPUDescriptorHandleForHeapStart();
-    command_list_->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
-
     const float clear_color[] = {0.66f, 0.80f, 0.97f, 1.0f};
-    command_list_->ClearRenderTargetView(rtv, clear_color, 0, nullptr);
-    command_list_->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-    command_list_->SetGraphicsRootSignature(root_signature_.Get());
-    ID3D12DescriptorHeap *heaps[] = {cbv_heap_.Get()};
-    command_list_->SetDescriptorHeaps(1, heaps);
-    command_list_->SetGraphicsRootConstantBufferView(0, constant_buffer_->GetGPUVirtualAddress());
-    command_list_->SetGraphicsRootDescriptorTable(1, cbv_heap_->GetGPUDescriptorHandleForHeapStart());
-    command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    command_list_->DrawInstanced(3, 1, 0, 0);
-
-    D3D12_RESOURCE_BARRIER barrier_back{};
-    barrier_back.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrier_back.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-    barrier_back.Transition.pResource = render_targets_[frame_index_].Get();
-    barrier_back.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    barrier_back.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    barrier_back.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-    command_list_->ResourceBarrier(1, &barrier_back);
-
-    throw_if_failed(command_list_->Close(), "Could not close command list.");
-
-    ID3D12CommandList *command_lists[] = {command_list_.Get()};
-    command_queue_->ExecuteCommandLists(1, command_lists);
-    throw_if_failed(swap_chain_->Present(1, 0), "Could not present frame.");
-    move_to_next_frame();
-}
-
-void D3D12App::wait_for_gpu()
-{
-    throw_if_failed(command_queue_->Signal(fence_.Get(), fence_value_), "Could not signal fence.");
-    throw_if_failed(
-        fence_->SetEventOnCompletion(fence_value_, fence_event_),
-        "Could not wait for fence completion.");
-    WaitForSingleObject(fence_event_, INFINITE);
-    ++fence_value_;
-}
-
-void D3D12App::move_to_next_frame()
-{
-    const UINT64 current_fence = fence_value_;
-    throw_if_failed(command_queue_->Signal(fence_.Get(), current_fence), "Could not signal fence.");
-    frames_[frame_index_].fence_value = current_fence;
-    ++fence_value_;
-
-    frame_index_ = swap_chain_->GetCurrentBackBufferIndex();
-    if (fence_->GetCompletedValue() < frames_[frame_index_].fence_value)
-    {
-        throw_if_failed(
-            fence_->SetEventOnCompletion(frames_[frame_index_].fence_value, fence_event_),
-            "Could not queue fence event.");
-        WaitForSingleObject(fence_event_, INFINITE);
-    }
+    ui_frame_renderer_.render(
+        *context_,
+        cbv_heap_.Get(),
+        clear_color,
+        [&](ID3D12GraphicsCommandList *command_list) {
+            D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(width_), static_cast<float>(height_), 0.0f, 1.0f};
+            D3D12_RECT scissor{0, 0, static_cast<LONG>(width_), static_cast<LONG>(height_)};
+            command_list->RSSetViewports(1, &viewport);
+            command_list->RSSetScissorRects(1, &scissor);
+            command_list->SetPipelineState(active_pipeline_state());
+            command_list->SetGraphicsRootSignature(root_signature_.Get());
+            command_list->SetGraphicsRootConstantBufferView(0, constant_buffer_->GetGPUVirtualAddress());
+            command_list->SetGraphicsRootDescriptorTable(1, cbv_heap_->GetGPUDescriptorHandleForHeapStart());
+            command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            command_list->DrawInstanced(3, 1, 0, 0);
+        });
 }
 
 void D3D12App::on_mouse_down(MouseState::DragMode drag_mode, LPARAM lparam)
@@ -3678,7 +3514,7 @@ LRESULT D3D12App::handle_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
         {
             if (wparam != SIZE_MINIMIZED)
             {
-                resize_window_size_dependent_resources(
+                on_viewport_resized(
                     static_cast<UINT>(LOWORD(lparam)),
                     static_cast<UINT>(HIWORD(lparam)));
             }

@@ -172,6 +172,25 @@ Current renderer status:
 
 ## Graphics/Rendering Patterns
 
+### Renderer Parity Rule (001 and 002)
+
+To avoid accidental renderer forks:
+
+- Treat `grass-field-001` as the canonical world-render implementation.
+- Treat `grass-field-002` as a UI/session shell that consumes the same world
+  render path.
+- Do not add a 002-only world pipeline, standalone world shaders, or
+  substitute geometry pass.
+- Implement world-render changes in shared/canonical code first, then wire
+  both subprojects to it.
+
+Required validation for renderer changes:
+
+1. Build both `grannys_house_trials_grass_field_001` and
+   `grannys_house_trials_grass_field_002`.
+2. Launch both and verify world visuals match for equivalent scenario state.
+3. Only then update docs/status and mark the renderer task complete.
+
 ### The D3D12 Renderer Module
 
 New subprojects that need Direct3D12 rendering should use the shared `modules/gfx/d3d12_renderer/` module rather than copying device/frame management code.

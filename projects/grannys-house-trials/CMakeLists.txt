@@ -16,6 +16,11 @@ add_library(
     modules/playtest/src/evidence_board_panel.cpp
     modules/playtest/src/grannys_yard_session.cpp
     modules/gfx/src/orbit_camera.cpp
+    modules/gfx/d3d12_renderer/src/d3d12_context.cpp
+    modules/gfx/d3d12_renderer/src/graphics_frame.cpp
+    modules/gfx/d3d12_renderer/src/device_resources.cpp
+    modules/gfx/d3d12_renderer/src/pipeline_builder.cpp
+    modules/gfx/d3d12_renderer/src/ui_frame_renderer.cpp
 )
 
 add_library(grannys_house_trials::core ALIAS grannys_house_trials)
@@ -29,6 +34,7 @@ target_include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/modules/sim/include
     ${CMAKE_CURRENT_SOURCE_DIR}/modules/playtest/include
     ${CMAKE_CURRENT_SOURCE_DIR}/modules/gfx/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/modules/gfx/d3d12_renderer/include
 )
 
 add_subdirectory(subprojects)

@@ -12,12 +12,25 @@ Replace grass-field-001 with a cleaner observation-focused interface using ImGui
 - Conversation log (agent-to-agent communication + actions)
 - World state queries (pause, replay, constraint inspection)
 
+Important renderer boundary:
+
+- 002 is a host/UI harness over the same world renderer used by 001.
+- The world render path, world shaders, and scene geometry logic are shared,
+	not reimplemented locally in 002.
+- 002-specific work should stay in panels, controls, and session interaction
+	glue.
+
 ## Architecture
 
 - **Rendering:** D3D12 + DirectXMath (retained from grass-field-001)
 - **UI:** ImGui overlay (immediate-mode, zero external process overhead)
 - **Simulation:** GrannysYardSession + Scenario 002
 - **Agent Integration:** Structured action packets with reasoning annotations
+
+Parity rule:
+
+- Any world-render change must be validated against 001 in the same scenario
+	state before merge.
 
 ## Development Phases
 
