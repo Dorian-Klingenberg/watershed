@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GrannyPuzzleRecipe",
+  "type": "object",
+  "required": ["puzzleId", "primaryGoal", "safetyGoals", "selectedMotifs", "requiredFeatures", "knownHappyPath", "expectedResult"],
+  "properties": {
+    "puzzleId": { "type": "string" },
+    "primaryGoal": { "type": "string" },
+    "safetyGoals": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "qualityGoals": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "discoveryGoals": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "selectedMotifs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "requiredFeatures": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "knownHappyPath": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "expectedResult": {
+      "type": "object",
+      "properties": {
+        "oldGardenHydrationMin": { "type": "number" },
+        "newGardenHydrationMin": { "type": "number" },
+        "basementDampnessMax": { "type": "number" },
+        "boulderWallStabilityMin": { "type": "number" }
+      }
+    },
+    "designedTraps": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

@@ -1,0 +1,234 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <style>
+      text { font-family: "Segoe UI", Arial, sans-serif; fill: #25302b; }
+      .title { font-size: 30px; font-weight: 700; }
+      .subtitle { font-size: 16px; fill: #52615a; }
+      .label { font-size: 16px; font-weight: 650; }
+      .small { font-size: 12px; fill: #4f5d55; }
+      .tiny { font-size: 10px; fill: #5a6860; }
+      .panel { fill: #f7f4eb; stroke: #28332e; stroke-width: 2; }
+      .grid { stroke: #d8d2c4; stroke-width: 1; }
+      .major-grid { stroke: #b7ad9a; stroke-width: 1.4; }
+      .contour { fill: none; stroke: #9a8f78; stroke-width: 1.2; opacity: .62; }
+      .water { fill: none; stroke: #2a8fc8; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+      .water-thin { fill: none; stroke: #2a8fc8; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+      .danger { fill: none; stroke: #c44532; stroke-width: 5; stroke-dasharray: 10 8; stroke-linecap: round; stroke-linejoin: round; }
+      .safe { fill: none; stroke: #3a9161; stroke-width: 6; stroke-dasharray: 3 9; stroke-linecap: round; stroke-linejoin: round; }
+      .hidden { fill: none; stroke: #7b5599; stroke-width: 4; stroke-dasharray: 4 7; stroke-linecap: round; stroke-linejoin: round; }
+      .source { fill: #54b1d6; stroke: #1e5f7c; stroke-width: 3; }
+      .stone { fill: #aab0a3; stroke: #586157; stroke-width: 2; }
+      .canal { fill: #84948f; stroke: #42504a; stroke-width: 2; }
+      .garden { fill: #89a95d; stroke: #536d35; stroke-width: 2; }
+      .new-garden { fill: #b09a4f; stroke: #766734; stroke-width: 2; }
+      .house { fill: #b17b4f; stroke: #5f3f2d; stroke-width: 3; }
+      .basement { fill: #c44532; opacity: .15; stroke: #c44532; stroke-width: 2; stroke-dasharray: 6 5; }
+      .boulder { fill: #8c8979; stroke: #514f45; stroke-width: 2; }
+      .soil { fill: #d6c598; stroke: #9f8f63; stroke-width: 1.5; }
+      .swale { fill: #c4d2a4; stroke: #67784c; stroke-width: 2; }
+      .check { fill: #756e60; stroke: #3f3a34; stroke-width: 1.5; }
+      .iso-top { stroke: #344039; stroke-width: 1.2; }
+      .iso-left { stroke: #344039; stroke-width: 1.2; opacity: .95; }
+      .iso-right { stroke: #344039; stroke-width: 1.2; opacity: .9; }
+    </style>
+
+    <marker id="arrowWater" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L12,4 L0,8 Z" fill="#2a8fc8"/>
+    </marker>
+    <marker id="arrowDanger" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L12,4 L0,8 Z" fill="#c44532"/>
+    </marker>
+    <marker id="arrowSafe" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L12,4 L0,8 Z" fill="#3a9161"/>
+    </marker>
+    <marker id="arrowNorth" markerWidth="10" markerHeight="10" refX="5" refY="1" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M5,0 L10,10 L5,7 L0,10 Z" fill="#25302b"/>
+    </marker>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#efe9dc"/>
+  <text x="50" y="52" class="title">Column-Based Voxel Map Proposal</text>
+  <text x="50" y="78" class="subtitle">Top-down grid and isometric column interpretation for Granny's House Trials</text>
+
+  <rect x="40" y="110" width="720" height="820" rx="8" class="panel"/>
+  <rect x="820" y="110" width="740" height="820" rx="8" class="panel"/>
+
+  <text x="70" y="150" class="label">Top-Down Plan: 32 x 48 one-meter columns</text>
+  <text x="850" y="150" class="label">Isometric Read: same layout as voxel columns</text>
+  <text x="70" y="174" class="small">Horizontal axes: x east/west, z north/south. Height is column y.</text>
+  <text x="850" y="174" class="small">Simplified 2m-sampled columns showing height bands, terraces, house risk, and routes.</text>
+
+  <!-- Top-down grid: origin at x=110, y=205. Scale: 12px/cell. Map: 32 x 48. -->
+  <g id="topdown" transform="translate(110 205)">
+    <rect x="0" y="0" width="384" height="576" fill="#e8ddbf" stroke="#2b342e" stroke-width="2"/>
+    <g>
+      <path class="grid" d="M12 0V576 M24 0V576 M36 0V576 M48 0V576 M60 0V576 M72 0V576 M84 0V576 M96 0V576 M108 0V576 M120 0V576 M132 0V576 M144 0V576 M156 0V576 M168 0V576 M180 0V576 M192 0V576 M204 0V576 M216 0V576 M228 0V576 M240 0V576 M252 0V576 M264 0V576 M276 0V576 M288 0V576 M300 0V576 M312 0V576 M324 0V576 M336 0V576 M348 0V576 M360 0V576 M372 0V576"/>
+      <path class="grid" d="M0 12H384 M0 24H384 M0 36H384 M0 48H384 M0 60H384 M0 72H384 M0 84H384 M0 96H384 M0 108H384 M0 120H384 M0 132H384 M0 144H384 M0 156H384 M0 168H384 M0 180H384 M0 192H384 M0 204H384 M0 216H384 M0 228H384 M0 240H384 M0 252H384 M0 264H384 M0 276H384 M0 288H384 M0 300H384 M0 312H384 M0 324H384 M0 336H384 M0 348H384 M0 360H384 M0 372H384 M0 384H384 M0 396H384 M0 408H384 M0 420H384 M0 432H384 M0 444H384 M0 456H384 M0 468H384 M0 480H384 M0 492H384 M0 504H384 M0 516H384 M0 528H384 M0 540H384 M0 552H384 M0 564H384"/>
+      <path class="major-grid" d="M0 96H384 M0 192H384 M0 288H384 M0 384H384 M0 480H384 M96 0V576 M192 0V576 M288 0V576"/>
+    </g>
+
+    <!-- broad height bands / contours -->
+    <path class="contour" d="M18,28 C80,12 136,22 196,16 C255,11 329,28 366,68"/>
+    <path class="contour" d="M18,104 C73,88 145,80 212,94 C282,108 335,132 372,172"/>
+    <path class="contour" d="M20,194 C86,177 148,181 210,211 C276,242 329,250 370,294"/>
+    <path class="contour" d="M18,305 C80,295 139,319 196,352 C254,386 318,392 365,430"/>
+    <path class="contour" d="M18,438 C83,432 147,458 203,490 C258,521 314,529 362,558"/>
+
+    <!-- semantic areas -->
+    <ellipse cx="62" cy="58" rx="33" ry="30" class="source"/>
+    <rect x="132" y="88" width="112" height="160" rx="6" class="garden"/>
+    <rect x="148" y="100" width="78" height="24" fill="#a6be75" stroke="#536d35" stroke-width="1.5"/>
+    <rect x="148" y="136" width="78" height="24" fill="#9bb56d" stroke="#536d35" stroke-width="1.5"/>
+    <rect x="148" y="172" width="78" height="24" fill="#91ad66" stroke="#536d35" stroke-width="1.5"/>
+    <rect x="148" y="208" width="78" height="24" fill="#86a35c" stroke="#536d35" stroke-width="1.5"/>
+    <rect x="210" y="262" width="116" height="112" rx="5" class="house"/>
+    <rect x="182" y="236" width="162" height="164" rx="12" class="basement"/>
+    <ellipse cx="166" cy="523" rx="91" ry="42" class="new-garden"/>
+
+    <!-- boulder wall and path materials -->
+    <path d="M75,130 C56,178 60,246 78,309 C92,357 89,408 63,458" class="boulder" fill="none" stroke-width="22" stroke-linecap="round"/>
+    <path d="M93,425 C136,402 186,394 239,400 C286,406 322,424 344,456" class="soil" fill="none" stroke-width="28" stroke-linecap="round"/>
+    <path d="M274,210 C306,226 324,246 334,276" class="swale" fill="none" stroke-width="24" stroke-linecap="round"/>
+    <path d="M322,286 C351,344 342,428 252,500" class="swale" fill="none" stroke-width="24" stroke-linecap="round"/>
+
+    <!-- infrastructure objects -->
+    <path d="M70,59 C119,43 160,35 215,42 C253,48 276,60 298,82" class="canal" fill="none" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="282" y="58" width="33" height="36" rx="4" class="canal"/>
+    <rect x="202" y="250" width="35" height="30" rx="4" fill="#77918d" stroke="#42504a" stroke-width="2"/>
+    <circle cx="218" cy="265" r="8" fill="#2a8fc8" stroke="#1e5f7c" stroke-width="2"/>
+    <rect x="236" y="383" width="12" height="23" class="check"/>
+    <rect x="297" y="400" width="12" height="23" class="check"/>
+    <rect x="326" y="334" width="12" height="23" class="check"/>
+
+    <!-- routes -->
+    <path d="M70,59 C125,44 190,39 298,76 C275,92 253,105 229,116 C205,126 189,140 188,154 C187,184 196,214 218,265"
+          class="water" marker-end="url(#arrowWater)"/>
+    <path d="M218,265 C258,282 286,302 300,342 C320,397 288,456 213,501"
+          class="safe" marker-end="url(#arrowSafe)"/>
+    <path d="M214,266 C160,294 116,334 87,421"
+          class="danger" marker-end="url(#arrowDanger)"/>
+    <path d="M218,265 C244,286 263,318 276,371"
+          class="hidden" marker-end="url(#arrowDanger)"/>
+
+    <!-- house roof lines -->
+    <path d="M216,262 L267,232 L321,262" fill="none" stroke="#5f3f2d" stroke-width="4"/>
+    <path d="M211,375 L267,405 L327,375" fill="none" stroke="#5f3f2d" stroke-width="3"/>
+
+    <!-- labels -->
+    <text x="22" y="-20" class="small">N / uphill</text>
+    <path d="M28,-12 L28,-50" stroke="#25302b" stroke-width="2" marker-end="url(#arrowNorth)"/>
+    <text x="48" y="64" class="tiny">cistern y+16</text>
+    <text x="256" y="55" class="tiny">canal ridge</text>
+    <text x="144" y="85" class="tiny">old terraces</text>
+    <text x="239" y="260" class="tiny">splitter</text>
+    <text x="252" y="324" class="tiny">house + basement</text>
+    <text x="16" y="301" class="tiny">loose wall</text>
+    <text x="266" y="438" class="tiny">safe swale</text>
+    <text x="118" y="533" class="tiny">new garden basin</text>
+
+    <text x="5" y="602" class="small">Material/read layers: stone canal, garden soil, boulder hazard, house/foundation, safe swale, hidden drain.</text>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(530 205)">
+    <text x="0" y="0" class="label">Column map rules</text>
+    <rect x="0" y="24" width="18" height="18" class="source"/><text x="28" y="38" class="small">source / cistern column cluster</text>
+    <rect x="0" y="54" width="18" height="18" class="canal"/><text x="28" y="68" class="small">stone canal / splitter columns</text>
+    <rect x="0" y="84" width="18" height="18" class="garden"/><text x="28" y="98" class="small">old terrace beds</text>
+    <rect x="0" y="114" width="18" height="18" class="house"/><text x="28" y="128" class="small">house footprint</text>
+    <rect x="0" y="144" width="18" height="18" class="basement"/><text x="28" y="158" class="small">basement seepage risk mask</text>
+    <rect x="0" y="174" width="18" height="18" class="new-garden"/><text x="28" y="188" class="small">lower new garden</text>
+    <path d="M0,222 H52" class="water" marker-end="url(#arrowWater)"/><text x="62" y="226" class="small">intended active flow</text>
+    <path d="M0,258 H52" class="safe" marker-end="url(#arrowSafe)"/><text x="62" y="262" class="small">safe engineered route</text>
+    <path d="M0,294 H52" class="danger" marker-end="url(#arrowDanger)"/><text x="62" y="298" class="small">tempting failure route</text>
+    <path d="M0,330 H52" class="hidden" marker-end="url(#arrowDanger)"/><text x="62" y="334" class="small">buried conduit risk</text>
+    <text x="0" y="385" class="small">Suggested columns:</text>
+    <text x="0" y="410" class="tiny">cell: 1m x 1m x 1ft or 1m vertical display unit</text>
+    <text x="0" y="430" class="tiny">coarse view: full-height columns only</text>
+    <text x="0" y="450" class="tiny">refined view: top mixed blocks promoted to inch detail</text>
+    <text x="0" y="470" class="tiny">scenario anchors snap to feature regions, not single cells</text>
+  </g>
+
+  <!-- Isometric diagram -->
+  <g id="iso" transform="translate(1160 330)">
+    <!-- grid tray -->
+    <polygon points="-300,110 0,-40 300,110 0,260" fill="#d8c99c" stroke="#2b342e" stroke-width="2"/>
+    <g opacity=".42">
+      <path d="M-260,130 L40,-20 M-220,150 L80,0 M-180,170 L120,20 M-140,190 L160,40 M-100,210 L200,60 M-60,230 L240,80 M-20,250 L280,100" stroke="#9f947f"/>
+      <path d="M260,130 L-40,-20 M220,150 L-80,0 M180,170 L-120,20 M140,190 L-160,40 M100,210 L-200,60 M60,230 L-240,80 M20,250 L-280,100" stroke="#9f947f"/>
+    </g>
+
+    <!-- helper: hand-drawn columns/prisms -->
+    <!-- cistern plateau -->
+    <polygon class="iso-top" points="-260,-28 -210,-53 -160,-28 -210,-3" fill="#54b1d6"/>
+    <polygon class="iso-left" points="-260,-28 -210,-3 -210,28 -260,3" fill="#347e99"/>
+    <polygon class="iso-right" points="-210,-3 -160,-28 -160,3 -210,28" fill="#256d86"/>
+    <ellipse cx="-210" cy="-28" rx="30" ry="13" fill="#8fd0e5" stroke="#1e5f7c" stroke-width="2"/>
+
+    <!-- upper canal ridge -->
+    <polygon class="iso-top" points="-210,-4 -95,-62 -30,-30 -145,28" fill="#84948f"/>
+    <polygon class="iso-left" points="-210,-4 -145,28 -145,54 -210,21" fill="#66756f"/>
+    <polygon class="iso-right" points="-145,28 -30,-30 -30,-5 -145,54" fill="#56645f"/>
+    <path d="M-201,-6 C-158,-22 -111,-42 -44,-31" class="water-thin" marker-end="url(#arrowWater)"/>
+
+    <!-- old terraced garden stacked shelves -->
+    <polygon class="iso-top" points="-92,-26 20,-82 128,-28 16,28" fill="#9fb76c"/>
+    <polygon class="iso-left" points="-92,-26 16,28 16,55 -92,1" fill="#778d50"/>
+    <polygon class="iso-right" points="16,28 128,-28 128,-2 16,55" fill="#6f8649"/>
+    <polygon class="iso-top" points="-70,25 18,-19 103,24 14,68" fill="#93ad64"/>
+    <polygon class="iso-left" points="-70,25 14,68 14,91 -70,48" fill="#6d844a"/>
+    <polygon class="iso-right" points="14,68 103,24 103,47 14,91" fill="#657d44"/>
+    <polygon class="iso-top" points="-48,73 14,42 78,74 16,106" fill="#88a45d"/>
+    <polygon class="iso-left" points="-48,73 16,106 16,125 -48,93" fill="#627a43"/>
+    <polygon class="iso-right" points="16,106 78,74 78,93 16,125" fill="#5b733e"/>
+    <path d="M-29,-43 C6,-36 38,-22 64,-7 C44,13 22,33 10,54 C11,73 22,91 37,104" class="water-thin" marker-end="url(#arrowWater)"/>
+
+    <!-- splitter box -->
+    <polygon class="iso-top" points="21,117 63,96 105,117 63,138" fill="#77918d"/>
+    <polygon class="iso-left" points="21,117 63,138 63,161 21,140" fill="#526d69"/>
+    <polygon class="iso-right" points="63,138 105,117 105,140 63,161" fill="#48625f"/>
+    <circle cx="63" cy="117" r="9" fill="#2a8fc8" stroke="#1e5f7c" stroke-width="2"/>
+
+    <!-- house and basement hazard -->
+    <polygon points="45,175 155,120 272,178 162,234" fill="#c44532" opacity=".16" stroke="#c44532" stroke-width="2" stroke-dasharray="6 5"/>
+    <polygon class="iso-top" points="79,151 154,114 236,155 161,193" fill="#b17b4f"/>
+    <polygon class="iso-left" points="79,151 161,193 161,248 79,206" fill="#8d603e"/>
+    <polygon class="iso-right" points="161,193 236,155 236,210 161,248" fill="#7c5338"/>
+    <polygon points="88,147 158,91 229,150 156,118" fill="#6a4936" stroke="#3d2b22" stroke-width="2"/>
+    <path d="M63,138 C105,154 126,174 145,211" class="hidden" marker-end="url(#arrowDanger)"/>
+
+    <!-- boulder wall / tempting route -->
+    <path d="M-192,82 C-150,109 -132,151 -116,201" fill="none" stroke="#8c8979" stroke-width="28" stroke-linecap="round"/>
+    <path d="M60,138 C0,158 -72,190 -112,222" class="danger" marker-end="url(#arrowDanger)"/>
+
+    <!-- safe swale around east/south side -->
+    <path d="M65,141 C133,139 224,188 200,248 C178,304 60,327 -44,286" class="safe" marker-end="url(#arrowSafe)"/>
+    <polygon class="iso-top" points="182,246 203,236 224,246 203,257" fill="#756e60"/>
+    <polygon class="iso-top" points="127,296 148,286 169,296 148,307" fill="#756e60"/>
+    <polygon class="iso-top" points="54,314 75,303 96,314 75,324" fill="#756e60"/>
+
+    <!-- lower new garden basin -->
+    <polygon class="iso-top" points="-114,289 -20,242 103,303 9,351" fill="#b09a4f"/>
+    <polygon class="iso-left" points="-114,289 9,351 9,380 -114,318" fill="#8a7a3e"/>
+    <polygon class="iso-right" points="9,351 103,303 103,332 9,380" fill="#7e713a"/>
+
+    <!-- isometric labels -->
+    <text x="-292" y="-68" class="tiny">high source columns</text>
+    <text x="-36" y="-90" class="tiny">stepped terrace columns</text>
+    <text x="111" y="100" class="tiny">splitter column feature</text>
+    <text x="196" y="124" class="tiny">foundation risk mask</text>
+    <text x="-210" y="210" class="tiny">loose boulder columns</text>
+    <text x="198" y="286" class="tiny">check-dam columns</text>
+    <text x="-54" y="388" class="tiny">low garden basin</text>
+  </g>
+
+  <!-- Isometric notes -->
+  <g transform="translate(850 745)">
+    <text x="0" y="0" class="label">How this maps to the renderer/sim</text>
+    <text x="0" y="28" class="small">1. Every visible square in plan is a coarse terrain column with material, height, water/saturation, and scenario tags.</text>
+    <text x="0" y="54" class="small">2. Terraces are not special geometry at first: they are flat column shelves plus overflow-lip feature cells.</text>
+    <text x="0" y="80" class="small">3. House and basement are masks over columns. The basement risk can read saturation from adjacent north/west cells.</text>
+    <text x="0" y="106" class="small">4. Boulder wall is a stability-tagged material band. Flow velocity or digging changes stability, then material state.</text>
+    <text x="0" y="132" class="small">5. Splitter box is the key playtest anchor: intended, safe, tempting, and hidden routes all branch from it.</text>
+  </g>
+</svg>

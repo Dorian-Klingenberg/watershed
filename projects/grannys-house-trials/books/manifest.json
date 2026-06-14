@@ -1,0 +1,56 @@
+{
+  "version": "1.0",
+  "description": "Portable knowledge base manifest — lists all books, their sources, and indexing config.",
+  "books": [
+    {
+      "id": "cppreference",
+      "name": "C++ Reference (cppreference.com)",
+      "format": "html-archive",
+      "source": "https://github.com/PeterFeicht/cppreference-doc/releases/download/v20250209/html-book-20250209.zip",
+      "book_dir": "books/cppreference",
+      "description": "Full C++ standard library and language reference — all symbols, headers, and since-versions.",
+      "tags": ["stdlib", "cpp11", "cpp14", "cpp17", "cpp20", "cpp23", "RAII", "containers", "algorithms", "smart-pointer"],
+      "extractor": "extract_html.py"
+    },
+    {
+      "id": "directx-specs",
+      "name": "DirectX 12 Engineering Specs (microsoft/DirectX-Specs)",
+      "format": "markdown-repo",
+      "source": "https://github.com/microsoft/DirectX-Specs",
+      "book_dir": "books/directx-specs",
+      "filter": ["d3d/**/*.md"],
+      "description": "Microsoft's engineering-level D3D12 specifications — deeper than the API docs. Covers barriers, descriptor heaps, raytracing, mesh shaders, and resource binding in detail.",
+      "tags": ["d3d12", "directx", "descriptor-heap", "command-list", "resource-barrier", "raytracing", "mesh-shader", "root-signature", "pipeline-state", "swap-chain"],
+      "extractor": "extract_markdown.py"
+    },
+    {
+      "id": "cpp-guidelines",
+      "name": "C++ Core Guidelines (Stroustrup & Sutter)",
+      "format": "html-single",
+      "source": "https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines.html",
+      "book_dir": "books/cpp-guidelines",
+      "description": "The canonical guide to modern C++ — RAII, ownership, lifetimes, [[nodiscard]], span, const-correctness, and interface design. Written by Bjarne Stroustrup and Herb Sutter.",
+      "tags": ["RAII", "ownership", "lifetime", "smart-pointer", "nodiscard", "const-correctness", "interfaces", "cpp-best-practices"],
+      "extractor": "extract_html_page.py"
+    },
+    {
+      "id": "win32-api",
+      "name": "Win32 API Reference (MicrosoftDocs/win32)",
+      "format": "markdown-repo",
+      "source": "https://github.com/MicrosoftDocs/win32",
+      "book_dir": "books/win32-api",
+      "filter": [
+        "desktop-src/directx/**/*.md",
+        "desktop-src/com/**/*.md",
+        "desktop-src/inputdev/**/*.md",
+        "desktop-src/winmsg/**/*.md",
+        "desktop-src/sync/**/*.md",
+        "desktop-src/windows-and-messages/**/*.md",
+        "desktop-src/input/**/*.md"
+      ],
+      "description": "Windows API reference for DirectX, COM, input, windowing, and synchronization — the actual platform layer under D3D12.",
+      "tags": ["win32", "COM", "HWND", "message-loop", "input", "synchronization", "windowing", "directx"],
+      "extractor": "extract_markdown.py"
+    }
+  ]
+}

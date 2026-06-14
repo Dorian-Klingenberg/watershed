@@ -1,0 +1,60 @@
+{
+  "id": "trap_straight_downhill_001",
+  "name": "Dig straight downhill beside boulder wall",
+  "description": "Designed bad solution. It may water lower area quickly but should increase basement dampness or destabilize boulder wall.",
+  "actions": [
+    {
+      "tick": 0,
+      "action": {
+        "type": "clear_weeds",
+        "target": "canal_intake"
+      }
+    },
+    {
+      "tick": 1,
+      "action": {
+        "type": "open_gate",
+        "target": "cistern_gate",
+        "parameters": {
+          "level": "medium"
+        }
+      }
+    },
+    {
+      "tick": 10,
+      "action": {
+        "type": "dig",
+        "target": "direct_downhill_segment_1",
+        "parameters": {
+          "depth_delta": 0.4
+        }
+      }
+    },
+    {
+      "tick": 11,
+      "action": {
+        "type": "dig",
+        "target": "direct_downhill_segment_2",
+        "parameters": {
+          "depth_delta": 0.4
+        }
+      }
+    },
+    {
+      "tick": 12,
+      "action": {
+        "type": "remove_stone",
+        "target": "boulder_wall_support_1"
+      }
+    },
+    {
+      "tick": 40,
+      "action": {
+        "type": "wait",
+        "parameters": {
+          "ticks": 100
+        }
+      }
+    }
+  ]
+}

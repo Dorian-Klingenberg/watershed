@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GrannyContraption",
+  "type": "object",
+  "required": ["id", "name", "category", "description", "practicalPurpose", "playerReadableClue", "usefulBehavior", "dangerousBehavior", "mapPlacement", "puzzlePotential"],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "category": { "type": "string" },
+    "description": { "type": "string" },
+    "practicalPurpose": { "type": "string" },
+    "playerReadableClue": { "type": "string" },
+    "usefulBehavior": { "type": "string" },
+    "dangerousBehavior": { "type": "string" },
+    "mapPlacement": { "type": "string" },
+    "puzzlePotential": { "type": "string" },
+    "playerActions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "failureModes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "teaches": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

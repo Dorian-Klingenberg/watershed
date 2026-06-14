@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Grannys House Trials Puzzle",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "seed",
+    "grid_width",
+    "grid_height",
+    "rule_version",
+    "materials",
+    "cells",
+    "features",
+    "goals",
+    "happy_paths"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "seed": {
+      "type": "integer"
+    },
+    "grid_width": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "grid_height": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "rule_version": {
+      "type": "string"
+    },
+    "materials": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "cells": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "x",
+          "y",
+          "elevation",
+          "material"
+        ],
+        "properties": {
+          "x": {
+            "type": "integer"
+          },
+          "y": {
+            "type": "integer"
+          },
+          "elevation": {
+            "type": "number"
+          },
+          "material": {
+            "type": "string"
+          },
+          "water": {
+            "type": "number"
+          },
+          "saturation": {
+            "type": "number"
+          },
+          "stability": {
+            "type": "number"
+          },
+          "feature_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "cells"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "cells": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "x",
+                "y"
+              ],
+              "properties": {
+                "x": {
+                  "type": "integer"
+                },
+                "y": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "properties": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "goals": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "happy_paths": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "trap_scripts": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "metadata": {
+      "type": "object"
+    }
+  }
+}

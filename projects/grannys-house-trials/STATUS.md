@@ -218,12 +218,40 @@ Not yet built:
 - shared `sim`, `playtest`, `gfx`, and `util` code compiled as one project library
 - one active D3D12 runnable:
   [main.cpp](/D:/Repos/Games/TheGame/projects/grannys-house-trials/subprojects/grass-field-001/main.cpp)
+- additional authored-map runnable:
+  [grass-field-004/main.cpp](/D:/Repos/Games/TheGame/projects/grannys-house-trials/subprojects/grass-field-004/main.cpp)
 - build-time shader compilation with separate coarse / refined / hybrid PSOs
 - shader-side column raycast renderer
 - coarse `1-foot` field plus `1-inch` refinement concepts for erosion/detail
 - adaptive ownership model for coarse vs refined terrain volume
 - click inspection and AI-agent JSON snapshot export
 - passing unit tests across sim, playtest, gfx, and util
+
+### 2026-05-23 Grass Field 004 Update
+
+Status: `implemented and verified`
+
+What is now done:
+
+- `grass-field-004` integrated as a dedicated authored visual map slice
+- `108 x 156` foot authored footprint expanded to `1296 x 1872` one-inch cells
+- selective inch-detail for structures/features with broad foot-quantized ground
+- material-id propagation through CPU buffers and all renderer shader paths
+- material color coding and inspector material labels
+- live hover highlight for pending column selection
+- control mapping update:
+  - left-click select
+  - middle-drag orbit
+  - right-drag pan
+  - scroll zoom
+- window resize support with swapchain/depth/RTV recreation
+- picking upgraded from ground-plane projection to DDA + per-column AABB tests
+- right-drag pan upgraded to world-plane delta anchored at selected column height
+
+What remains intentionally deferred in 004:
+
+- scenario action anchors and round mechanics
+- host scoring/evidence flow for this authored map slice
 
 ## Intentionally Not Done Yet
 

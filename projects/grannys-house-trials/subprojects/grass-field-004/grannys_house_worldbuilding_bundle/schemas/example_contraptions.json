@@ -1,0 +1,32 @@
+[
+  {
+    "id": "sluice_gate_cistern_intake",
+    "name": "Cistern Sluice Gate",
+    "category": "flow_control",
+    "description": "A mossy stone-and-wood gate controlling the outlet from the old cistern.",
+    "practicalPurpose": "Regulates water entering the sturdy canal.",
+    "playerReadableClue": "Old water stains mark safe and dangerous flow heights.",
+    "usefulBehavior": "Allows gentle controlled flow into the canal.",
+    "dangerousBehavior": "Opening fully releases too much water and causes downstream over-success failures.",
+    "mapPlacement": "North/top-left cistern outlet.",
+    "puzzlePotential": "First lesson in flow control.",
+    "playerActions": ["clear_debris", "repair", "open_low", "open_full", "close"],
+    "failureModes": ["surge", "overtopping", "debris_jam"],
+    "teaches": ["flow_control", "source_control"]
+  },
+  {
+    "id": "hidden_drain_house_hill",
+    "name": "Hidden Hill Drain",
+    "category": "old_conduit",
+    "description": "A half-buried stone-lined drain near the hill-built wall of Granny's house.",
+    "practicalPurpose": "Unknown; likely part of older drainage infrastructure.",
+    "playerReadableClue": "A damp patch, hollow sound, and fitted plug stone suggest a buried conduit.",
+    "usefulBehavior": "Can remove ponded water from a dangerous surface area.",
+    "dangerousBehavior": "May route water directly toward or under the basement.",
+    "mapPlacement": "Near north or west house wall.",
+    "puzzlePotential": "Signature test-before-trusting trap.",
+    "playerActions": ["inspect", "test_low_flow", "plug", "unplug", "mark_danger"],
+    "failureModes": ["hidden_reroute", "basement_seepage", "delayed_flood"],
+    "teaches": ["hidden_coupling", "risk_testing"]
+  }
+]

@@ -1,0 +1,71 @@
+{
+  "id": "happy_path_001",
+  "name": "Restore terraces and route safe bypass",
+  "description": "Known solution for first prototype. Coordinates are symbolic placeholders until static map is implemented.",
+  "actions": [
+    {
+      "tick": 0,
+      "action": {
+        "type": "clear_weeds",
+        "target": "canal_intake"
+      }
+    },
+    {
+      "tick": 1,
+      "action": {
+        "type": "repair",
+        "target": "upper_terrace_overflow_lip"
+      }
+    },
+    {
+      "tick": 2,
+      "action": {
+        "type": "open_gate",
+        "target": "cistern_gate",
+        "parameters": {
+          "level": "low"
+        }
+      }
+    },
+    {
+      "tick": 20,
+      "action": {
+        "type": "dig",
+        "target": "safe_bypass_segment_1",
+        "parameters": {
+          "depth_delta": 0.2
+        }
+      }
+    },
+    {
+      "tick": 21,
+      "action": {
+        "type": "dig",
+        "target": "safe_bypass_segment_2",
+        "parameters": {
+          "depth_delta": 0.2
+        }
+      }
+    },
+    {
+      "tick": 22,
+      "action": {
+        "type": "place_stone",
+        "target": "steep_bypass_section",
+        "parameters": {
+          "count": 3,
+          "role": "check_dam"
+        }
+      }
+    },
+    {
+      "tick": 60,
+      "action": {
+        "type": "wait",
+        "parameters": {
+          "ticks": 100
+        }
+      }
+    }
+  ]
+}
