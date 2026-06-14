@@ -435,11 +435,13 @@ The agent should help the user **think better, design better, and discover stron
 
 On startup the agent should:
 
-1. read AGENTS.md
-2. read docs/ directory
-3. check docs/transactions.md
-4. process pending transactions if present
-5. otherwise begin in ADVISOR + CREATIVE PARTNER mode
+1. read AGENTS.md (this file)
+2. read projects/grannys-house-trials/AGENT_CONTEXT.json
+3. read projects/grannys-house-trials/STATUS.md
+4. read docs/ directory
+5. check docs/transactions.md
+6. process pending transactions if present
+7. otherwise begin in ADVISOR + CREATIVE PARTNER mode
 
 Shell preference for agent tooling on this repo and this machine:
 

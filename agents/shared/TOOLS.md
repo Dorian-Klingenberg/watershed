@@ -81,7 +81,7 @@ Each agent workspace has two tiers of memory files:
 | `MEMORY.md` | LLM | Rich narrative. Full context, multi-paragraph entries. Used for testing, tuning, and human readability. |
 | `MEMORY.slm.md` | SLM | Dense behavioral triggers. Tagged patterns, short entries, voice markers. Optimized for small model token budgets. |
 
-Convention: IDENTITY.md, SOUL.md, and AGENTS.md are shared across both tiers.
+Convention: IDENTITY.md, SOUL.md, and MANUAL.md are shared across both tiers.
 Only MEMORY files are split. The SLM variant compresses the same behavioral
 content into pattern-matchable entries the deployment model can act on directly.
 

@@ -1,29 +1,18 @@
 # Agent Launchers
 
-Use this repository-local bootstrap and keep context narrow.
+All agent operating instructions are in [AGENTS.md](../AGENTS.md) at the repository root. This directory holds a thin bootstrap for tools that need a startup file.
 
 ## Codex Desktop
 
 - Start from [bootstrap.json](./bootstrap.json)
-- Load [../projects/grannys-house-trials/AGENT_CONTEXT.json](../projects/grannys-house-trials/AGENT_CONTEXT.json) first
-- Then load the maintained human docs only as needed
+- Bootstrap points to AGENTS.md as the primary instruction source
 
-## Codex CLI In WSL
-
-- Start from [bootstrap.json](./bootstrap.json)
-- Prefer WSL/bash-native commands for inspection, build, and test work
-- Avoid switching to Windows shells unless a Windows-native tool is required
-
-## Copilot / WSL CLI Agents
+## Codex CLI in WSL
 
 - Start from [bootstrap.json](./bootstrap.json)
-- Use the compact agent context file as the primary repo summary
-- Expand into prose docs only when the task needs more detail
+- Shell and tool preferences are specified in AGENTS.md
 
-## Shell Preference
+## Copilot / Other Agents
 
-- Prefer WSL/bash-equivalent shells over Windows shells for repo inspection,
-  build, and test work on this machine.
-- Use Windows shells only for Windows-specific UI, debugger, or toolchain
-  tasks that need them. This is a preference for the current tooling mix, not
-  a claim that Windows or the machine is unreliable.
+- Start from AGENTS.md directly
+- See bootstrap.json for focused context file hints

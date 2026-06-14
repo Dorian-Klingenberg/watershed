@@ -1,24 +1,15 @@
 {
-  "schema": "thegame.codex_bootstrap.v1",
-  "repo": "TheGame",
-  "purpose": "Fast, constrained Codex startup for Granny's House Trials and the broader ancient-infrastructure game work.",
-  "default_workflows": [
-    "read AGENTS.md",
-    "read projects/grannys-house-trials/AGENT_CONTEXT.json",
-    "read projects/grannys-house-trials/STATUS.md",
-    "read projects/grannys-house-trials/README.md",
-    "check docs/transactions.md before edits"
-  ],
+  "schema": "watershed.codex_bootstrap.v2",
+  "repo": "watershed",
+  "purpose": "Thin Codex bootstrap. All agent operating instructions are in AGENTS.md at the repository root.",
+  "entrypoint": "AGENTS.md",
   "focused_context_files": [
     "projects/grannys-house-trials/AGENT_CONTEXT.json",
     "projects/grannys-house-trials/STATUS.md",
     "projects/grannys-house-trials/PROJECT_BRIEF.md",
-    "projects/grannys-house-trials/README.md",
-    "projects/grannys-house-trials/subprojects/grass-field-001/README.md"
+    "projects/grannys-house-trials/README.md"
   ],
   "human_reference_files": [
-    "AGENTS.md",
-    "docs/gpt_context.md",
     "docs/game_vision.md",
     "docs/core_loops.md",
     "docs/ancient_technology.md",
@@ -27,12 +18,11 @@
   "load_policy": {
     "mode": "narrow",
     "notes": [
-      "Prefer the compact AGENT_CONTEXT.json for agent startup.",
+      "Read AGENTS.md first — it contains all operating instructions.",
+      "Use focused_context_files for GHT-specific context after AGENTS.md.",
       "Do not load broad docs unless a task needs them.",
       "Do not expand into unrelated experiments by default.",
-      "Prefer WSL/bash-native shells for repo inspection, build, and test work when available on this machine.",
-      "Use Windows shells only when the task requires Windows-native behavior or the tool is Windows-only.",
-      "Check transactions before making structured repository changes."
+      "Check docs/transactions.md before making structured repository changes."
     ]
   },
   "mission": "Prove that a small, agent-friendly yard scenario can reveal hidden infrastructure, record meaningful evidence, and support a real drainage/repair round without losing the larger world-first identity."
