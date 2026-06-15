@@ -27,7 +27,7 @@ Current architectural boundary:
 
 Machine-readable context:
 
-- [AGENT_CONTEXT.json](/D:/Repos/Games/TheGame/projects/grannys-house-trials/AGENT_CONTEXT.json)
+- [AGENT_CONTEXT.json](./AGENT_CONTEXT.json)
 
 ## Current Phase
 
@@ -75,7 +75,7 @@ What is done:
 
 Primary runnable:
 
-- [grass-field-001/README.md](/D:/Repos/Games/TheGame/projects/grannys-house-trials/subprojects/grass-field-001/README.md)
+- [grass-field-001/README.md](./subprojects/grass-field-001/README.md)
 
 ### Milestone 3: First Testable Mechanic
 
@@ -217,9 +217,9 @@ Not yet built:
 
 - shared `sim`, `playtest`, `gfx`, and `util` code compiled as one project library
 - one active D3D12 runnable:
-  [main.cpp](/D:/Repos/Games/TheGame/projects/grannys-house-trials/subprojects/grass-field-001/main.cpp)
+  [main.cpp](./subprojects/grass-field-001/main.cpp)
 - additional authored-map runnable:
-  [grass-field-004/main.cpp](/D:/Repos/Games/TheGame/projects/grannys-house-trials/subprojects/grass-field-004/main.cpp)
+  [grass-field-004/main.cpp](./subprojects/grass-field-004/main.cpp)
 - build-time shader compilation with separate coarse / refined / hybrid PSOs
 - shader-side column raycast renderer
 - coarse `1-foot` field plus `1-inch` refinement concepts for erosion/detail

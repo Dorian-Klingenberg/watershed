@@ -9,6 +9,11 @@
     "intervention under uncertainty",
     "meaningful unintended consequences"
   ],
+  "portfolio_context": {
+    "note": "Point-in-time reminder, not a scope change: this project can be described as a simulation-backed agent-testing harness where puzzle-matrix scenarios, role-differentiated tester strategies, evidence capture, and human adjudication reveal hidden-system behavior.",
+    "handoff": "handoff/2026-06-07-ai-portfolio-context.md",
+    "guardrail": "Keep the project fun, systems-first, and focused on one legible replayable round; do not turn it into an enterprise AI demo."
+  },
   "current_focus": [
     "one deterministic drainage round",
     "one hidden dependency",

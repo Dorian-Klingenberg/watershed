@@ -5,3 +5,5 @@
 
 add_subdirectory(grass-field-001)
 add_subdirectory(grass-field-002)
+add_subdirectory(grass-field-003)
+add_subdirectory(grass-field-004)

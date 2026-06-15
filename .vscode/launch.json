@@ -1,0 +1,175 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+
+    // ── Experiments ──────────────────────────────────────────────────────────
+    {
+      "name": "[Experiments] Agricultural Encounter 001",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/vs2026-debug/experiments/agricultural-encounter-001/Debug/agricultural_encounter_001_experiment.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "console": "integratedTerminal",
+      "preLaunchTask": "build: agricultural_encounter_001_experiment"
+    },
+    {
+      "name": "[Experiments] Tide Logic Regulator 002",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/vs2026-debug/experiments/tide-logic-regulator-002/Debug/tide_logic_regulator_002_experiment.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "console": "integratedTerminal",
+      "preLaunchTask": "build: tide_logic_regulator_002_experiment"
+    },
+    {
+      "name": "[Experiments] Sea Fed Packet Pump 003",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/vs2026-debug/experiments/sea-fed-packet-pump-003/Debug/sea_fed_packet_pump_003_experiment.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "console": "integratedTerminal",
+      "preLaunchTask": "build: sea_fed_packet_pump_003_experiment"
+    },
+    {
+      "name": "[Experiments] Voxel Infrastructure 004",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/vs2026-debug/experiments/voxel-infrastructure-004/Debug/voxel_infrastructure_004_experiment.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "console": "integratedTerminal",
+      "preLaunchTask": "build: voxel_infrastructure_004_experiment"
+    },
+    {
+      "name": "[Experiments] Voxel D3D12 001",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/vs2026-debug/experiments/voxel-infrastructure-004/subexperiments/voxel-d3d12-001/Debug/voxel_d3d12_001.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "preLaunchTask": "build: voxel_d3d12_001"
+    },
+    {
+      "name": "[Experiments] Scalar Field Flooding",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/vs2026-debug/experiments/scalar-field-flooding/Debug/scalar_field_flooding_experiment.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "console": "integratedTerminal",
+      "preLaunchTask": "build: scalar_field_flooding_experiment"
+    },
+    {
+      "name": "[Experiments] Scalar Field Flooding Tests",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/vs2026-debug/experiments/scalar-field-flooding/Debug/scalar_field_flooding_tests.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "console": "integratedTerminal",
+      "preLaunchTask": "build: scalar_field_flooding_tests"
+    },
+
+    // ── GHT Subprojects ──────────────────────────────────────────────────────
+    {
+      "name": "[GHT] Grass Field 001",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/vs2026-debug/projects/grannys-house-trials/subprojects/grass-field-001/Debug/grannys_house_trials_grass_field_001.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "preLaunchTask": "build: grannys_house_trials_grass_field_001"
+    },
+    {
+      "name": "[GHT] Grass Field 002",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/vs2026-debug/projects/grannys-house-trials/subprojects/grass-field-002/Debug/grannys_house_trials_grass_field_002.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "preLaunchTask": "build: grannys_house_trials_grass_field_002"
+    },
+    {
+      "name": "[GHT] Grass Field 003",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/vs2026-debug/projects/grannys-house-trials/subprojects/grass-field-003/Debug/grannys_house_trials_grass_field_003.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "preLaunchTask": "build: grannys_house_trials_grass_field_003"
+    },
+    {
+      "name": "[GHT] Grass Field 003 — Fluid Benchmark",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/vs2026-debug/projects/grannys-house-trials/subprojects/grass-field-003/Debug/grannys_house_trials_grass_field_003_fluid_benchmark.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "console": "integratedTerminal",
+      "preLaunchTask": "build: grannys_house_trials_grass_field_003_fluid_benchmark"
+    },
+    {
+      "name": "[GHT] Grass Field 003 — Compute Benchmark",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/vs2026-debug/projects/grannys-house-trials/subprojects/grass-field-003/Debug/gf003_fluid_compute.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "console": "integratedTerminal",
+      "preLaunchTask": "build: grannys_house_trials_grass_field_003_fluid_compute"
+    },
+    {
+      "name": "[GHT] Grass Field 004",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/vs2026-debug/projects/grannys-house-trials/subprojects/grass-field-004/Debug/grannys_house_trials_grass_field_004.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "preLaunchTask": "build: grannys_house_trials_grass_field_004"
+    },
+
+    // ── Tests ────────────────────────────────────────────────────────────────
+    {
+      "name": "[Tests] GHT Tests",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/vs2026-debug/projects/grannys-house-trials/tests/Debug/grannys_house_trials_tests.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "console": "integratedTerminal",
+      "preLaunchTask": "build: grannys_house_trials_tests"
+    }
+
+  ]
+}

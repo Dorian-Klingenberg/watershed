@@ -1,6 +1,24 @@
-.vscode/
+# VS Code workspace settings — tracked intentionally (shared project config)
+# .vscode/ is NOT excluded here
 
 # Local build outputs
 build/
 build-vs/
 exports/
+
+# CMake user-local preset overrides (machine-specific, not shared)
+CMakeUserPresets.json
+
+# MSVC build artifacts (prevent in-source build pollution)
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.lib
+
+# Compiled HLSL shader objects
+*.cso
+
+# ImGui runtime-generated window layout (written to CWD on app launch)
+imgui.ini

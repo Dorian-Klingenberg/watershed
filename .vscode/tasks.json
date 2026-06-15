@@ -1,0 +1,165 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+
+    // ── CMake infrastructure ─────────────────────────────────────────────────
+    {
+      "label": "cmake: configure (debug)",
+      "type": "shell",
+      "command": "cmake --preset vs2026-debug",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "cmake: build all (debug)",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-debug",
+      "options": { "cwd": "${workspaceFolder}" },
+      "dependsOn": ["cmake: configure (debug)"],
+      "dependsOrder": "sequence",
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "cmake: build all (release)",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-release",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "cmake: test (debug)",
+      "type": "shell",
+      "command": "ctest --preset test-vs2026-debug",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "test", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+
+    // ── Per-target build tasks (used by launch configs) ─────────────────────
+    // Experiments
+    {
+      "label": "build: agricultural_encounter_001_experiment",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-debug --target agricultural_encounter_001_experiment",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build: tide_logic_regulator_002_experiment",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-debug --target tide_logic_regulator_002_experiment",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build: sea_fed_packet_pump_003_experiment",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-debug --target sea_fed_packet_pump_003_experiment",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build: voxel_infrastructure_004_experiment",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-debug --target voxel_infrastructure_004_experiment",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build: voxel_d3d12_001",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-debug --target voxel_d3d12_001",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build: scalar_field_flooding_experiment",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-debug --target scalar_field_flooding_experiment",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build: scalar_field_flooding_tests",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-debug --target scalar_field_flooding_tests",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+
+    // GHT subprojects
+    {
+      "label": "build: grannys_house_trials_grass_field_001",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-debug --target grannys_house_trials_grass_field_001",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build: grannys_house_trials_grass_field_002",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-debug --target grannys_house_trials_grass_field_002",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build: grannys_house_trials_grass_field_003",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-debug --target grannys_house_trials_grass_field_003",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build: grannys_house_trials_grass_field_003_fluid_benchmark",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-debug --target grannys_house_trials_grass_field_003_fluid_benchmark",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build: grannys_house_trials_grass_field_003_fluid_compute",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-debug --target grannys_house_trials_grass_field_003_fluid_compute_phase1_benchmark",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build: grannys_house_trials_grass_field_004",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-debug --target grannys_house_trials_grass_field_004",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+
+    // Tests
+    {
+      "label": "build: grannys_house_trials_tests",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-debug --target grannys_house_trials_tests",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    }
+
+  ]
+}

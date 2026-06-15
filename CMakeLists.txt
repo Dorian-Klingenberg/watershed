@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(TheGame CXX)
+project(watershed CXX)
 
 # Organise projects into named folders in the VS solution
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)

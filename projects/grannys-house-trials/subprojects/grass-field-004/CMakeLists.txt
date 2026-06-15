@@ -1,7 +1,3 @@
-cmake_minimum_required(VERSION 3.20)
-
-project(grannys_house_trials_grass_field_004 CXX)
-
 # ── Shader compilation (Step 5) ───────────────────────────────────────────────
 # Find fxc.exe using the same search strategy as grass-field-001:
 #   1. Check the environment variables set by the VS developer shell.

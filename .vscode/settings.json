@@ -1,0 +1,9 @@
+{
+  "cmake.useCMakePresets": "always",
+  "cmake.configurePreset": "vs2026-debug",
+  "cmake.buildPreset": "build-vs2026-debug",
+  "cmake.testPreset": "test-vs2026-debug",
+  "files.associations": {
+    "*.hlsl": "hlsl"
+  }
+}

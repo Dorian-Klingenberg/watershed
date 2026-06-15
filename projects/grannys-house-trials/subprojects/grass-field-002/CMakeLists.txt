@@ -1,7 +1,3 @@
-cmake_minimum_required(VERSION 3.20)
-
-project(grannys_house_trials_grass_field_002 CXX)
-
 set(grass_field_002_shader_source
     ${CMAKE_CURRENT_SOURCE_DIR}/../grass-field-001/shaders/grass_field_renderer.hlsl
 )
