@@ -61,6 +61,7 @@
 #include "sim/simple_pipe_flux_shallow_water_sim.h"
 #include "sim/simple_shallow_water_sim.h"
 #include "sim/simple_slosh_basin_flow_sim.h"
+#include "sim/simple_slosh_mac_sim.h"
 #include "sim/simple_terrain_head_pipe_flow_sim.h"
 #include "sim/simple_virtual_pipe_fluid_sim.h"
 #include "sim/simple_erosion_sim.h"
@@ -136,8 +137,8 @@ struct SceneConstants
 
     uint32_t field_width;      // columns in X
     uint32_t field_depth;      // columns in Z
-    uint32_t pad0;
-    uint32_t pad1;
+    int32_t  highlight_x;
+    int32_t  highlight_z;
 
     // Forward VP matrix added for mesh-based renderers (wireframe, future passes).
     // The raycast PS uses inverse_view_projection; the wireframe VS uses this.
@@ -197,7 +198,7 @@ struct ExperimentLessonUnit
 
 // CPU lessons lead the catalog. Non-CPU lesson titles follow alphabetical order:
 // HLSL, Raycast, Split LOD, Wireframe.
-constexpr std::array<ExperimentLessonUnit, 17> k_experiment_lessons = {{
+constexpr std::array<ExperimentLessonUnit, 18> k_experiment_lessons = {{
     {
         "CPU 01 - Simple Erosion Simulator", "CPU Simulations",
         "lesson_experiment_simple_erosion_sim.md",
@@ -281,6 +282,13 @@ constexpr std::array<ExperimentLessonUnit, 17> k_experiment_lessons = {{
         "Returns to fixed-terrain pre-erosion flow on a purpose-built basin map with shelves, an island, a baffle, and a spillway.",
         "Compare slosh basin flow with terrain-head flow: the solver is inherited for now, but the map is designed for rebound and wave experiments.",
         LessonOptionKind::Simulation, 11, 9, "Show Slosh Basin", "Show Terrain Head"
+    },
+    {
+        "CPU 13 - Slosh MAC Grid", "CPU Simulations",
+        "lesson_experiment_slosh_mac_grid_sim.md",
+        "Staggered MAC grid solver: u and v velocity components live on cell faces and carry genuine inertia between steps.",
+        "Compare MAC grid with pipe slosh: the MAC solver retains momentum across the basin so waves arrive at rigid obstacles at full speed.",
+        LessonOptionKind::Simulation, 12, 11, "Show MAC Grid", "Show Pipe Slosh"
     },
     {
         "HLSL Compute Phase 1", "Other Experiments",
@@ -394,6 +402,9 @@ struct Application
     UINT                              rtv_descriptor_size  = 0;
     UINT                              dsv_descriptor_size  = 0;
     UINT                              srv_descriptor_size  = 0;  // cached in initialize_imgui
+    bool                              m_resize_pending = false;
+    UINT                              m_pending_width = 0;
+    UINT                              m_pending_height = 0;
 
     // ── Step 9: pluggable renderers ───────────────────────────────────────────
 
@@ -518,10 +529,24 @@ struct Application
     //   distance=130  → far enough to see the entire 100×100-foot field.
     gfx::OrbitCamera m_camera{ -90.f, 45.f, 130.f };
 
-    // Tracks whether a right-mouse drag is in progress.
-    // Updated each frame inside handle_camera_input().
-    bool  m_right_dragging = false;
-    POINT m_drag_last{};
+    // Column currently marked as "would be selected on right-click".
+    int  m_highlight_x = -1;
+    int  m_highlight_z = -1;
+    bool m_highlight_valid = false;
+
+    // Input gesture state:
+    // - middle-drag orbits
+    // - right-drag pans
+    // - right-click (without drag) selects hovered column
+    bool  m_middle_orbit_dragging = false;
+    bool  m_right_pan_dragging = false;
+    POINT m_middle_drag_last{};
+    POINT m_right_drag_last{};
+    POINT m_right_press_start{};
+    float m_right_pan_plane_y = 0.0f;
+
+    float m_focus_offset_x = 0.0f;
+    float m_focus_offset_z = 0.0f;
 
     // Cached by update_scene_constants() so that update_mouse_picking() can
     // unproject the cursor ray without recomputing camera matrices.
@@ -573,6 +598,7 @@ struct Application
         m_sims.push_back(std::make_unique<sim::SimpleTerrainHeadPipeFlowSim>());
         m_sims.push_back(std::make_unique<sim::SimpleHydraulicErosionRainSim>());
         m_sims.push_back(std::make_unique<sim::SimpleSloshBasinFlowSim>());
+        m_sims.push_back(std::make_unique<sim::SimpleSloshMacSim>());
     }
 
     // GPU-backed simulations are registered only after the D3D12 device and
@@ -764,74 +790,79 @@ struct Application
     {
         const int w = simulation_grid_width(target_sim);
         const int d = simulation_grid_depth(target_sim);
-        const float cell_size_feet = target_sim.cell_size_feet();
-        const float width_feet = static_cast<float>(w) * cell_size_feet;
-        const float depth_feet = static_cast<float>(d) * cell_size_feet;
+
+        // All heights are hard step functions — no Gaussian blending.
+        // Every feature has a vertical face so water hits a cliff, not a ramp.
+        //
+        // Layout on a 100×100 grid (1 cell = 1 foot):
+        //   Floor:          16 in — flat open basin
+        //   Rim:            72 in — 4-cell-wide border wall on all sides
+        //   Spillway:       50 in — notch in the south rim (x 74..88); above typical water level
+        //   Central pillar: 72 in — 16×14 foot solid block at x[43..58], z[43..56]
+        //   East wall:      72 in — 3-foot-wide partial wall x[67..69], z[4..72]
+        //                          (gap z[73..95] lets water flow around south end)
+        //   Diagonal baffle:72 in — rasterized 2-cell-wide line from [22,76] to [60,28]
+        //   West ledge:     34 in — half-height step x[4..20], z[34..66]
+        //                          (water surges over when deep enough, drains back)
+
+        constexpr int k_floor    = 16;
+        constexpr int k_wall     = 72;
+        constexpr int k_spillway = 50;  // above typical water surface; reached only by large waves
+        constexpr int k_ledge    = 34;
+        constexpr int k_rim      = 4;  // cells from edge that are wall
+
+        // Baffle: rasterized line segment from (22,76) to (60,28), 2-cell half-width.
+        constexpr float k_baffle_x0 = 22.0f;
+        constexpr float k_baffle_z0 = 76.0f;
+        constexpr float k_baffle_x1 = 60.0f;
+        constexpr float k_baffle_z1 = 28.0f;
+        constexpr float k_baffle_half_width = 1.8f;
 
         std::vector<int> heights;
         heights.reserve(static_cast<std::size_t>(w * d));
 
         for (int z = 0; z < d; ++z)
         {
-            const float world_z = (static_cast<float>(z) + 0.5f) * cell_size_feet;
-            const float nz = world_z / std::max(depth_feet, 1.0f);
-
             for (int x = 0; x < w; ++x)
             {
-                const float world_x = (static_cast<float>(x) + 0.5f) * cell_size_feet;
-                const float nx = world_x / std::max(width_feet, 1.0f);
+                int h = k_floor;
 
-                float terrain_height = 52.0f;
+                // Rim — 4-cell border wall on all sides.
+                const bool on_rim = (x < k_rim || x >= w - k_rim ||
+                                     z < k_rim || z >= d - k_rim);
+                if (on_rim)
+                {
+                    h = k_wall;
+                    // Spillway notch in the south rim (z = last 4 rows, x 74..88).
+                    if (z >= d - k_rim && x >= 74 && x <= 88)
+                        h = k_spillway;
+                }
 
-                // Broad asymmetric bowl: low middle, higher banks.
-                const float bowl_x = (nx - 0.47f) / 0.37f;
-                const float bowl_z = (nz - 0.54f) / 0.31f;
-                const float bowl_r2 = bowl_x * bowl_x + bowl_z * bowl_z;
-                terrain_height -= 36.0f * std::exp(-bowl_r2 * 1.35f);
+                // Central solid pillar — 16×14 foot block.
+                if (x >= 43 && x <= 58 && z >= 43 && z <= 56)
+                    h = k_wall;
 
-                // A shallow west shelf gives water a place to surge onto and drain back.
-                const float shelf_x = (nx - 0.25f) / 0.20f;
-                const float shelf_z = (nz - 0.37f) / 0.13f;
-                const float shelf_r2 = shelf_x * shelf_x + shelf_z * shelf_z;
-                terrain_height -= 12.0f * std::exp(-shelf_r2 * 2.0f);
+                // East partial wall — 3 cells wide, stops at z=72 leaving a south gap.
+                if (x >= 67 && x <= 69 && z >= k_rim && z <= 72)
+                    h = k_wall;
 
-                // A central island splits waves and makes reflections visible.
-                const float island_x = (nx - 0.53f) / 0.09f;
-                const float island_z = (nz - 0.50f) / 0.08f;
-                const float island_r2 = island_x * island_x + island_z * island_z;
-                terrain_height += 26.0f * std::exp(-island_r2 * 2.1f);
+                // West half-height ledge — water can surge onto this and drain back.
+                if (x >= k_rim && x <= 20 && z >= 34 && z <= 66)
+                    h = std::max(h, k_ledge);
 
-                // A diagonal submerged baffle encourages complex rebound.
-                const float baffle = distance_to_segment_feet(
-                    world_x, world_z,
-                    width_feet * 0.32f, depth_feet * 0.72f,
-                    width_feet * 0.73f, depth_feet * 0.28f);
-                terrain_height += 12.0f *
-                    std::exp(-(baffle * baffle) / (2.0f * 2.1f * 2.1f));
+                // Diagonal baffle — rasterized 2-cell-wide line segment.
+                {
+                    const float fx = static_cast<float>(x) + 0.5f;
+                    const float fz = static_cast<float>(z) + 0.5f;
+                    const float dist = distance_to_segment_feet(
+                        fx, fz,
+                        k_baffle_x0, k_baffle_z0,
+                        k_baffle_x1, k_baffle_z1);
+                    if (dist < k_baffle_half_width)
+                        h = k_wall;
+                }
 
-                // Raised rim around the field, with a southeast spillway notch.
-                const float edge_feet = std::min(
-                    std::min(world_x, width_feet - world_x),
-                    std::min(world_z, depth_feet - world_z));
-                terrain_height += 28.0f *
-                    std::exp(-(edge_feet * edge_feet) / (2.0f * 5.0f * 5.0f));
-
-                const float spillway = distance_to_segment_feet(
-                    world_x, world_z,
-                    width_feet * 0.70f, depth_feet * 0.76f,
-                    width_feet * 0.96f, depth_feet * 0.88f);
-                terrain_height -= 22.0f *
-                    std::exp(-(spillway * spillway) / (2.0f * 2.5f * 2.5f));
-
-                // Gentle overall tilt and small ripples break perfect symmetry.
-                terrain_height += 7.0f * (nz - 0.5f);
-                terrain_height += 2.2f * std::sin(world_x * 0.34f + world_z * 0.09f);
-                terrain_height += 1.6f * std::sin(world_z * 0.41f + 2.3f);
-                terrain_height +=
-                    0.7f * static_cast<float>(terrain_noise_inches(x / 5, z / 5));
-
-                heights.push_back(
-                    std::clamp(static_cast<int>(std::lround(terrain_height)), 4, 96));
+                heights.push_back(h);
             }
         }
 
@@ -997,75 +1028,182 @@ struct Application
 
     // ── Step 7: mouse picking ─────────────────────────────────────────────────
 
-    // update_mouse_picking() runs a ray-vs-ground-plane test each frame to
-    // find which column (if any) the cursor is hovering over.
-    //
-    // Algorithm:
-    //   1. Convert window pixel (mouse_x, mouse_y) → NDC [-1,1]².
-    //   2. Construct a far-clip point: float4(ndc, 1, 1).
-    //   3. Multiply by the same inv_vp the shader uses → world-space position.
-    //   4. Subtract the camera eye → unnormalised world-space direction.
-    //   5. Solve for t where ray.y == 0 (the ground plane).
-    //   6. Compute the column index from the hit XZ position.
-    //
-    // This is the CPU mirror of BuildCameraRay() + the ground-plane projection
-    // in the HLSL pixel shader. No DDA loop needed: the terrain is
-    // flat-bottomed, so projecting onto Y=0 is always the right first hit.
-    void update_mouse_picking()
+    struct CpuRay
+    {
+        float ox = 0.0f;
+        float oy = 0.0f;
+        float oz = 0.0f;
+        float dx = 0.0f;
+        float dy = 0.0f;
+        float dz = 0.0f;
+    };
+
+    [[nodiscard]] bool build_mouse_ray(int px, int py, CpuRay& out_ray) const
     {
         using namespace DirectX;
 
-        m_hovered_column_valid = false;
+        if (width == 0 || height == 0)
+            return false;
 
-        if (height == 0) return;
+        const float ndc_x = (static_cast<float>(px) / static_cast<float>(width)) * 2.0f - 1.0f;
+        const float ndc_y = -(static_cast<float>(py) / static_cast<float>(height)) * 2.0f + 1.0f;
 
-        // ── 1. Window pixel → NDC ─────────────────────────────────────────────
-        // NDC x grows right, NDC y grows up.  Screen y grows downward, so flip.
-        const float ndc_x =  (static_cast<float>(mouse_x) / static_cast<float>(width))  * 2.f - 1.f;
-        const float ndc_y = -(static_cast<float>(mouse_y) / static_cast<float>(height)) * 2.f + 1.f;
-
-        // ── 2. Unproject the far-clip point into world space ──────────────────
-        // m_inv_vp and m_camera_eye are cached by update_scene_constants() which
-        // runs just before this call, so they always reflect the current frame's
-        // camera — including any orbit or zoom that happened last frame.
-        XMVECTOR far_clip  = XMVectorSet(ndc_x, ndc_y, 1.f, 1.f);
+        XMVECTOR far_clip = XMVectorSet(ndc_x, ndc_y, 1.0f, 1.0f);
         XMVECTOR far_world = XMVector4Transform(far_clip, XMLoadFloat4x4(&m_inv_vp));
-
-        // Perspective divide: after the inverse projection w ≠ 1 in general.
         const float w_comp = XMVectorGetW(far_world);
-        if (std::fabs(w_comp) < 1e-6f) return;
-        far_world = XMVectorScale(far_world, 1.f / w_comp);
+        if (std::fabs(w_comp) < 1e-6f)
+            return false;
+        far_world = XMVectorScale(far_world, 1.0f / w_comp);
 
-        // ── 3. Ray direction in world space ──────────────────────────────────
-        XMFLOAT3 far_f3;
+        DirectX::XMFLOAT3 far_f3{};
         XMStoreFloat3(&far_f3, far_world);
 
         const float dir_x = far_f3.x - m_camera_eye.x;
         const float dir_y = far_f3.y - m_camera_eye.y;
         const float dir_z = far_f3.z - m_camera_eye.z;
+        const float len_sq = dir_x * dir_x + dir_y * dir_y + dir_z * dir_z;
+        if (len_sq < 1e-10f)
+            return false;
 
-        // ── 4. Intersect with Y = 0 (the ground plane) ───────────────────────
-        // Ray: P(t) = eye + t * dir.  Solve P.y = 0:  t = -eye.y / dir.y
-        // If dir.y == 0 the ray is horizontal — it never hits the ground.
-        // If t < 0 the intersection is behind the camera — discard.
-        if (std::fabs(dir_y) < 1e-6f) return;
-        const float t = -m_camera_eye.y / dir_y;
-        if (t < 0.f) return;
+        const float inv_len = 1.0f / std::sqrt(len_sq);
+        out_ray.ox = m_camera_eye.x;
+        out_ray.oy = m_camera_eye.y;
+        out_ray.oz = m_camera_eye.z;
+        out_ray.dx = dir_x * inv_len;
+        out_ray.dy = dir_y * inv_len;
+        out_ray.dz = dir_z * inv_len;
+        return true;
+    }
 
-        const float hit_x = m_camera_eye.x + t * dir_x;
-        const float hit_z = m_camera_eye.z + t * dir_z;
+    [[nodiscard]] static bool intersect_horizontal_plane(
+        const CpuRay& ray,
+        float plane_y,
+        float& out_x,
+        float& out_z)
+    {
+        if (std::fabs(ray.dy) < 1e-6f)
+            return false;
+        const float t = (plane_y - ray.oy) / ray.dy;
+        if (t < 0.0f)
+            return false;
+        out_x = ray.ox + ray.dx * t;
+        out_z = ray.oz + ray.dz * t;
+        return true;
+    }
 
-        // ── 5. World-space XZ → column index ─────────────────────────────────
+    // DDA traversal through X/Z columns, with per-column AABB ray tests.
+    // Matches angled views better than a flat ground-plane projection because
+    // it can hit side walls and elevated tops directly.
+    void update_mouse_picking()
+    {
+        m_hovered_column_valid = false;
+
+        CpuRay ray{};
+        if (!build_mouse_ray(mouse_x, mouse_y, ray))
+            return;
+
+        const sim::IFieldSim& sim = active_sim();
+        const int field_w = sim.width();
+        const int field_d = sim.depth();
         const float voxel = simulation_voxel_size_feet();
-        const int cx = static_cast<int>(hit_x / voxel);
-        const int cz = static_cast<int>(hit_z / voxel);
+        const float field_max_x = static_cast<float>(field_w) * voxel;
+        const float field_max_z = static_cast<float>(field_d) * voxel;
+        constexpr float field_max_y = 24.0f;
 
-        if (cx < 0 || cx >= active_sim().width())  return;
-        if (cz < 0 || cz >= active_sim().depth())  return;
+        auto slab_axis = [](float ro, float rd, float mn, float mx, float& t0, float& t1) -> bool
+        {
+            if (std::fabs(rd) < 1e-6f)
+                return ro >= mn && ro <= mx;
+            const float inv = 1.0f / rd;
+            float a = (mn - ro) * inv;
+            float b = (mx - ro) * inv;
+            if (a > b) std::swap(a, b);
+            t0 = std::max(t0, a);
+            t1 = std::min(t1, b);
+            return t1 >= t0;
+        };
 
-        m_hovered_x             = cx;
-        m_hovered_z             = cz;
-        m_hovered_column_valid  = true;
+        float t_enter = 0.0f;
+        float t_exit = 1e30f;
+        if (!slab_axis(ray.ox, ray.dx, 0.0f, field_max_x, t_enter, t_exit)) return;
+        if (!slab_axis(ray.oy, ray.dy, 0.0f, field_max_y, t_enter, t_exit)) return;
+        if (!slab_axis(ray.oz, ray.dz, 0.0f, field_max_z, t_enter, t_exit)) return;
+        if (t_exit < 0.0f) return;
+        t_enter = std::max(t_enter, 0.0f);
+
+        const float start_x = ray.ox + ray.dx * t_enter;
+        const float start_z = ray.oz + ray.dz * t_enter;
+
+        int cx = static_cast<int>(std::floor(start_x / voxel));
+        int cz = static_cast<int>(std::floor(start_z / voxel));
+        cx = std::clamp(cx, 0, field_w - 1);
+        cz = std::clamp(cz, 0, field_d - 1);
+
+        const int step_x = (ray.dx > 0.0f) ? 1 : ((ray.dx < 0.0f) ? -1 : 0);
+        const int step_z = (ray.dz > 0.0f) ? 1 : ((ray.dz < 0.0f) ? -1 : 0);
+
+        const float inf = 1e30f;
+        const float t_delta_x = (step_x != 0) ? (voxel / std::fabs(ray.dx)) : inf;
+        const float t_delta_z = (step_z != 0) ? (voxel / std::fabs(ray.dz)) : inf;
+
+        const float next_boundary_x = (step_x > 0)
+            ? (static_cast<float>(cx + 1) * voxel)
+            : (static_cast<float>(cx) * voxel);
+        const float next_boundary_z = (step_z > 0)
+            ? (static_cast<float>(cz + 1) * voxel)
+            : (static_cast<float>(cz) * voxel);
+
+        float t_max_x = (step_x != 0) ? ((next_boundary_x - start_x) / ray.dx) : inf;
+        float t_max_z = (step_z != 0) ? ((next_boundary_z - start_z) / ray.dz) : inf;
+        if (t_max_x < 0.0f) t_max_x = 0.0f;
+        if (t_max_z < 0.0f) t_max_z = 0.0f;
+
+        float seg_t = t_enter;
+
+        while (cx >= 0 && cx < field_w && cz >= 0 && cz < field_d && seg_t <= t_exit)
+        {
+            const float top_y = static_cast<float>(
+                sim.height_at(cx, cz) + sim.water_depth_at(cx, cz)) / 12.0f;
+
+            if (top_y > 0.0f)
+            {
+                float local_t0 = seg_t;
+                float local_t1 = std::min(t_exit, seg_t + std::min(t_max_x, t_max_z));
+
+                const float cell_min_x = static_cast<float>(cx) * voxel;
+                const float cell_max_x = cell_min_x + voxel;
+                const float cell_min_z = static_cast<float>(cz) * voxel;
+                const float cell_max_z = cell_min_z + voxel;
+
+                if (slab_axis(ray.ox, ray.dx, cell_min_x, cell_max_x, local_t0, local_t1) &&
+                    slab_axis(ray.oy, ray.dy, 0.0f, top_y, local_t0, local_t1) &&
+                    slab_axis(ray.oz, ray.dz, cell_min_z, cell_max_z, local_t0, local_t1))
+                {
+                    if (local_t1 >= std::max(local_t0, 0.0f))
+                    {
+                        m_hovered_x = cx;
+                        m_hovered_z = cz;
+                        m_hovered_column_valid = true;
+                        return;
+                    }
+                }
+            }
+
+            if (t_max_x < t_max_z)
+            {
+                seg_t += t_max_x;
+                t_max_z -= t_max_x;
+                t_max_x = t_delta_x;
+                cx += step_x;
+            }
+            else
+            {
+                seg_t += t_max_z;
+                t_max_x -= t_max_z;
+                t_max_z = t_delta_z;
+                cz += step_z;
+            }
+        }
     }
 
     ~Application()
@@ -1640,9 +1778,9 @@ struct Application
                 m_selected_z >= 0 && m_selected_z < sim.depth())
             {
                 return DirectX::XMFLOAT3{
-                    (static_cast<float>(m_selected_x) + 0.5f) * voxel,
+                    (static_cast<float>(m_selected_x) + 0.5f) * voxel + m_focus_offset_x,
                     sim.surface_height_inches_at(m_selected_x, m_selected_z) / 12.f,
-                    (static_cast<float>(m_selected_z) + 0.5f) * voxel
+                    (static_cast<float>(m_selected_z) + 0.5f) * voxel + m_focus_offset_z
                 };
             }
 
@@ -1651,9 +1789,9 @@ struct Application
 
         const sim::IFieldSim& sim = active_sim();
         return DirectX::XMFLOAT3{
-            static_cast<float>(sim.width()) * voxel * 0.5f,
+            static_cast<float>(sim.width()) * voxel * 0.5f + m_focus_offset_x,
             0.5f,
-            static_cast<float>(sim.depth()) * voxel * 0.5f
+            static_cast<float>(sim.depth()) * voxel * 0.5f + m_focus_offset_z
         };
     }
 
@@ -1685,7 +1823,8 @@ struct Application
         // Skip if ImGui is using the mouse (cursor over a panel, clicking a button).
         if (io.WantCaptureMouse)
         {
-            m_right_dragging = false;
+            m_middle_orbit_dragging = false;
+            m_right_pan_dragging = false;
             return;
         }
 
@@ -1694,10 +1833,13 @@ struct Application
             static_cast<LONG>(io.MousePos.y)
         };
 
-        // ── Left-click: select orbit focus cell ───────────────────────────────
-        // update_mouse_picking() already refreshed m_hovered_* earlier this
-        // frame. A click locks that cell as the orbit pivot until another cell
-        // is selected.
+        m_highlight_valid = m_hovered_column_valid;
+        if (m_highlight_valid)
+        {
+            m_highlight_x = m_hovered_x;
+            m_highlight_z = m_hovered_z;
+        }
+
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && m_hovered_column_valid)
         {
             m_selected_x = m_hovered_x;
@@ -1705,33 +1847,96 @@ struct Application
             m_selected_column_valid = true;
         }
 
-        // ── Right-drag: orbit ─────────────────────────────────────────────────
-        // Horizontal drag rotates yaw; vertical drag changes pitch.
-        // The deltas are scaled to match grass-field-002's feel (0.35°/px yaw,
-        // 0.25°/px pitch). Negating dx makes right-drag rotate clockwise.
-        const bool right_down = ImGui::IsMouseDown(ImGuiMouseButton_Right);
-        if (right_down)
+        // Middle-drag: orbit.
+        const bool middle_down = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
+        if (middle_down)
         {
-            if (m_right_dragging)
+            if (m_middle_orbit_dragging)
             {
-                const int dx = cur_pos.x - m_drag_last.x;
-                const int dy = cur_pos.y - m_drag_last.y;
+                const int dx = cur_pos.x - m_middle_drag_last.x;
+                const int dy = cur_pos.y - m_middle_drag_last.y;
                 m_camera.orbit(
                     static_cast<float>(-dx) * 0.35f,
                     static_cast<float>( dy) * 0.25f);
             }
-            m_drag_last      = cur_pos;
-            m_right_dragging = true;
+            m_middle_drag_last = cur_pos;
+            m_middle_orbit_dragging = true;
         }
         else
         {
-            m_right_dragging = false;
+            m_middle_orbit_dragging = false;
+        }
+
+        // Right: record press start; threshold check converts to pan; release selects.
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        {
+            m_right_press_start = cur_pos;
+            m_right_drag_last = cur_pos;
+            m_right_pan_dragging = false;
+            m_right_pan_plane_y = 0.0f;
+            if (m_selected_column_valid)
+            {
+                const sim::IFieldSim& sim = active_sim();
+                if (m_selected_x >= 0 && m_selected_x < sim.width() &&
+                    m_selected_z >= 0 && m_selected_z < sim.depth())
+                {
+                    m_right_pan_plane_y = sim.surface_height_inches_at(
+                        m_selected_x, m_selected_z) / 12.0f;
+                }
+            }
+        }
+
+        const bool right_down = ImGui::IsMouseDown(ImGuiMouseButton_Right);
+        if (right_down)
+        {
+            const int total_dx = cur_pos.x - m_right_press_start.x;
+            const int total_dy = cur_pos.y - m_right_press_start.y;
+            const int drag_threshold_px = 3;
+            if (!m_right_pan_dragging &&
+                (std::abs(total_dx) > drag_threshold_px ||
+                 std::abs(total_dy) > drag_threshold_px))
+            {
+                m_right_pan_dragging = true;
+            }
+
+            if (m_right_pan_dragging)
+            {
+                CpuRay prev_ray{};
+                CpuRay cur_ray{};
+                if (build_mouse_ray(m_right_drag_last.x, m_right_drag_last.y, prev_ray) &&
+                    build_mouse_ray(cur_pos.x, cur_pos.y, cur_ray))
+                {
+                    float prev_x = 0.0f;
+                    float prev_z = 0.0f;
+                    float cur_x = 0.0f;
+                    float cur_z = 0.0f;
+                    if (intersect_horizontal_plane(prev_ray, m_right_pan_plane_y, prev_x, prev_z) &&
+                        intersect_horizontal_plane(cur_ray, m_right_pan_plane_y, cur_x, cur_z))
+                    {
+                        m_focus_offset_x -= (cur_x - prev_x);
+                        m_focus_offset_z -= (cur_z - prev_z);
+                    }
+                }
+            }
+
+            m_right_drag_last = cur_pos;
+        }
+        else if (ImGui::IsMouseReleased(ImGuiMouseButton_Right) && !m_right_pan_dragging)
+        {
+            if (m_hovered_column_valid)
+            {
+                m_selected_x = m_hovered_x;
+                m_selected_z = m_hovered_z;
+                m_selected_column_valid = true;
+            }
+            m_right_pan_dragging = false;
+        }
+        else if (!right_down)
+        {
+            m_right_pan_dragging = false;
         }
 
         // ── Scroll wheel: zoom ────────────────────────────────────────────────
-        // io.MouseWheel is positive for scroll-up (zoom in) and negative for
-        // scroll-down (zoom out). camera.zoom() adds to the orbit distance, so
-        // we negate MouseWheel. Multiplier 1.2 matches grass-field-002.
         if (io.MouseWheel != 0.f)
             m_camera.zoom(-io.MouseWheel * 1.2f);
     }
@@ -1810,6 +2015,8 @@ struct Application
         cb.max_height_feet = 24.f;
         cb.field_width     = static_cast<uint32_t>(active_sim().width());
         cb.field_depth     = static_cast<uint32_t>(active_sim().depth());
+        cb.highlight_x     = m_highlight_valid ? m_highlight_x : -1;
+        cb.highlight_z     = m_highlight_valid ? m_highlight_z : -1;
 
         memcpy(m_cb_buffer_mapped, &cb, sizeof(cb));
     }
@@ -2186,6 +2393,86 @@ struct Application
         }
     }
 
+    void handle_pending_resize()
+    {
+        if (!m_resize_pending)
+            return;
+        if (m_pending_width == 0 || m_pending_height == 0)
+            return;
+
+        wait_for_gpu();
+
+        for (UINT i = 0; i < k_frame_count; ++i)
+            render_targets[i].Reset();
+        depth_buffer.Reset();
+
+        throw_if_failed(
+            swap_chain->ResizeBuffers(
+                k_frame_count,
+                m_pending_width,
+                m_pending_height,
+                k_back_buffer_format,
+                0),
+            "ResizeBuffers failed.");
+
+        width = m_pending_width;
+        height = m_pending_height;
+        frame_index = swap_chain->GetCurrentBackBufferIndex();
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = rtv_heap->GetCPUDescriptorHandleForHeapStart();
+        for (UINT i = 0; i < k_frame_count; ++i)
+        {
+            throw_if_failed(
+                swap_chain->GetBuffer(i, IID_PPV_ARGS(&render_targets[i])),
+                "GetBuffer (resize) failed.");
+            device->CreateRenderTargetView(render_targets[i].Get(), nullptr, rtv);
+            rtv.ptr += rtv_descriptor_size;
+        }
+
+        D3D12_RESOURCE_DESC depth_desc = {};
+        depth_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        depth_desc.Width = width;
+        depth_desc.Height = height;
+        depth_desc.DepthOrArraySize = 1;
+        depth_desc.MipLevels = 1;
+        depth_desc.Format = k_depth_format;
+        depth_desc.SampleDesc.Count = 1;
+        depth_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        depth_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+        D3D12_CLEAR_VALUE depth_clear = {};
+        depth_clear.Format = k_depth_format;
+        depth_clear.DepthStencil.Depth = 1.0f;
+        depth_clear.DepthStencil.Stencil = 0;
+
+        D3D12_HEAP_PROPERTIES depth_heap = {};
+        depth_heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+        depth_heap.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+        depth_heap.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+        depth_heap.CreationNodeMask = 1;
+        depth_heap.VisibleNodeMask = 1;
+
+        throw_if_failed(
+            device->CreateCommittedResource(
+                &depth_heap,
+                D3D12_HEAP_FLAG_NONE,
+                &depth_desc,
+                D3D12_RESOURCE_STATE_DEPTH_WRITE,
+                &depth_clear,
+                IID_PPV_ARGS(&depth_buffer)),
+            "CreateCommittedResource (resize depth) failed.");
+
+        D3D12_DEPTH_STENCIL_VIEW_DESC dsv_desc = {};
+        dsv_desc.Format = k_depth_format;
+        dsv_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+        device->CreateDepthStencilView(
+            depth_buffer.Get(),
+            &dsv_desc,
+            dsv_heap->GetCPUDescriptorHandleForHeapStart());
+
+        m_resize_pending = false;
+    }
+
     // end_frame(): finish recording, submit to GPU, present, advance.
     //
     // Steps:
@@ -2440,10 +2727,13 @@ struct Application
             ImGui::TextDisabled("Orbit: field center");
         ImGui::Separator();
         ImGui::TextDisabled("Left-click a cell to set orbit focus");
-        ImGui::TextDisabled("Right-drag to orbit");
-        ImGui::TextDisabled("Scroll to zoom");
+        ImGui::TextDisabled("Middle-drag to orbit / Right-drag to pan / Scroll to zoom");
         if (ImGui::Button("Reset Camera"))
+        {
             m_camera = gfx::OrbitCamera{ -90.f, 45.f, 130.f };
+            m_focus_offset_x = 0.0f;
+            m_focus_offset_z = 0.0f;
+        }
         ImGui::SameLine();
         if (ImGui::Button("Clear Focus"))
             m_selected_column_valid = false;
@@ -2511,6 +2801,9 @@ struct Application
             // as possible and represents the full previous frame.
             tick_frame_time();
             update_running_simulation();
+            handle_pending_resize();
+            if (width == 0 || height == 0)
+                continue;
             begin_frame();
 
             // Clear the back buffer. Even though the full-screen triangle
@@ -2577,15 +2870,11 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpar
         return 0;
 
     case WM_SIZE:
-        // Record the new dimensions. We do not resize the swap chain here yet
-        // (that requires releasing all back-buffer references, calling
-        // ResizeBuffers, then recreating the RTVs). That will be added when
-        // this project needs it. For now just tracking width/height is enough.
         if (g_app && wparam != SIZE_MINIMIZED)
         {
-            g_app->width  = static_cast<UINT>(LOWORD(lparam));
-            g_app->height = static_cast<UINT>(HIWORD(lparam));
-            // Step 2 TODO: call swap chain ResizeBuffers here.
+            g_app->m_pending_width = static_cast<UINT>(LOWORD(lparam));
+            g_app->m_pending_height = static_cast<UINT>(HIWORD(lparam));
+            g_app->m_resize_pending = true;
         }
         return 0;
 

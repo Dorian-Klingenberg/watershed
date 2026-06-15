@@ -1,14 +1,12 @@
 #pragma once
 
-// SimpleSloshBasinFlowSim -- fixed-terrain pre-erosion flow on a slosh map.
+// SimpleSloshBasinFlowSim -- slosh map with linear-drag pipe flow.
 //
-// This is the branch point for the "sloshiness" experiment. Step one keeps the
-// known terrain-head pipe flow behavior and swaps only the seed terrain, so we
-// can evaluate whether the basin, shelf, island, and spillway invite interesting
-// rebound/wave motion before replacing the solver.
+// Wraps SimpleSloshPipeFlowSim: 4-neighbor cardinal pipes with linear drag
+// instead of Manning friction, so water retains inertia and visibly rebounds.
 
 #include "i_field_sim.h"
-#include "simple_terrain_head_pipe_flow_sim.h"
+#include "simple_slosh_pipe_flow_sim.h"
 
 #include "../third_party/imgui/imgui.h"
 
@@ -76,14 +74,13 @@ public:
     {
         const bool changed = flow_.render_ui();
         ImGui::Separator();
-        ImGui::TextDisabled("Slosh branch point: fixed terrain, no erosion.");
-        ImGui::TextDisabled("Map: bowl, shelf, island, baffle ridge, and spillway.");
-        ImGui::TextDisabled("Next: replace this flow core with explicit slosh velocities.");
+        ImGui::TextDisabled("Slosh basin: flat floor, hard-step obstacles, linear drag.");
+        ImGui::TextDisabled("Map: rim, central pillar, east wall, baffle, west ledge, spillway.");
         return changed;
     }
 
 private:
-    SimpleTerrainHeadPipeFlowSim flow_;
+    SimpleSloshPipeFlowSim flow_;
 };
 
 } // namespace grannys_house_trials::sim

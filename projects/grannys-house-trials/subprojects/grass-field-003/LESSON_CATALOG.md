@@ -145,10 +145,23 @@ evaporation, and stochastic visible rainfall on the erosion valley map.
 
 **Full lesson:** `lesson_experiment_slosh_basin_flow_sim.md`
 
-**Topic:** A fixed-terrain pre-erosion flow branch on a purpose-built basin map
-with a shelf, island, baffle ridge, raised rim, and spillway.
+**Topic:** A fixed-terrain flow branch using four-neighbor cardinal pipes with
+linear drag instead of Manning friction, on a hard-step basin map with vertical
+obstacle faces: a rim, central pillar, partial east wall, diagonal baffle, and
+half-height west ledge.
 
 **UI comparison:** Slosh Basin Flow versus Terrain-Head Pipe Flow.
+
+### CPU 13 - Slosh MAC Grid
+
+**Full lesson:** `lesson_experiment_slosh_mac_grid_sim.md`
+
+**Topic:** A staggered MAC-grid shallow water solver where u and v velocity
+components live on cell faces and carry genuine inertia between steps. Wave
+speed emerges from the depth as `c = √(g·H)` rather than from a pipe-area
+parameter. Shares the hard-step basin terrain with CPU 12.
+
+**UI comparison:** Slosh MAC Grid versus Slosh Basin Flow.
 
 ```mermaid
 flowchart LR
@@ -163,6 +176,7 @@ flowchart LR
     C9 --> C10["CPU 10<br/>Terrain-Head Pipe Flow"]
     C10 --> C11["CPU 11<br/>Hydraulic Erosion + Rainfall"]
     C10 --> C12["CPU 12<br/>Slosh Basin Flow"]
+    C12 --> C13["CPU 13<br/>Slosh MAC Grid"]
 ```
 
 ---
@@ -237,11 +251,12 @@ flowchart LR
 | 10 | CPU 10 - Terrain-Head Pipe Flow | CPU | `lesson_experiment_terrain_head_pipe_flow_sim.md` |
 | 11 | CPU 11 - Hydraulic Erosion + Rainfall | CPU | `lesson_experiment_hydraulic_erosion_rain_sim.md` |
 | 12 | CPU 12 - Slosh Basin Flow | CPU | `lesson_experiment_slosh_basin_flow_sim.md` |
-| 13 | HLSL Compute Phase 1 | Other | `lesson_experiment_cellular_fluid_hlsl_compute_phase1.md` |
-| 14 | HLSL Compute Phase 2 - Tiled Resident | Other | `lesson_experiment_cellular_fluid_hlsl_compute_phase2_tiled_resident.md` |
-| 15 | Raycast Renderer | Other | `lesson_experiment_raycast_renderer.md` |
-| 16 | Split LOD Renderer | Other | `lesson_experiment_split_lod_renderer.md` |
-| 17 | Wireframe Renderer | Other | `lesson_experiment_wireframe_renderer.md` |
+| 13 | CPU 13 - Slosh MAC Grid | CPU | `lesson_experiment_slosh_mac_grid_sim.md` |
+| 14 | HLSL Compute Phase 1 | Other | `lesson_experiment_cellular_fluid_hlsl_compute_phase1.md` |
+| 15 | HLSL Compute Phase 2 - Tiled Resident | Other | `lesson_experiment_cellular_fluid_hlsl_compute_phase2_tiled_resident.md` |
+| 16 | Raycast Renderer | Other | `lesson_experiment_raycast_renderer.md` |
+| 17 | Split LOD Renderer | Other | `lesson_experiment_split_lod_renderer.md` |
+| 18 | Wireframe Renderer | Other | `lesson_experiment_wireframe_renderer.md` |
 
 Review result:
 

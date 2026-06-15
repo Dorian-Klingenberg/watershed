@@ -45,8 +45,8 @@ cbuffer SceneConstants : register(b0)
 
     uint     field_width;               // column count along X
     uint     field_depth;               // column count along Z
-    uint     pad0;
-    uint     pad1;
+    int      highlight_x;
+    int      highlight_z;
 
     // VP matrix added to SceneConstants for mesh-based renderers (Step 9+).
     // inverse_view_projection is used by the raycast PS; view_projection is
@@ -68,6 +68,8 @@ struct VSOutput
 {
     float4 position    : SV_POSITION;
     float  water_depth : TEXCOORD0;
+    nointerpolation int cell_x : TEXCOORD1;
+    nointerpolation int cell_z : TEXCOORD2;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -132,6 +134,8 @@ VSOutput VSMain(uint vertex_id : SV_VertexID)
     // so mul(row_vec, matrix) here produces the correct result.
     output.position = mul(float4(wx, h, wz, 1.0f), view_projection);
     output.water_depth = cell.water_depth_feet;
+    output.cell_x = int(cx);
+    output.cell_z = int(cz);
     return output;
 }
 
@@ -142,6 +146,9 @@ VSOutput VSMain(uint vertex_id : SV_VertexID)
 // chartreuse colour that is clearly visible against the sky-blue clear colour.
 float4 PSMain(VSOutput input) : SV_TARGET
 {
+    if (input.cell_x == highlight_x && input.cell_z == highlight_z)
+        return float4(1.0f, 0.95f, 0.25f, 1.0f);
+
     if (input.water_depth > 0.01f)
         return float4(0.18f, 0.62f, 1.0f, 1.0f);
 

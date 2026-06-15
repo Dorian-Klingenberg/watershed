@@ -16,8 +16,8 @@ cbuffer SceneConstants : register(b0)
 
     uint field_width;
     uint field_depth;
-    uint pad0;
-    uint pad1;
+    int highlight_x;
+    int highlight_z;
 
     float4x4 view_projection;
 };
@@ -66,6 +66,7 @@ struct VSOutput
     float velocity : TEXCOORD4;
     float sediment_depth : TEXCOORD5;
     float terrain_delta : TEXCOORD6;
+    float2 world_xz : TEXCOORD7;
 };
 
 static const uint CUBE_INDICES[36] = {
@@ -164,6 +165,7 @@ VSOutput VSMain(uint vertex_id : SV_VertexID)
     output.velocity = velocity;
     output.sediment_depth = sediment_depth;
     output.terrain_delta = terrain_delta;
+    output.world_xz = float2(world.x, world.z);
     return output;
 }
 
@@ -171,6 +173,10 @@ float4 PSMain(VSOutput input) : SV_TARGET
 {
     const float3 light_dir = normalize(float3(-0.35, 0.85, -0.40));
     const float diffuse = saturate(dot(normalize(input.normal), light_dir)) * 0.65 + 0.35;
+
+    const int cell_x = int(floor((input.world_xz.x - field_origin_x) / voxel_size_feet));
+    const int cell_z = int(floor((input.world_xz.y - field_origin_z) / voxel_size_feet));
+    const bool is_highlight = (cell_x == highlight_x && cell_z == highlight_z);
 
     if (display_mode == 3u && abs(input.terrain_delta) > 0.00001)
     {
@@ -214,11 +220,16 @@ float4 PSMain(VSOutput input) : SV_TARGET
             water_color = lerp(shallow, deep, water_t);
         }
 
+        if (is_highlight)
+            water_color = lerp(water_color, float3(1.0, 0.95, 0.25), 0.45);
         return float4(water_color * diffuse, saturate(water_alpha));
     }
 
     const float3 coarse_color = float3(0.36, 0.50, 0.25);
     const float3 fine_color = float3(0.49, 0.70, 0.31);
-    const float3 base = lerp(coarse_color, fine_color, saturate(input.pass_kind));
+    float3 base = lerp(coarse_color, fine_color, saturate(input.pass_kind));
+    if (is_highlight)
+        base = lerp(base, float3(1.0, 0.95, 0.25), 0.45);
+
     return float4(base * diffuse, 1.0);
 }

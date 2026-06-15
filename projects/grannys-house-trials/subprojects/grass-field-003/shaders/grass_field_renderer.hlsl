@@ -51,9 +51,8 @@ cbuffer SceneConstants : register(b0)
     // Number of columns in X and Z.
     uint field_width;
     uint field_depth;
-
-    uint pad0;
-    uint pad1;
+    int highlight_x;
+    int highlight_z;
 };
 
 struct ColumnData
@@ -496,6 +495,9 @@ float4 PSMain(VSOutput input) : SV_TARGET
         const float depth_t = saturate(result.water_depth * 2.0);
         color = lerp(color, float3(0.18, 0.60, 1.0), 0.25 + 0.25 * depth_t);
     }
+
+    if (result.cell_x == highlight_x && result.cell_z == highlight_z)
+        color = lerp(color, float3(1.0, 0.95, 0.25), 0.45);
 
     return float4(color, 1.0);
 }
