@@ -163,6 +163,17 @@ parameter. Shares the hard-step basin terrain with CPU 12.
 
 **UI comparison:** Slosh MAC Grid versus Slosh Basin Flow.
 
+### CPU 14 - Water Slide
+
+**Full lesson:** `lesson_experiment_water_slide.md`
+
+**Topic:** The same MAC grid solver on a purpose-built slide map: a carved
+7-cell-wide channel descends 38 inches from a top reservoir (52 in) to a
+landing pool (14 in), demonstrating gravitational acceleration rather than
+wave reflection.
+
+**UI comparison:** Water Slide versus Slosh MAC Grid.
+
 ```mermaid
 flowchart LR
     C1["CPU 01<br/>Erosion"] --> C2["CPU 02<br/>Fluid Baseline"]
@@ -177,6 +188,7 @@ flowchart LR
     C10 --> C11["CPU 11<br/>Hydraulic Erosion + Rainfall"]
     C10 --> C12["CPU 12<br/>Slosh Basin Flow"]
     C12 --> C13["CPU 13<br/>Slosh MAC Grid"]
+    C13 --> C14["CPU 14<br/>Water Slide"]
 ```
 
 ---
@@ -252,11 +264,12 @@ flowchart LR
 | 11 | CPU 11 - Hydraulic Erosion + Rainfall | CPU | `lesson_experiment_hydraulic_erosion_rain_sim.md` |
 | 12 | CPU 12 - Slosh Basin Flow | CPU | `lesson_experiment_slosh_basin_flow_sim.md` |
 | 13 | CPU 13 - Slosh MAC Grid | CPU | `lesson_experiment_slosh_mac_grid_sim.md` |
-| 14 | HLSL Compute Phase 1 | Other | `lesson_experiment_cellular_fluid_hlsl_compute_phase1.md` |
-| 15 | HLSL Compute Phase 2 - Tiled Resident | Other | `lesson_experiment_cellular_fluid_hlsl_compute_phase2_tiled_resident.md` |
-| 16 | Raycast Renderer | Other | `lesson_experiment_raycast_renderer.md` |
-| 17 | Split LOD Renderer | Other | `lesson_experiment_split_lod_renderer.md` |
-| 18 | Wireframe Renderer | Other | `lesson_experiment_wireframe_renderer.md` |
+| 14 | CPU 14 - Water Slide | CPU | `lesson_experiment_water_slide.md` |
+| 15 | HLSL Compute Phase 1 | Other | `lesson_experiment_cellular_fluid_hlsl_compute_phase1.md` |
+| 16 | HLSL Compute Phase 2 - Tiled Resident | Other | `lesson_experiment_cellular_fluid_hlsl_compute_phase2_tiled_resident.md` |
+| 17 | Raycast Renderer | Other | `lesson_experiment_raycast_renderer.md` |
+| 18 | Split LOD Renderer | Other | `lesson_experiment_split_lod_renderer.md` |
+| 19 | Wireframe Renderer | Other | `lesson_experiment_wireframe_renderer.md` |
 
 Review result:
 

@@ -198,7 +198,7 @@ struct ExperimentLessonUnit
 
 // CPU lessons lead the catalog. Non-CPU lesson titles follow alphabetical order:
 // HLSL, Raycast, Split LOD, Wireframe.
-constexpr std::array<ExperimentLessonUnit, 18> k_experiment_lessons = {{
+constexpr std::array<ExperimentLessonUnit, 19> k_experiment_lessons = {{
     {
         "CPU 01 - Simple Erosion Simulator", "CPU Simulations",
         "lesson_experiment_simple_erosion_sim.md",
@@ -289,6 +289,13 @@ constexpr std::array<ExperimentLessonUnit, 18> k_experiment_lessons = {{
         "Staggered MAC grid solver: u and v velocity components live on cell faces and carry genuine inertia between steps.",
         "Compare MAC grid with pipe slosh: the MAC solver retains momentum across the basin so waves arrive at rigid obstacles at full speed.",
         LessonOptionKind::Simulation, 12, 11, "Show MAC Grid", "Show Pipe Slosh"
+    },
+    {
+        "CPU 14 - Water Slide", "CPU Simulations",
+        "lesson_experiment_water_slide.md",
+        "Same MAC grid solver, different map: a carved channel descends 38 inches from a top reservoir to a landing pool. Watch water accelerate down the slope and surge across the pool.",
+        "Compare water slide with the slosh basin: both use the same MAC solver, but the slide demonstrates acceleration on a slope rather than reflection from rigid walls.",
+        LessonOptionKind::Simulation, 13, 12, "Show Water Slide", "Show MAC Slosh"
     },
     {
         "HLSL Compute Phase 1", "Other Experiments",
@@ -599,6 +606,8 @@ struct Application
         m_sims.push_back(std::make_unique<sim::SimpleHydraulicErosionRainSim>());
         m_sims.push_back(std::make_unique<sim::SimpleSloshBasinFlowSim>());
         m_sims.push_back(std::make_unique<sim::SimpleSloshMacSim>());
+        m_sims.push_back(std::make_unique<sim::SimpleSloshMacSim>(
+            "Water Slide", sim::SeedMapProfile::WaterSlide, 50, 8, 24.0f)); // deeper fills for visible slide
     }
 
     // GPU-backed simulations are registered only after the D3D12 device and
@@ -869,12 +878,106 @@ struct Application
         return heights;
     }
 
+    [[nodiscard]] std::vector<int> build_water_slide_seed(
+        const sim::IFieldSim& target_sim) const
+    {
+        const int w = simulation_grid_width(target_sim);
+        const int d = simulation_grid_depth(target_sim);
+
+        // Water slide on a 100×100 ft grid.
+        //
+        // Everything starts at 72 in (solid wall — background plateau).
+        // Three carved-out regions are fluid (terrain < k_solid_in = 60):
+        //
+        //   Top reservoir: x=[42,58], z=[2,15]  — floor = 52 in
+        //     Wide starting pool. Default brush lands here at (50, 8).
+        //     User adds water; it pools then drains south into the channel.
+        //
+        //   Slide channel: x=[47,53], z=[15,82]  — floor descends 52→14 in
+        //     7-cell-wide channel with a linear slope. Water accelerates
+        //     down the full 68-cell length and arrives at the pool fast.
+        //
+        //   Landing pool: x=[22,78], z=[80,97]  — floor = 14 in
+        //     Wide, flat pool. The arriving surge spreads, reflects off the
+        //     far wall, and creates visible wave interference.
+
+        constexpr int k_background  = 72;
+        constexpr int k_reservoir   = 52;
+        constexpr int k_pool        = 14;
+        constexpr int k_slide_top   = 52;
+        constexpr int k_slide_bot   = 14;
+        constexpr int k_slide_z0    = 15;
+        constexpr int k_slide_z1    = 55; // 40-cell channel
+
+        // Obstacle heights — all below k_solid_in=60 so water can flow over them.
+        constexpr int k_baffle      = 20; // partial baffles: overflow at ~6in pool depth
+        constexpr int k_lip         = 18; // back-pool lip: overflow at ~4in pool depth
+
+        std::vector<int> heights(static_cast<std::size_t>(w * d), k_background);
+
+        auto set = [&](int x, int z, int h)
+        {
+            if (x >= 0 && x < w && z >= 0 && z < d)
+                heights[static_cast<std::size_t>(z * w + x)] = h;
+        };
+
+        // Top reservoir.
+        for (int z = 2; z <= 15; ++z)
+            for (int x = 42; x <= 58; ++x)
+                set(x, z, k_reservoir);
+
+        // Slide channel with linear floor descent.
+        for (int z = k_slide_z0; z <= k_slide_z1; ++z)
+        {
+            const float t = static_cast<float>(z - k_slide_z0) /
+                            static_cast<float>(k_slide_z1 - k_slide_z0);
+            const int floor_h = static_cast<int>(
+                std::lround(k_slide_top + t * (k_slide_bot - k_slide_top)));
+            for (int x = 47; x <= 53; ++x)
+                set(x, z, floor_h);
+        }
+
+        // Main landing pool — set before obstacles so later calls override correctly.
+        for (int z = 53; z <= 73; ++z)
+            for (int x = 22; x <= 78; ++x)
+                set(x, z, k_pool);
+
+        // Central solid pillar — forces the surge to split east and west.
+        for (int z = 62; z <= 67; ++z)
+            for (int x = 46; x <= 54; ++x)
+                set(x, z, k_background);
+
+        // West baffle — water must overflow (~6in) or squeeze through the center gap.
+        for (int z = 68; z <= 70; ++z)
+            for (int x = 22; x <= 44; ++x)
+                set(x, z, k_baffle);
+
+        // East baffle — mirror of west; center passage x=[45,55] stays open at pool floor.
+        for (int z = 68; z <= 70; ++z)
+            for (int x = 56; x <= 78; ++x)
+                set(x, z, k_baffle);
+
+        // Lip separating main pool from back pool.
+        for (int x = 22; x <= 78; ++x)
+            set(x, 74, k_lip);
+
+        // Back isolated pool — water fills from above and stays trapped when the main
+        // pool quiets and the free surface drops below the lip.
+        for (int z = 75; z <= 86; ++z)
+            for (int x = 22; x <= 78; ++x)
+                set(x, z, k_pool);
+
+        return heights;
+    }
+
     [[nodiscard]] std::vector<int> build_seed_heights(const sim::IFieldSim& target_sim) const
     {
         if (target_sim.seed_map_profile() == sim::SeedMapProfile::ErosionInclineValleys)
             return build_erosion_incline_valley_seed(target_sim);
         if (target_sim.seed_map_profile() == sim::SeedMapProfile::SloshBasin)
             return build_slosh_basin_seed(target_sim);
+        if (target_sim.seed_map_profile() == sim::SeedMapProfile::WaterSlide)
+            return build_water_slide_seed(target_sim);
 
         const int source_w = m_grass_field.width();
         const int source_d = m_grass_field.depth();

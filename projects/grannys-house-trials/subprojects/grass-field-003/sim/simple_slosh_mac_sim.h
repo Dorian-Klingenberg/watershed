@@ -39,12 +39,20 @@ namespace grannys_house_trials::sim
 class SimpleSloshMacSim final : public IFieldSim
 {
 public:
-    [[nodiscard]] const char* name() const noexcept override { return "Slosh MAC Grid"; }
+    // name, profile, and default brush position are set at construction so the
+    // same solver class can serve multiple seed maps without subclassing.
+    explicit SimpleSloshMacSim(
+        const char*    name              = "Slosh MAC Grid",
+        SeedMapProfile profile           = SeedMapProfile::SloshBasin,
+        int            default_cx        = 50,
+        int            default_cz        = 50,
+        float          default_add_depth = 8.0f)
+        : name_(name), profile_(profile), default_cx_(default_cx), default_cz_(default_cz)
+        , add_depth_in_(default_add_depth)
+    {}
 
-    [[nodiscard]] SeedMapProfile seed_map_profile() const noexcept override
-    {
-        return SeedMapProfile::SloshBasin;
-    }
+    [[nodiscard]] const char*    name()             const noexcept override { return name_;    }
+    [[nodiscard]] SeedMapProfile seed_map_profile() const noexcept override { return profile_; }
 
     [[nodiscard]] int   width()          const noexcept override { return width_;  }
     [[nodiscard]] int   depth()          const noexcept override { return depth_;  }
@@ -168,7 +176,7 @@ public:
         if (ImGui::Button("Add Water"))
         {
             const auto [cx, cz] = brush_center();
-            add_water_disc(cx, cz, k_add_radius, k_add_depth_in);
+            add_water_disc(cx, cz, k_add_radius, add_depth_in_);
             changed = true;
         }
 
@@ -182,6 +190,16 @@ public:
         {
             wake();
             for (int i = 0; i < 100; ++i)
+            {
+                changed = step_once() || changed;
+                if (sleeping_) break;
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Step (x1000)"))
+        {
+            wake();
+            for (int i = 0; i < 1000; ++i)
             {
                 changed = step_once() || changed;
                 if (sleeping_) break;
@@ -202,11 +220,11 @@ private:
     static constexpr float k_in_per_ft  = 12.0f;
     static constexpr int   k_solid_in   = 60;      // terrain >= this = rigid wall
     static constexpr int   k_add_radius = 4;
-    static constexpr float k_add_depth_in = 8.0f;
     static constexpr int   k_sleep_steps  = 120;
     static constexpr float k_sleep_speed  = 0.005f; // ft/s
 
-    float damping_ = 0.02f; // linear drag coefficient, 1/s
+    float damping_    = 0.02f; // linear drag coefficient, 1/s
+    float add_depth_in_ = 8.0f; // water depth added per "Add Water" press, inches
 
     // ── Indexing ──────────────────────────────────────────────────────────────
 
@@ -243,7 +261,7 @@ private:
     [[nodiscard]] std::pair<int, int> brush_center() const noexcept
     {
         if (sel_valid_) return { sel_x_, sel_z_ };
-        return { width_ / 2, depth_ / 2 };
+        return { default_cx_, default_cz_ };
     }
 
     void wake() noexcept
@@ -372,6 +390,11 @@ private:
     }
 
     // ── State ─────────────────────────────────────────────────────────────────
+
+    const char*    name_       = "Slosh MAC Grid";
+    SeedMapProfile profile_    = SeedMapProfile::SloshBasin;
+    int            default_cx_ = 50;
+    int            default_cz_ = 50;
 
     int  width_  = 0;
     int  depth_  = 0;

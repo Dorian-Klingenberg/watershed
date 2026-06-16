@@ -60,6 +60,7 @@ enum class SeedMapProfile
     SharedGrassField,
     ErosionInclineValleys,
     SloshBasin,
+    WaterSlide,
 };
 
 struct FieldVisualPoint
