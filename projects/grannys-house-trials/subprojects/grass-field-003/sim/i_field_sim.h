@@ -61,6 +61,7 @@ enum class SeedMapProfile
     ErosionInclineValleys,
     SloshBasin,
     WaterSlide,
+    TeslaValve,
 };
 
 struct FieldVisualPoint

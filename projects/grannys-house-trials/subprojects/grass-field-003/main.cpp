@@ -198,7 +198,7 @@ struct ExperimentLessonUnit
 
 // CPU lessons lead the catalog. Non-CPU lesson titles follow alphabetical order:
 // HLSL, Raycast, Split LOD, Wireframe.
-constexpr std::array<ExperimentLessonUnit, 19> k_experiment_lessons = {{
+constexpr std::array<ExperimentLessonUnit, 20> k_experiment_lessons = {{
     {
         "CPU 01 - Simple Erosion Simulator", "CPU Simulations",
         "lesson_experiment_simple_erosion_sim.md",
@@ -296,6 +296,13 @@ constexpr std::array<ExperimentLessonUnit, 19> k_experiment_lessons = {{
         "Same MAC grid solver, different map: a carved channel descends 38 inches from a top reservoir to a landing pool. Watch water accelerate down the slope and surge across the pool.",
         "Compare water slide with the slosh basin: both use the same MAC solver, but the slide demonstrates acceleration on a slope rather than reflection from rigid walls.",
         LessonOptionKind::Simulation, 13, 12, "Show Water Slide", "Show MAC Slosh"
+    },
+    {
+        "CPU 15 - Tesla Valve", "CPU Simulations",
+        "lesson_experiment_tesla_valve.md",
+        "A straight channel with three bypass-loop stages: the geometry of a Tesla valve. Tests whether the MAC grid can exhibit directional flow asymmetry without the advection term.",
+        "Compare Tesla valve with the water slide: same MAC solver, but the valve map exposes the limit of pressure-only inertia — full directional resistance requires u dot grad u.",
+        LessonOptionKind::Simulation, 14, 13, "Show Tesla Valve", "Show Water Slide"
     },
     {
         "HLSL Compute Phase 1", "Other Experiments",
@@ -608,6 +615,8 @@ struct Application
         m_sims.push_back(std::make_unique<sim::SimpleSloshMacSim>());
         m_sims.push_back(std::make_unique<sim::SimpleSloshMacSim>(
             "Water Slide", sim::SeedMapProfile::WaterSlide, 50, 8, 24.0f)); // deeper fills for visible slide
+        m_sims.push_back(std::make_unique<sim::SimpleSloshMacSim>(
+            "Tesla Valve", sim::SeedMapProfile::TeslaValve, 50, 6, 16.0f)); // CPU 15
     }
 
     // GPU-backed simulations are registered only after the D3D12 device and
@@ -970,6 +979,75 @@ struct Application
         return heights;
     }
 
+    [[nodiscard]] std::vector<int> build_tesla_valve_seed(
+        const sim::IFieldSim& target_sim) const
+    {
+        const int w = simulation_grid_width(target_sim);
+        const int d = simulation_grid_depth(target_sim);
+
+        // Tesla valve channel on a 100×100 grid.
+        //
+        // A straight main channel runs south through three bypass-loop stages.
+        // Each stage has a rectangular bypass corridor on alternating sides.
+        // The corridor connects to the main channel only at two single-cell
+        // junction openings — one near the top of the stage, one near the
+        // bottom — separated by a solid wall segment in between.
+        //
+        // In a real fluid with momentum (advection), hard-direction flow enters
+        // the bypass and is turned 180°, re-injecting fluid against the incoming
+        // stream. In the linearised SWE without advection, the bypass acts as a
+        // simple parallel path; resistance is nearly symmetric. The map is the
+        // motivating test case for adding the u·∇u advection term.
+        //
+        // Stage layout (easy direction = south, +z):
+        //   Stage 1: west bypass x=[33,45], junctions at z=16 and z=32
+        //   Stage 2: east bypass x=[55,66], junctions at z=40 and z=56
+        //   Stage 3: west bypass x=[33,45], junctions at z=64 and z=80
+
+        constexpr int k_fluid = 14;
+
+        std::vector<int> heights(static_cast<std::size_t>(w * d), 72);
+
+        auto set = [&](int x, int z, int h) {
+            if (x >= 0 && x < w && z >= 0 && z < d)
+                heights[static_cast<std::size_t>(z * w + x)] = h;
+        };
+        auto carve = [&](int x0, int x1, int z0, int z1) {
+            for (int z = z0; z <= z1; ++z)
+                for (int x = x0; x <= x1; ++x)
+                    set(x, z, k_fluid);
+        };
+
+        // Source reservoir.
+        carve(42, 58, 2, 10);
+
+        // Main channel, full length.
+        carve(47, 53, 10, 90);
+
+        // Stage 1: west bypass corridor plus two single-cell junction openings.
+        // The wall between corridor and main channel (x=46, z=17..31) stays solid.
+        carve(33, 45, 16, 32);  // bypass corridor
+        set(46, 16, k_fluid);   // upper junction (x=46 connects corridor to channel)
+        set(46, 32, k_fluid);   // lower junction
+
+        // Stage 2: east bypass corridor.
+        // Wall: x=54, z=41..55 stays solid.
+        carve(55, 66, 40, 56);  // bypass corridor
+        set(54, 40, k_fluid);   // upper junction
+        set(54, 56, k_fluid);   // lower junction
+
+        // Stage 3: west bypass corridor (mirrors Stage 1 side).
+        // Wall: x=46, z=65..79 stays solid.
+        carve(33, 45, 64, 80);  // bypass corridor
+        set(46, 64, k_fluid);   // upper junction
+        set(46, 80, k_fluid);   // lower junction
+
+        // Exit pool.
+        carve(22, 78, 88, 97);
+
+        return heights;
+    }
+
     [[nodiscard]] std::vector<int> build_seed_heights(const sim::IFieldSim& target_sim) const
     {
         if (target_sim.seed_map_profile() == sim::SeedMapProfile::ErosionInclineValleys)
@@ -978,6 +1056,8 @@ struct Application
             return build_slosh_basin_seed(target_sim);
         if (target_sim.seed_map_profile() == sim::SeedMapProfile::WaterSlide)
             return build_water_slide_seed(target_sim);
+        if (target_sim.seed_map_profile() == sim::SeedMapProfile::TeslaValve)
+            return build_tesla_valve_seed(target_sim);
 
         const int source_w = m_grass_field.width();
         const int source_d = m_grass_field.depth();

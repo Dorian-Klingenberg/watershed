@@ -174,6 +174,18 @@ wave reflection.
 
 **UI comparison:** Water Slide versus Slosh MAC Grid.
 
+### CPU 15 - Tesla Valve
+
+**Full lesson:** `lesson_experiment_tesla_valve.md`
+
+**Topic:** A straight main channel with three rectangular bypass-loop
+stages, shaped after Tesla's 1920 patent (US1329559). Tests whether the
+MAC grid can exhibit directional flow asymmetry from geometry alone,
+without the advection term. Spoiler: it cannot — and the experiment makes
+the missing `u·∇u` term concrete.
+
+**UI comparison:** Tesla Valve versus Water Slide.
+
 ```mermaid
 flowchart LR
     C1["CPU 01<br/>Erosion"] --> C2["CPU 02<br/>Fluid Baseline"]
@@ -189,6 +201,7 @@ flowchart LR
     C10 --> C12["CPU 12<br/>Slosh Basin Flow"]
     C12 --> C13["CPU 13<br/>Slosh MAC Grid"]
     C13 --> C14["CPU 14<br/>Water Slide"]
+    C14 --> C15["CPU 15<br/>Tesla Valve"]
 ```
 
 ---
@@ -265,11 +278,12 @@ flowchart LR
 | 12 | CPU 12 - Slosh Basin Flow | CPU | `lesson_experiment_slosh_basin_flow_sim.md` |
 | 13 | CPU 13 - Slosh MAC Grid | CPU | `lesson_experiment_slosh_mac_grid_sim.md` |
 | 14 | CPU 14 - Water Slide | CPU | `lesson_experiment_water_slide.md` |
-| 15 | HLSL Compute Phase 1 | Other | `lesson_experiment_cellular_fluid_hlsl_compute_phase1.md` |
-| 16 | HLSL Compute Phase 2 - Tiled Resident | Other | `lesson_experiment_cellular_fluid_hlsl_compute_phase2_tiled_resident.md` |
-| 17 | Raycast Renderer | Other | `lesson_experiment_raycast_renderer.md` |
-| 18 | Split LOD Renderer | Other | `lesson_experiment_split_lod_renderer.md` |
-| 19 | Wireframe Renderer | Other | `lesson_experiment_wireframe_renderer.md` |
+| 15 | CPU 15 - Tesla Valve | CPU | `lesson_experiment_tesla_valve.md` |
+| 16 | HLSL Compute Phase 1 | Other | `lesson_experiment_cellular_fluid_hlsl_compute_phase1.md` |
+| 17 | HLSL Compute Phase 2 - Tiled Resident | Other | `lesson_experiment_cellular_fluid_hlsl_compute_phase2_tiled_resident.md` |
+| 18 | Raycast Renderer | Other | `lesson_experiment_raycast_renderer.md` |
+| 19 | Split LOD Renderer | Other | `lesson_experiment_split_lod_renderer.md` |
+| 20 | Wireframe Renderer | Other | `lesson_experiment_wireframe_renderer.md` |
 
 Review result:
 
