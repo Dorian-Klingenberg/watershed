@@ -7,9 +7,9 @@
 // from the pressure impulse and persists across steps, so a wave front carries
 // momentum across the basin before linear drag dissipates it.
 //
-// Equations (depth-averaged linearised SWE, no advection):
-//   ∂u/∂t = -g ∂η/∂x  -  α·u
-//   ∂v/∂t = -g ∂η/∂z  -  α·v
+// Equations (depth-averaged SWE, optional first-order upwind advection):
+//   ∂u/∂t + u·∂u/∂x + v·∂u/∂z = -g ∂η/∂x  -  α·u   (advection term optional)
+//   ∂v/∂t + u·∂v/∂x + v·∂v/∂z = -g ∂η/∂z  -  α·v
 //   ∂h/∂t = -∂(hu)/∂x  -  ∂(hv)/∂z   (first-order upwind fluxes)
 //
 // where η = terrain + h is the free surface and α is the linear drag coefficient.
@@ -105,6 +105,8 @@ public:
         u_.assign(nu, 0.0f);
         v_.assign(nv, 0.0f);
         h_new_.assign(nc, 0.0f);
+        u_new_.assign(nu, 0.0f);
+        v_new_.assign(nv, 0.0f);
         u_active_.assign(nu, false);
         v_active_.assign(nv, false);
 
@@ -144,6 +146,7 @@ public:
 
         const auto t0 = std::chrono::steady_clock::now();
 
+        apply_advection();
         apply_gravity();
         apply_drag();
         update_depth();
@@ -207,6 +210,7 @@ public:
         }
 
         ImGui::Separator();
+        ImGui::Checkbox("Advection (u*du/dx)", &advection_enabled_);
         ImGui::SliderFloat("Damping (1/s)", &damping_, 0.0f, 2.0f, "%.3f");
         ImGui::TextDisabled("MAC staggered grid: u on east faces, v on north faces.");
         ImGui::TextDisabled("Wave speed = sqrt(g*h)  |  dt = %.4f s", k_dt);
@@ -223,8 +227,9 @@ private:
     static constexpr int   k_sleep_steps  = 120;
     static constexpr float k_sleep_speed  = 0.005f; // ft/s
 
-    float damping_    = 0.02f; // linear drag coefficient, 1/s
-    float add_depth_in_ = 8.0f; // water depth added per "Add Water" press, inches
+    float damping_      = 0.02f;
+    float add_depth_in_ = 8.0f;
+    bool  advection_enabled_ = false;
 
     // ── Indexing ──────────────────────────────────────────────────────────────
 
@@ -289,6 +294,75 @@ private:
     }
 
     // ── Simulation steps ──────────────────────────────────────────────────────
+
+    // Advection step: transport velocity by the current velocity field (u·∇u).
+    // First-order upwind: derivative sign selects which neighbor is upstream.
+    // v-at-u-face and u-at-v-face are averaged from the four surrounding corner faces.
+    void apply_advection()
+    {
+        if (!advection_enabled_) return;
+        const float c = k_dt / k_dx;
+
+        // ── Advect u-faces ────────────────────────────────────────────────
+        u_new_ = u_;
+        for (int z = 0; z < depth_; ++z)
+        {
+            for (int x = 1; x < width_; ++x)
+            {
+                const std::size_t fi = ui(x, z);
+                if (!u_active_[fi]) continue;
+
+                const float uc = u_[fi];
+
+                // u * du/dx  (x+1 <= W is always in-bounds for active face range)
+                const float u_w = u_[ui(x - 1, z)];
+                const float u_e = u_[ui(x + 1, z)];
+                const float du_dx = (uc >= 0.0f) ? (uc - u_w) : (u_e - uc);
+
+                // Average v at the four surrounding v-faces
+                const float v_avg = 0.25f * (v_[vi(x - 1, z    )] + v_[vi(x, z    )]
+                                           + v_[vi(x - 1, z + 1)] + v_[vi(x, z + 1)]);
+
+                // v_avg * du/dz  (upwind; guard at z=0 and z=depth_-1)
+                const float u_s = (z > 0)          ? u_[ui(x, z - 1)] : 0.0f;
+                const float u_n = (z + 1 < depth_) ? u_[ui(x, z + 1)] : 0.0f;
+                const float du_dz = (v_avg >= 0.0f) ? (uc - u_s) : (u_n - uc);
+
+                u_new_[fi] = uc - c * (uc * du_dx + v_avg * du_dz);
+            }
+        }
+        std::swap(u_, u_new_);
+
+        // ── Advect v-faces ────────────────────────────────────────────────
+        v_new_ = v_;
+        for (int z = 1; z < depth_; ++z)
+        {
+            for (int x = 0; x < width_; ++x)
+            {
+                const std::size_t fi = vi(x, z);
+                if (!v_active_[fi]) continue;
+
+                const float vc = v_[fi];
+
+                // v * dv/dz  (z+1 <= D is always in-bounds for active face range)
+                const float v_s = v_[vi(x, z - 1)];
+                const float v_n = v_[vi(x, z + 1)];
+                const float dv_dz = (vc >= 0.0f) ? (vc - v_s) : (v_n - vc);
+
+                // Average u at the four surrounding u-faces
+                const float u_avg = 0.25f * (u_[ui(x,     z - 1)] + u_[ui(x + 1, z - 1)]
+                                           + u_[ui(x,     z    )] + u_[ui(x + 1, z    )]);
+
+                // u_avg * dv/dx  (upwind; guard at x=0 and x=width_-1)
+                const float v_w = (x > 0)          ? v_[vi(x - 1, z)] : 0.0f;
+                const float v_e = (x + 1 < width_) ? v_[vi(x + 1, z)] : 0.0f;
+                const float dv_dx = (u_avg >= 0.0f) ? (vc - v_w) : (v_e - vc);
+
+                v_new_[fi] = vc - c * (u_avg * dv_dx + vc * dv_dz);
+            }
+        }
+        std::swap(v_, v_new_);
+    }
 
     // Pressure step: accelerate each active face by the free-surface head gradient.
     void apply_gravity()
@@ -410,9 +484,11 @@ private:
 
     std::vector<int>   terrain_;
     std::vector<float> h_;
-    std::vector<float> u_;       // (W+1)*D east-face velocities, ft/s
-    std::vector<float> v_;       // W*(D+1) north-face velocities, ft/s
-    std::vector<float> h_new_;
+    std::vector<float> u_;        // (W+1)*D east-face velocities, ft/s
+    std::vector<float> v_;        // W*(D+1) north-face velocities, ft/s
+    std::vector<float> h_new_;    // scratch for continuity step
+    std::vector<float> u_new_;    // scratch for advection step
+    std::vector<float> v_new_;    // scratch for advection step
     std::vector<bool>  u_active_; // precomputed: face connects two non-solid cells
     std::vector<bool>  v_active_;
 };

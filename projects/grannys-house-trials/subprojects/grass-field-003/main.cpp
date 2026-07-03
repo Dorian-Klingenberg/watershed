@@ -985,24 +985,24 @@ struct Application
         const int w = simulation_grid_width(target_sim);
         const int d = simulation_grid_depth(target_sim);
 
-        // Tesla valve channel on a 100×100 grid.
+        // Tesla valve on a 100×100 grid.
         //
-        // A straight main channel runs south through three bypass-loop stages.
-        // Each stage has a rectangular bypass corridor on alternating sides.
-        // The corridor connects to the main channel only at two single-cell
-        // junction openings — one near the top of the stage, one near the
-        // bottom — separated by a solid wall segment in between.
+        // Three D-shaped bypass loops alternate west/east/west beside the main
+        // channel. Each bypass tapers to a narrow north tip (approximating the
+        // pointed fin of Tesla's 1920 patent) and opens wide at the south end.
+        // Junctions are asymmetric: 1 cell at the north (easy-direction exit),
+        // 4 cells at the south (hard-direction entry scoop).
         //
-        // In a real fluid with momentum (advection), hard-direction flow enters
-        // the bypass and is turned 180°, re-injecting fluid against the incoming
-        // stream. In the linearised SWE without advection, the bypass acts as a
-        // simple parallel path; resistance is nearly symmetric. The map is the
-        // motivating test case for adding the u·∇u advection term.
+        // With advection enabled, northward (hard-direction) flow enters the
+        // wide south scoop, travels north through the bypass, and re-enters the
+        // main channel heading south — colliding with the incoming stream.
+        // Southward (easy-direction) flow approaches the narrow 1-cell north
+        // junction and mostly skips past it.
         //
-        // Stage layout (easy direction = south, +z):
-        //   Stage 1: west bypass x=[33,45], junctions at z=16 and z=32
-        //   Stage 2: east bypass x=[55,66], junctions at z=40 and z=56
-        //   Stage 3: west bypass x=[33,45], junctions at z=64 and z=80
+        // Easy direction = south (+z). Stage layout:
+        //   Stage 1: west D-bypass x=[36,46], north junction z=13, south z=33..36
+        //   Stage 2: east D-bypass x=[54,64], north junction z=44, south z=63..66
+        //   Stage 3: west D-bypass x=[36,46], north junction z=73, south z=84..87
 
         constexpr int k_fluid = 14;
 
@@ -1018,32 +1018,41 @@ struct Application
                     set(x, z, k_fluid);
         };
 
-        // Source reservoir.
-        carve(42, 58, 2, 10);
+        carve(42, 58, 2, 10);       // source reservoir
+        carve(47, 53, 10, 88);      // main channel
 
-        // Main channel, full length.
-        carve(47, 53, 10, 90);
+        // Stage 1: west D-bypass, z=12..36
+        // Staircase taper at north; wall x=46 solid except at junction rows.
+        carve(41, 45, 12, 17);      // north tip   — 5 cells wide
+        carve(38, 45, 16, 22);      // shoulder    — 8 cells wide
+        carve(36, 45, 20, 36);      // full body   — 10 cells wide
+        set(46, 13, k_fluid);       // north junction — 1 cell (narrow exit)
+        set(46, 33, k_fluid);       // south junction — 4 cells (wide scoop entry)
+        set(46, 34, k_fluid);
+        set(46, 35, k_fluid);
+        set(46, 36, k_fluid);
 
-        // Stage 1: west bypass corridor plus two single-cell junction openings.
-        // The wall between corridor and main channel (x=46, z=17..31) stays solid.
-        carve(33, 45, 16, 32);  // bypass corridor
-        set(46, 16, k_fluid);   // upper junction (x=46 connects corridor to channel)
-        set(46, 32, k_fluid);   // lower junction
+        // Stage 2: east D-bypass, z=44..66
+        carve(55, 59, 44, 49);      // north tip   — 5 cells wide
+        carve(55, 62, 48, 54);      // shoulder    — 8 cells wide
+        carve(55, 64, 52, 66);      // full body   — 10 cells wide
+        set(54, 44, k_fluid);       // north junction — 1 cell
+        set(54, 63, k_fluid);       // south junction — 4 cells
+        set(54, 64, k_fluid);
+        set(54, 65, k_fluid);
+        set(54, 66, k_fluid);
 
-        // Stage 2: east bypass corridor.
-        // Wall: x=54, z=41..55 stays solid.
-        carve(55, 66, 40, 56);  // bypass corridor
-        set(54, 40, k_fluid);   // upper junction
-        set(54, 56, k_fluid);   // lower junction
+        // Stage 3: west D-bypass, z=72..87
+        carve(41, 45, 72, 77);      // north tip
+        carve(38, 45, 76, 82);      // shoulder
+        carve(36, 45, 80, 87);      // full body
+        set(46, 73, k_fluid);       // north junction — 1 cell
+        set(46, 84, k_fluid);       // south junction — 4 cells
+        set(46, 85, k_fluid);
+        set(46, 86, k_fluid);
+        set(46, 87, k_fluid);
 
-        // Stage 3: west bypass corridor (mirrors Stage 1 side).
-        // Wall: x=46, z=65..79 stays solid.
-        carve(33, 45, 64, 80);  // bypass corridor
-        set(46, 64, k_fluid);   // upper junction
-        set(46, 80, k_fluid);   // lower junction
-
-        // Exit pool.
-        carve(22, 78, 88, 97);
+        carve(22, 78, 88, 97);      // exit pool
 
         return heights;
     }
