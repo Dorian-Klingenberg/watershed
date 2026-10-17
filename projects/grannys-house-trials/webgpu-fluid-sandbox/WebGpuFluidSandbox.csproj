@@ -13,4 +13,8 @@
     <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" Version="5.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="tests/**/*.cs" />
+  </ItemGroup>
+
 </Project>

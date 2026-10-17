@@ -1,7 +1,229 @@
-﻿@page "/"
+@page "/"
+@inject WebGpuFluidBackend Gpu
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Cellular Fluid Lab</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="workspace">
+    <header class="masthead">
+        <div>
+            <p class="eyebrow">WEBGPU FLUID SANDBOX · FIRST EXPERIMENT</p>
+            <h1>Cellular Fluid Lab</h1>
+            <p class="intro">A small water field, stepped in parallel on the GPU and in a C# reference.</p>
+        </div>
+        <div class="engine-status @(_gpuSupported ? "ready" : "waiting")" role="status">
+            <span class="status-dot"></span>
+            @_gpuMessage
+        </div>
+    </header>
 
-Welcome to your new app.
+    <section class="control-panel" aria-label="Simulation controls">
+        <div class="control-copy">
+            <span class="eyebrow">ONE FIELD · TWO IMPLEMENTATIONS</span>
+            <p>Pour water into the low basin, then advance both simulations by one synchronous tick.</p>
+        </div>
+        <div class="actions">
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="PourAsync" Disabled="@_busy">Pour 12 in</FluentButton>
+            <FluentButton OnClick="StepAsync" Disabled="@_busy">Step both</FluentButton>
+            <FluentButton OnClick="CompareAsync" Disabled="@(_busy || !_gpuSupported)">Compare states</FluentButton>
+            <FluentButton OnClick="ResetAsync" Disabled="@_busy">Reset</FluentButton>
+        </div>
+    </section>
+
+    @if (_errorMessage is not null)
+    {
+        <div class="alert" role="alert">@_errorMessage</div>
+    }
+
+    <section class="field-pair" aria-label="CPU and GPU simulation views">
+        <article class="field-card">
+            <div class="card-heading">
+                <div>
+                    <span class="eyebrow">REFERENCE</span>
+                    <h2>C# CPU</h2>
+                </div>
+                <span class="engine-tag">Domain model</span>
+            </div>
+            <canvas @ref="_cpuCanvas" class="field-canvas" aria-label="CPU water-depth field"></canvas>
+            <div class="legend"><span class="dry-swatch"></span> dry terrain <span class="water-swatch"></span> water depth</div>
+        </article>
+
+        <article class="field-card">
+            <div class="card-heading">
+                <div>
+                    <span class="eyebrow">COMPUTE</span>
+                    <h2>WebGPU</h2>
+                </div>
+                <span class="engine-tag">WGSL · two-pass flow</span>
+            </div>
+            <canvas @ref="_gpuCanvas" class="field-canvas" aria-label="GPU water-depth field"></canvas>
+            <div class="legend"><span class="dry-swatch"></span> dry terrain <span class="water-swatch"></span> water depth</div>
+        </article>
+    </section>
+
+    <section class="readout" aria-label="Simulation readout">
+        <div class="metric">
+            <span class="eyebrow">TICK</span>
+            <strong>@_summary.Cycles</strong>
+        </div>
+        <div class="metric">
+            <span class="eyebrow">WET CELLS</span>
+            <strong>@_summary.WetCells</strong>
+        </div>
+        <div class="metric">
+            <span class="eyebrow">WATER</span>
+            <strong>@_summary.TotalWater.ToString("F2") <small>cell-inches</small></strong>
+        </div>
+        <div class="metric">
+            <span class="eyebrow">MAX DEPTH</span>
+            <strong>@_summary.MaximumDepth.ToString("F2") <small>in</small></strong>
+        </div>
+    </section>
+
+    @if (_comparison is not null)
+    {
+        <section class="comparison @(_comparison.Matches ? "match" : "mismatch")" aria-live="polite">
+            <div>
+                <span class="eyebrow">CPU ↔ GPU CHECK</span>
+                <h2>@(_comparison.Matches ? "States agree within tolerance" : "States differ")</h2>
+            </div>
+            <p>
+                @_comparison.CellsCompared cells · @_comparison.MismatchedCells outside tolerance ·
+                max error @_comparison.MaximumDifference.ToString("G5") ·
+                water-total error @_comparison.TotalWaterDifference.ToString("G5")
+            </p>
+        </section>
+    }
+
+    <footer>
+        <span>Terrain stays fixed; only water depth changes.</span>
+        <span>Comparison tolerance: @CellularFluidSimulation.ComparisonTolerance</span>
+    </footer>
+</div>
+
+@code {
+    private const int PourRadius = 4;
+    private const float PourDepthInches = 12.0f;
+
+    private readonly CellularFluidSimulation _simulation = CellularFluidSimulation.CreateDefault();
+    private ElementReference _cpuCanvas;
+    private ElementReference _gpuCanvas;
+    private FluidSummary _summary;
+    private FluidComparisonResult? _comparison;
+    private bool _gpuSupported;
+    private bool _busy;
+    private string _gpuMessage = "Checking WebGPU support…";
+    private string? _errorMessage;
+
+    protected override void OnInitialized()
+    {
+        _summary = _simulation.GetSummary();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await Gpu.InitializeAsync(_gpuCanvas, _simulation);
+            _gpuSupported = result.Supported;
+            _gpuMessage = result.Message;
+            await RenderCpuAsync();
+        }
+        catch (Exception exception)
+        {
+            _gpuMessage = "WebGPU initialization failed";
+            _errorMessage = exception.Message;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ResetAsync()
+    {
+        await RunActionAsync(async () =>
+        {
+            _simulation.Reset();
+            _comparison = null;
+            if (_gpuSupported)
+            {
+                await Gpu.ResetAsync(_simulation);
+            }
+
+            await RenderCpuAsync();
+        });
+    }
+
+    private async Task PourAsync()
+    {
+        await RunActionAsync(async () =>
+        {
+            _simulation.AddCenterWater(PourRadius, PourDepthInches);
+            _comparison = null;
+            if (_gpuSupported)
+            {
+                await Gpu.SetWaterAsync(_simulation.GetWaterSnapshot());
+            }
+
+            await RenderCpuAsync();
+        });
+    }
+
+    private async Task StepAsync()
+    {
+        await RunActionAsync(async () =>
+        {
+            _simulation.Step();
+            _comparison = null;
+            if (_gpuSupported)
+            {
+                await Gpu.StepAsync();
+            }
+
+            await RenderCpuAsync();
+        });
+    }
+
+    private async Task CompareAsync()
+    {
+        await RunActionAsync(async () =>
+        {
+            var gpuWater = await Gpu.GetSnapshotAsync();
+            _comparison = FluidComparison.Compare(_simulation.GetWaterSnapshot(), gpuWater);
+        });
+    }
+
+    private async Task RunActionAsync(Func<Task> action)
+    {
+        _busy = true;
+        _errorMessage = null;
+        try
+        {
+            await action();
+        }
+        catch (Exception exception)
+        {
+            _errorMessage = exception.Message;
+        }
+        finally
+        {
+            _summary = _simulation.GetSummary();
+            _busy = false;
+        }
+    }
+
+    private Task RenderCpuAsync() =>
+        Gpu.RenderCpuAsync(
+            _cpuCanvas,
+            _simulation.GetTerrainSnapshot(),
+            _simulation.GetWaterSnapshot(),
+            _simulation.Width,
+            _simulation.Height).AsTask();
+
+    public ValueTask DisposeAsync() => Gpu.DisposeAsync();
+}
