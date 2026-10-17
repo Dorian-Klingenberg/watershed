@@ -1,0 +1,84 @@
+name: Deploy WebGPU Fluid Sandbox
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "projects/grannys-house-trials/webgpu-fluid-sandbox/**"
+      - ".github/workflows/deploy-webgpu-fluid-sandbox.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Run simulation checks
+        run: >
+          dotnet run
+          --project projects/grannys-house-trials/webgpu-fluid-sandbox/tests/FluidModelChecks/FluidModelChecks.csproj
+          --configuration Release
+
+      - name: Publish application
+        run: >
+          dotnet publish
+          projects/grannys-house-trials/webgpu-fluid-sandbox/WebGpuFluidSandbox.csproj
+          --configuration Release
+          --output artifacts/publish
+
+      - name: Set site base path and routing fallback
+        env:
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import shutil
+          from pathlib import Path
+
+          site = Path("artifacts/publish/wwwroot")
+          index = site / "index.html"
+          base_path = os.environ["BASE_PATH"].rstrip("/") + "/"
+          content = index.read_text(encoding="utf-8")
+          if '<base href="/" />' not in content:
+              raise RuntimeError("Could not find the Blazor base href placeholder.")
+          content = content.replace('<base href="/" />', f'<base href="{base_path}" />', 1)
+          index.write_text(content, encoding="utf-8")
+          shutil.copyfile(index, site / "404.html")
+          PY
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: artifacts/publish/wwwroot
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
