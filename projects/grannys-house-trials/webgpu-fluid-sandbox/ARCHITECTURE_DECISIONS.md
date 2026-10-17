@@ -138,7 +138,8 @@ architecture:
   loop; visibility changes also resolve waits so a suspended animation frame
   cannot strand component disposal. Reset commits cached water/terrain/tick only
   after upload completion; a failed partial reset invalidates recovery and
-  explicitly resets CPU state.
+  explicitly resets CPU state. Backend view sessions serialize old-page disposal
+  and new-page initialization so asynchronous cleanup cannot clear remounted views.
 - Actual redraw FPS, ticks/sec, draw cost, CPU step cost, and GPU dispatch/readback
   wall-clock roundtrip are sampled every 500 ms. The latter is not GPU execution
   time. Selection reads cached display depths without another GPU map or full

@@ -228,14 +228,14 @@
         {
             _simulation.Reset();
             _summaryDirty = true;
-            _gpuCycles = 0;
             _terrainForCpu = _simulation.GetTerrainSnapshot();
             _comparison = null;
-            await RenderCpuAsync();
             if (_gpuSupported)
             {
                 await Gpu.ResetAsync(_simulation, _cpuEnabled);
             }
+            _gpuCycles = 0;
+            await RenderCpuAsync();
             _referenceStatus = _cpuEnabled ? "Independent CPU reference enabled · reset baseline at tick 0."
                 : "CPU reference off · reset GPU baseline at tick 0.";
         });
