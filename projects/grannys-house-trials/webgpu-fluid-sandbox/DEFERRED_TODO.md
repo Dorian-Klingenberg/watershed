@@ -4,10 +4,15 @@ This list records work and decisions discussed but intentionally deferred.
 Nothing here authorizes implementation. Priorities are not implied unless
 explicitly stated.
 
+## First iteration direction
+
+- [ ] Use regular rendering for the first iteration while establishing a decent
+  cellular-fluid simulation.
+- [ ] Explore the existing column-raycast rendering approach later, after the
+  fluid simulation is working well.
+
 ## Resolve before implementation
 
-- [ ] Decide whether the first visible version uses the existing
-  column-raycast approach or a simpler temporary visualization.
 - [ ] Define the minimal interaction set. Reset, a small center water pour, and
   manual stepping are current candidate controls only.
 - [ ] Define the C# and browser GPU boundary, including which side owns active
