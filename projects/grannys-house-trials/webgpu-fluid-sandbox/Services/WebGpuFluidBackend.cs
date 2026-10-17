@@ -27,35 +27,47 @@ public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
             CellularFluidSimulation.DrainEdges);
     }
 
-    public ValueTask ResetAsync(CellularFluidSimulation simulation) =>
-        Module.InvokeVoidAsync("reset", simulation.GetTerrainSnapshot(), simulation.GetWaterSnapshot());
+    public ValueTask ResetAsync(CellularFluidSimulation simulation, bool cpuEnabled) =>
+        Module.InvokeVoidAsync("reset", simulation.GetTerrainSnapshot(),
+            cpuEnabled ? simulation.GetWaterSnapshot() : new float[simulation.Width * simulation.Height]);
 
     public ValueTask ApplyEditsAsync(int[]? terrain, float[]? waterDelta) =>
         Module.InvokeVoidAsync("applyEdits", terrain, waterDelta);
 
     public async ValueTask InitializeViewsAsync<T>(
-        ElementReference cpuCanvas, ElementReference gpuCanvas, ElementReference scrollbar,
+        ElementReference cpuCanvas, ElementReference gpuCanvas, ElementReference scrollbar, ElementReference verticalScrollbar,
         DotNetObjectReference<T> callback, CellularFluidSimulation simulation) where T : class
     {
         _views = await jsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/landscape-view.js");
-        await _views.InvokeVoidAsync("initialize", cpuCanvas, gpuCanvas, scrollbar, callback,
+        await _views.InvokeVoidAsync("initialize", cpuCanvas, gpuCanvas, scrollbar, verticalScrollbar, callback,
             simulation.Width, simulation.Height, simulation.GetTerrainSnapshot(), simulation.GetWaterSnapshot());
     }
 
-    public ValueTask StepAsync() =>
-        Module.InvokeVoidAsync("step");
+    public ValueTask StepAsync(int ticks) =>
+        Module.InvokeVoidAsync("step", ticks);
 
-    public ValueTask<float[]> GetSnapshotAsync() =>
-        Module.InvokeAsync<float[]>("snapshot");
+    public ValueTask<GpuBaseline> GetSnapshotAsync(bool fresh = false) =>
+        Module.InvokeAsync<GpuBaseline>("snapshot", fresh);
+
+    public ValueTask SetCpuEnabledAsync(bool enabled) =>
+        Views.InvokeVoidAsync("setCpuEnabled", enabled);
+
+    public ValueTask SetGpuEnabledAsync(bool enabled) =>
+        Views.InvokeVoidAsync("setGpuEnabled", enabled);
+
+    public ValueTask<bool> WaitForDisplayAsync() =>
+        Views.InvokeAsync<bool>("waitForDisplay");
 
     public ValueTask RenderCpuAsync(
         ElementReference canvas,
-        int[] terrain,
+        int[]? terrain,
         float[] water,
         int width,
         int height) =>
-        (_views ?? throw new InvalidOperationException("Views are not initialized."))
-            .InvokeVoidAsync("renderCpu", terrain, water);
+        Views.InvokeVoidAsync("renderCpu", terrain, water);
+
+    private IJSObjectReference Views =>
+        _views ?? throw new InvalidOperationException("Views are not initialized.");
 
     private IJSObjectReference Module =>
         _module ?? throw new InvalidOperationException("The WebGPU module has not been initialized.");
@@ -85,3 +97,4 @@ public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
 }
 
 public sealed record GpuInitializationResult(bool Supported, string Message);
+public sealed record GpuBaseline(float[] Water, int Cycles);

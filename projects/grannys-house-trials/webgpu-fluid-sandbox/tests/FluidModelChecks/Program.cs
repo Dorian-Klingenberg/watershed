@@ -96,6 +96,41 @@ blockedChannel.Step();
 Assert(blockedChannel.GetCell(2, 2).WaterDepth > 0, "water overtops a submerged barrier");
 AssertNear(20, blockedChannel.GetSummary().TotalWater, 0.0001, "barrier overflow conserves water");
 
+var suspended = new CellularFluidSimulation(5, 5, new int[25]);
+suspended.AddWater(2, 2, 0, 4);
+var frozen = suspended.GetWaterSnapshot();
+var gpuOnlyEdit = suspended.AddWater(1, 2, 0, 7, applyToReference: false);
+Assert(suspended.GetWaterSnapshot().SequenceEqual(frozen), "GPU-only pour creates a domain edit without changing frozen reference water");
+AssertNear(7, gpuOnlyEdit.Sum(), 0, "GPU-only domain edit retains the same brush policy");
+suspended.AddBarrier([11]);
+Assert(suspended.GetCell(1, 2).TerrainHeight == 12, "terrain policy remains active without CPU stepping");
+Assert(suspended.CycleCount == 0, "domain edits do not advance the disabled reference");
+var baseline = new float[25];
+baseline[12] = 9;
+suspended.SynchronizeWater(baseline, 42);
+Assert(suspended.CycleCount == 42, "explicit baseline synchronization restores GPU tick identity");
+AssertNear(9, suspended.GetSummary().TotalWater, 0, "synchronization replaces frozen reference water");
+baseline[12] = 100;
+AssertNear(9, suspended.GetCell(2, 2).WaterDepth, 0, "baseline import does not alias caller data");
+var resumedPeer = new CellularFluidSimulation(5, 5, suspended.GetTerrainSnapshot());
+resumedPeer.SynchronizeWater(suspended.GetWaterSnapshot(), 42);
+for (var i = 0; i < 8; i++) { suspended.Step(); resumedPeer.Step(); }
+Assert(FluidComparison.Compare(suspended.GetWaterSnapshot(), resumedPeer.GetWaterSnapshot(), 0).Matches,
+    "independent reference stepping resumes deterministically after synchronization");
+ExpectThrows<ArgumentException>(() => suspended.SynchronizeWater([1], 42), "baseline dimension mismatch is rejected");
+var invalidBaseline = suspended.GetWaterSnapshot();
+invalidBaseline[0] = float.NaN;
+ExpectThrows<ArgumentException>(() => suspended.SynchronizeWater(invalidBaseline, 42), "non-finite baseline is rejected atomically");
+invalidBaseline[0] = -1;
+ExpectThrows<ArgumentException>(() => suspended.SynchronizeWater(invalidBaseline, 42), "negative baseline is rejected");
+ExpectThrows<ArgumentException>(() => suspended.SynchronizeWater(new float[25], -1), "negative baseline tick is rejected");
+Assert(suspended.CycleCount == 50, "invalid synchronization leaves tick unchanged");
+suspended.Step();
+var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+for (var i = 0; i < 20; i++) suspended.Step();
+var allocatedBySteps = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+Assert(allocatedBySteps == 0, "CPU ticks reuse their delta buffer without managed allocations");
+
 Console.WriteLine("All fluid model checks passed.");
 
 static void Assert(bool condition, string description)

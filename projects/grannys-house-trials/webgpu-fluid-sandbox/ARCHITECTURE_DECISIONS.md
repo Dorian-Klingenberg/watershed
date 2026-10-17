@@ -108,14 +108,21 @@ architecture:
 - `wwwroot/js/fluid-gpu.js` owns WebGPU resources and executes the WGSL
   propose/apply passes. The GPU state stays in ping-pong buffers between actions.
 - Reset uploads the complete starting field. Pours send additive edits, preserving
-  each implementation's independent water state. Barrier strokes update terrain
-  without replacing water. Each paired tick reads GPU water back for drawing.
+  each active implementation's independent water state. Barrier strokes update terrain
+  without replacing water. Each display batch reads GPU water back once for drawing.
 - After each tick, water on the field's outer boundary is drained.
-- `Compare states` requests a GPU snapshot across interop and compares it to the
+- `Compare states` requests the cached completed GPU snapshot across interop and compares it to the
   C# snapshot, reporting mismatch count, maximum cell error, and water-total
   error.
-- When WebGPU cannot initialize, the C# reference remains available.
-- Both views share selection, hover, camera, and horizontal navigation. Vertical
+- When WebGPU cannot initialize, the C# reference remains available. GPU failure
+  restores the last completed display baseline/tick before activating CPU fallback;
+  an unrecoverable baseline explicitly resets, never resumes stale reference water.
+- The CPU reference toggle skips solver stepping, water snapshots, drawing, and
+  summary scans while off. C# retains domain/terrain/edit policy. Re-enabling uses
+  a fresh GPU readback and its tick as an explicitly announced new baseline;
+  subsequent edits/steps remain independent, not ongoing synchronization.
+- Both views share selection, hover, camera, and two-axis landscape navigation.
+  The depth-axis slider sits physically to the right of the views. Vertical
   page scrolling and responsive layout keep controls reachable on small screens.
 - The sloped scene and barriers are reusable across future solver experiments;
   momentum-based waves remain outside the current cellular solver's scope.
@@ -123,6 +130,19 @@ architecture:
   pours, input validation, and comparison behavior.
 - `.github/workflows/deploy-webgpu-fluid-sandbox.yml` publishes the static app to
   GitHub Pages.
+- A serialized display-paced loop replaces the fixed tick delay. Configurable
+  1/2/4/8-tick batches amortize one GPU readback; manual Step remains one tick.
+  CPU delta storage, unchanged terrain, projected geometry, and column order are
+  reused. Only dirty, visible, enabled canvases redraw.
+- Actual redraw FPS, ticks/sec, draw cost, CPU step cost, and GPU dispatch/readback
+  wall-clock roundtrip are sampled every 500 ms. The latter is not GPU execution
+  time. Selection reads cached display depths without another GPU map or full
+  snapshot transfer to C#.
+- Dedicated message-passing workers are feasible on static hosting without shared
+  memory; moving the C# runtime or WebGPU device into one needs a separate ownership
+  and bootstrap design. Shared-memory/WASM threads require cross-origin isolation,
+  which this Pages workflow does not configure. No worker or parallel mixed-solver
+  architecture is required here; see README for the hosting assessment.
 
 The earlier diagrams below are conceptual planning sketches; the current
 implementation boundary is described above and in [README.md](./README.md).

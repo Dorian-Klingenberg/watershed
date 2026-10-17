@@ -9,7 +9,7 @@
         <div>
             <p class="eyebrow">WEBGPU FLUID SANDBOX · FIRST EXPERIMENT</p>
             <h1>Cellular Fluid Lab</h1>
-            <p class="intro">A small water field, stepped in parallel on the GPU and in a C# reference.</p>
+            <p class="intro">A GPU water field with an optional independent C# reference.</p>
         </div>
         <div class="engine-status @(_gpuSupported ? "ready" : "waiting")" role="status">
             <span class="status-dot"></span>
@@ -24,10 +24,16 @@
         </div>
         <div class="actions">
             <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ToggleRun" Disabled="@(!_initialized)">@(_running ? "Pause" : "Run")</FluentButton>
-            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="PourAsync" Disabled="@(_busy || !_initialized)">Pour 12 in</FluentButton>
-            <FluentButton OnClick="StepAsync" Disabled="@(_busy || !_initialized)">Step @(_gpuSupported ? "both" : "CPU")</FluentButton>
-            <FluentButton OnClick="CompareAsync" Disabled="@(_busy || !_initialized || !_gpuSupported)">Compare states</FluentButton>
-            <FluentButton OnClick="ResetAsync" Disabled="@(_busy || !_initialized)">Reset</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="PourAsync" Disabled="@(!_initialized)">Pour 12 in</FluentButton>
+            <FluentButton OnClick="StepAsync" Disabled="@(!_initialized)">Step @(_gpuSupported ? (_cpuEnabled ? "both" : "GPU") : "CPU")</FluentButton>
+            <FluentButton OnClick="ToggleCpuAsync" Disabled="@(!_initialized || !_gpuSupported)">CPU reference: @(_cpuEnabled ? "on" : "off")</FluentButton>
+            <FluentButton OnClick="CompareAsync" Disabled="@(!_initialized || !_gpuSupported || !_cpuEnabled)">Compare states</FluentButton>
+            <FluentButton OnClick="ResetAsync" Disabled="@(!_initialized)">Reset</FluentButton>
+            <label class="batch-control">Ticks / display
+                <select @bind="_ticksPerDisplay" aria-label="Ticks per display">
+                    <option value="1">1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option>
+                </select>
+            </label>
         </div>
     </section>
 
@@ -36,8 +42,9 @@
         <div class="alert" role="alert">@_errorMessage</div>
     }
 
-    <section class="field-pair" aria-label="CPU and GPU simulation views">
-        <article class="field-card">
+    <div class="landscape-navigation">
+    <section class="field-pair @(!_cpuEnabled || !_gpuSupported ? "single-view" : null)" aria-label="CPU and GPU simulation views">
+        <article class="field-card" hidden="@(!_cpuEnabled)">
             <div class="card-heading">
                 <div>
                     <span class="eyebrow">REFERENCE</span>
@@ -49,7 +56,7 @@
             <div class="legend"><span class="dry-swatch"></span> dry terrain <span class="water-swatch"></span> water depth</div>
         </article>
 
-        <article class="field-card">
+        <article class="field-card" hidden="@(!_gpuSupported)">
             <div class="card-heading">
                 <div>
                     <span class="eyebrow">COMPUTE</span>
@@ -61,6 +68,11 @@
             <div class="legend"><span class="dry-swatch"></span> dry terrain <span class="water-swatch"></span> water depth</div>
         </article>
     </section>
+    <div class="vertical-navigation">
+        <label for="landscape-vertical">Depth position · both views</label>
+        <input @ref="_landscapeVertical" id="landscape-vertical" aria-label="Vertical landscape position · both views" type="range" min="0" max="64" value="32" step="0.1" />
+    </div>
+    </div>
 
     <section class="navigation-panel" aria-label="Linked landscape navigation">
         <label for="landscape-scroll">Horizontal landscape position · both views</label>
@@ -68,13 +80,16 @@
         <p>Left click: select · Left drag: orbit · Wheel over land: zoom · Right click: pour · Right drag: draw barrier.</p>
         <p>Scroll the page using the margin or vertical scrollbar. Touch-drag over a view orbits; swipe outside it to scroll.</p>
         <p role="status">@_selectionText</p>
+        <p role="status">@_referenceStatus</p>
     </section>
 
     <section class="readout" aria-label="Simulation readout">
         <div class="metric">
             <span class="eyebrow">TICK</span>
-            <strong>@_summary.Cycles</strong>
+            <strong>@(_gpuSupported ? _gpuCycles : _simulation.CycleCount)</strong>
         </div>
+        @if (_cpuEnabled)
+        {
         <div class="metric">
             <span class="eyebrow">WET CELLS</span>
             <strong>@_summary.WetCells</strong>
@@ -87,6 +102,19 @@
             <span class="eyebrow">MAX DEPTH</span>
             <strong>@_summary.MaximumDepth.ToString("F2") <small>in</small></strong>
         </div>
+        }
+        else
+        {
+            <p>GPU authoritative · CPU snapshots and statistics suspended.</p>
+        }
+    </section>
+
+    <section class="readout performance" aria-label="Performance readout">
+        <div class="metric"><span class="eyebrow">CPU / GPU DRAW FPS</span><strong>@_cpuFps.ToString("F1") / @_gpuFps.ToString("F1")</strong></div>
+        <div class="metric"><span class="eyebrow">TICKS / SEC</span><strong>@_ticksPerSecond.ToString("F1")</strong></div>
+        <div class="metric"><span class="eyebrow">CPU / GPU DRAW MS</span><strong>@_cpuDrawMs.ToString("F2") / @_gpuDrawMs.ToString("F2")</strong></div>
+        <div class="metric"><span class="eyebrow">CPU STEP MS / TICK</span><strong>@(_cpuEnabled ? _cpuStepMs.ToString("F2") : "off")</strong></div>
+        <div class="metric"><span class="eyebrow">GPU DISPATCH + READBACK MS / BATCH</span><strong>@(_gpuSupported ? _gpuRoundtripMs.ToString("F2") : "unavailable")</strong><small>Wall-clock roundtrip, not GPU execution time</small></div>
     </section>
 
     @if (_comparison is not null)
@@ -118,6 +146,7 @@
     private ElementReference _cpuCanvas;
     private ElementReference _gpuCanvas;
     private ElementReference _landscapeScroll;
+    private ElementReference _landscapeVertical;
     private DotNetObjectReference<Home>? _callback;
     private readonly SemaphoreSlim _actionGate = new(1, 1);
     private CancellationTokenSource? _runCancellation;
@@ -127,12 +156,20 @@
     private int? _selectedIndex;
     private string _selectionText = "Select a cell in either view to inspect it.";
     private FluidSummary _summary;
+    private bool _summaryDirty;
     private FluidComparisonResult? _comparison;
     private bool _gpuSupported;
     private bool _initialized;
-    private bool _busy;
     private string _gpuMessage = "Checking WebGPU support…";
     private string? _errorMessage;
+    private bool _cpuEnabled = true;
+    private int _gpuCycles;
+    private int _ticksPerDisplay = 2;
+    private int[]? _terrainForCpu;
+    private string _referenceStatus = "Independent CPU reference enabled · initial baseline at tick 0.";
+    private double _cpuFps, _gpuFps, _cpuDrawMs, _gpuDrawMs, _cpuStepMs, _gpuRoundtripMs, _ticksPerSecond;
+    private long _metricStart = System.Diagnostics.Stopwatch.GetTimestamp();
+    private int _metricTicks;
 
     protected override void OnInitialized()
     {
@@ -153,10 +190,12 @@
             try
             {
                 _callback = DotNetObjectReference.Create(this);
-                await Gpu.InitializeViewsAsync(_cpuCanvas, _gpuCanvas, _landscapeScroll, _callback, _simulation);
+                await Gpu.InitializeViewsAsync(_cpuCanvas, _gpuCanvas, _landscapeScroll, _landscapeVertical, _callback, _simulation);
                 var result = await Gpu.InitializeAsync(_gpuCanvas, _simulation);
                 _gpuSupported = result.Supported;
                 _gpuMessage = result.Message;
+                await Gpu.SetGpuEnabledAsync(_gpuSupported);
+                if (!_gpuSupported) _referenceStatus = "CPU fallback active · WebGPU unavailable.";
             }
             catch (Exception exception)
             {
@@ -188,12 +227,17 @@
         await RunActionAsync(async () =>
         {
             _simulation.Reset();
+            _summaryDirty = true;
+            _gpuCycles = 0;
+            _terrainForCpu = _simulation.GetTerrainSnapshot();
             _comparison = null;
             await RenderCpuAsync();
             if (_gpuSupported)
             {
-                await Gpu.ResetAsync(_simulation);
+                await Gpu.ResetAsync(_simulation, _cpuEnabled);
             }
+            _referenceStatus = _cpuEnabled ? "Independent CPU reference enabled · reset baseline at tick 0."
+                : "CPU reference off · reset GPU baseline at tick 0.";
         });
     }
 
@@ -201,7 +245,8 @@
     {
         await RunActionAsync(async () =>
         {
-            var delta = _simulation.AddWater(_simulation.Width / 2, 12, PourRadius, PourDepthInches);
+            var delta = _simulation.AddWater(_simulation.Width / 2, 12, PourRadius, PourDepthInches, _cpuEnabled);
+            if (_cpuEnabled) _summaryDirty = true;
             _comparison = null;
             await RenderCpuAsync();
             if (_gpuSupported)
@@ -211,20 +256,30 @@
         });
     }
 
-    private Task StepAsync() => AdvanceAsync(CancellationToken.None);
+    private Task StepAsync() => AdvanceAsync(CancellationToken.None, 1);
 
-    private async Task AdvanceAsync(CancellationToken cancellationToken)
+    private async Task AdvanceAsync(CancellationToken cancellationToken, int ticks)
     {
         await RunActionAsync(async () =>
         {
             if (cancellationToken.IsCancellationRequested) return;
-            _simulation.Step();
+            if (_cpuEnabled)
+            {
+                var start = System.Diagnostics.Stopwatch.GetTimestamp();
+                for (var i = 0; i < ticks; i++) _simulation.Step();
+                _summaryDirty = true;
+                _cpuStepMs = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds / ticks;
+            }
             _comparison = null;
             await RenderCpuAsync();
             if (_gpuSupported)
             {
-                await Gpu.StepAsync();
+                var start = System.Diagnostics.Stopwatch.GetTimestamp();
+                await Gpu.StepAsync(ticks);
+                _gpuRoundtripMs = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+                _gpuCycles += ticks;
             }
+            _metricTicks += ticks;
         });
     }
 
@@ -255,19 +310,30 @@
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                await AdvanceAsync(cancellationToken);
-                await InvokeAsync(StateHasChanged);
+                var visible = await Gpu.WaitForDisplayAsync();
+                if (cancellationToken.IsCancellationRequested) break;
+                if (!visible) continue;
+                await AdvanceAsync(cancellationToken, _ticksPerDisplay);
                 if (_errorMessage is not null) break;
-                await Task.Delay(60, cancellationToken);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (Exception exception)
+        {
+            StopRun();
+            _errorMessage = exception.Message;
+        }
         finally
         {
             if (_runCancellation?.Token == cancellationToken) _running = false;
             if (!_disposed) await InvokeAsync(StateHasChanged);
         }
     }
+
+    [JSInvokable]
+    public Task HandleGpuFailure(string message) =>
+        RunActionAsync(() => !_initialized || !_gpuSupported
+            ? Task.CompletedTask : throw new JSException(message));
 
     [JSInvokable]
     public async Task HandleLandscapeAction(string action, int x, int y, int[] cells)
@@ -279,17 +345,19 @@
             _selectedIndex = cell.Y * _simulation.Width + cell.X;
             if (action == "pour")
             {
-                var delta = _simulation.AddWater(x, y, 1, PourDepthInches);
+                var delta = _simulation.AddWater(x, y, 1, PourDepthInches, _cpuEnabled);
+                if (_cpuEnabled) _summaryDirty = true;
                 _comparison = null;
                 if (_gpuSupported) await Gpu.ApplyEditsAsync(null, delta);
             }
             else if (action == "barrier")
             {
                 _simulation.AddBarrier(cells);
+                _terrainForCpu = _simulation.GetTerrainSnapshot();
                 _comparison = null;
-                if (_gpuSupported) await Gpu.ApplyEditsAsync(_simulation.GetTerrainSnapshot(), null);
+                if (_gpuSupported) await Gpu.ApplyEditsAsync(_terrainForCpu, null);
             }
-            await RenderCpuAsync();
+            if (action is "pour" or "barrier") await RenderCpuAsync();
         });
         if (!_disposed) await InvokeAsync(StateHasChanged);
     }
@@ -298,9 +366,64 @@
     {
         await RunActionAsync(async () =>
         {
+            if (!_cpuEnabled || !_gpuSupported) return;
             var gpuWater = await Gpu.GetSnapshotAsync();
-            _comparison = FluidComparison.Compare(_simulation.GetWaterSnapshot(), gpuWater);
+            _comparison = FluidComparison.Compare(_simulation.GetWaterSnapshot(), gpuWater.Water);
         });
+    }
+
+    private async Task ToggleCpuAsync()
+    {
+        await RunActionAsync(async () =>
+        {
+            if (!_gpuSupported) return;
+            _comparison = null;
+            if (_cpuEnabled)
+            {
+                _cpuEnabled = false;
+                await Gpu.SetCpuEnabledAsync(false);
+                _referenceStatus = "CPU reference off · GPU authoritative. Re-enabling starts a fresh GPU baseline.";
+            }
+            else
+            {
+                var baseline = await Gpu.GetSnapshotAsync(fresh: true);
+                _simulation.SynchronizeWater(baseline.Water, baseline.Cycles);
+                _summaryDirty = true;
+                _gpuCycles = baseline.Cycles;
+                _cpuEnabled = true;
+                _terrainForCpu = _simulation.GetTerrainSnapshot();
+                await Gpu.SetCpuEnabledAsync(true);
+                await RenderCpuAsync();
+                _referenceStatus = $"CPU re-synchronized from GPU at tick {baseline.Cycles} · new independent comparison baseline.";
+            }
+        });
+    }
+
+    [JSInvokable]
+    public async Task HandlePresentationReadout(double cpuFps, double gpuFps, double cpuDrawMs, double gpuDrawMs, double? gpuDepth)
+    {
+        if (_disposed) return;
+        _cpuFps = cpuFps;
+        _gpuFps = gpuFps;
+        _cpuDrawMs = cpuDrawMs;
+        _gpuDrawMs = gpuDrawMs;
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        _ticksPerSecond = _metricTicks / System.Diagnostics.Stopwatch.GetElapsedTime(_metricStart, now).TotalSeconds;
+        _metricTicks = 0;
+        _metricStart = now;
+        if (_cpuEnabled && _summaryDirty)
+        {
+            _summary = _simulation.GetSummary();
+            _summaryDirty = false;
+        }
+        if (_selectedIndex is int index)
+        {
+            var cell = _simulation.GetCell(index % _simulation.Width, index / _simulation.Width);
+            _selectionText = $"Cell ({cell.X}, {cell.Y}) · terrain {cell.TerrainHeight} in";
+            if (_cpuEnabled) _selectionText += $" · CPU water {cell.WaterDepth:F3} in";
+            if (_gpuSupported && gpuDepth is double depth) _selectionText += $" · GPU water {depth:F3} in";
+        }
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task RunActionAsync(Func<Task> action)
@@ -311,47 +434,59 @@
             _actionGate.Release();
             return;
         }
-        _busy = true;
         _errorMessage = null;
         try
         {
             await action();
-            if (_selectedIndex is int index)
-            {
-                var cell = _simulation.GetCell(index % _simulation.Width, index / _simulation.Width);
-                _selectionText = $"Cell ({cell.X}, {cell.Y}) · terrain {cell.TerrainHeight} in · CPU water {cell.WaterDepth:F3} in";
-                if (_gpuSupported)
-                {
-                    var gpuWater = await Gpu.GetSnapshotAsync();
-                    _selectionText += $" · GPU water {gpuWater[index]:F3} in";
-                }
-            }
         }
         catch (Exception exception)
         {
             if (exception is JSException)
             {
+                StopRun();
+                // The last displayed GPU field is recoverable even after device loss.
+                // Never resume a reference that was frozen while GPU-only ticks ran.
+                try
+                {
+                    var baseline = await Gpu.GetSnapshotAsync();
+                    _simulation.SynchronizeWater(baseline.Water, baseline.Cycles);
+                    _referenceStatus = $"CPU fallback recovered the last displayed GPU baseline at tick {baseline.Cycles}.";
+                }
+                catch
+                {
+                    _simulation.Reset();
+                    _referenceStatus = "GPU recovery unavailable · CPU fallback explicitly reset to tick 0 (not stale reference state).";
+                }
+                _cpuEnabled = true;
+                _summaryDirty = true;
                 _gpuSupported = false;
-                _gpuMessage = "WebGPU stopped; the CPU reference remains available.";
+                _comparison = null;
+                _terrainForCpu = _simulation.GetTerrainSnapshot();
+                await Gpu.SetCpuEnabledAsync(true);
+                await Gpu.SetGpuEnabledAsync(false);
+                await RenderCpuAsync();
+                _gpuMessage = "WebGPU stopped; CPU fallback active. Last unconfirmed GPU work may be lost.";
             }
 
             _errorMessage = exception.Message;
         }
         finally
         {
-            _summary = _simulation.GetSummary();
-            _busy = false;
             _actionGate.Release();
         }
     }
 
-    private Task RenderCpuAsync() =>
-        Gpu.RenderCpuAsync(
+    private async Task RenderCpuAsync()
+    {
+        if (!_cpuEnabled) return;
+        await Gpu.RenderCpuAsync(
             _cpuCanvas,
-            _simulation.GetTerrainSnapshot(),
+            _terrainForCpu,
             _simulation.GetWaterSnapshot(),
             _simulation.Width,
-            _simulation.Height).AsTask();
+            _simulation.Height);
+        _terrainForCpu = null;
+    }
 
     public async ValueTask DisposeAsync()
     {

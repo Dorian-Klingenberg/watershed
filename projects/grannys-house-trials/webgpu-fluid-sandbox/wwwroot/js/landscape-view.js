@@ -9,10 +9,11 @@ function snapshot(values, count) {
     if (!values || values.length !== count) {
         throw new Error(`Landscape snapshots require ${count} cells.`);
     }
+    if (values instanceof Float32Array) return values;
     return Float32Array.from(values, value => Number.isFinite(value) ? value : 0);
 }
 
-export function initialize(cpuCanvas, gpuCanvas, scrollbar, dotnet, width, height, terrain, water) {
+export function initialize(cpuCanvas, gpuCanvas, scrollbar, verticalScrollbar, dotnet, width, height, terrain, water) {
     dispose();
     if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 ||
         width * height > 262144) {
@@ -28,7 +29,7 @@ export function initialize(cpuCanvas, gpuCanvas, scrollbar, dotnet, width, heigh
         maximum = Math.max(maximum, value);
     }
     const s = {
-        width, height, dotnet, scrollbar, ground,
+        width, height, dotnet, scrollbar, verticalScrollbar, ground,
         base: (minimum - 2) * heightScale,
         camera: {
             x: width / 2, y: height / 2, z: (minimum + maximum) * heightScale / 2,
@@ -36,14 +37,16 @@ export function initialize(cpuCanvas, gpuCanvas, scrollbar, dotnet, width, heigh
         },
         span: Math.max(width, height) + (maximum - minimum) * heightScale,
         views: [], listeners: [], frame: null, queue: Promise.resolve(),
-        selected: null, hover: null, gesture: null, disposed: false
+        selected: null, hover: null, gesture: null, disposed: false,
+        order: null, orderAzimuth: null, terrainVersion: 0, metricTime: performance.now()
     };
     for (const canvas of [cpuCanvas, gpuCanvas]) {
         const context = canvas.getContext("2d");
         if (!context) throw new Error("Landscape presentation requires a Canvas2D canvas.");
         s.views.push({
             canvas, context, water: initialWater.slice(), width: 1, height: 1,
-            oldTouchAction: canvas.style.touchAction
+            oldTouchAction: canvas.style.touchAction, enabled: true, visible: true, dirty: true,
+            draws: 0, drawMs: 0, geometry: null
         });
     }
     state = s;
@@ -74,9 +77,84 @@ export function initialize(cpuCanvas, gpuCanvas, scrollbar, dotnet, width, heigh
             schedule(s);
         });
     }
+    if (verticalScrollbar) {
+        verticalScrollbar.max = String(height);
+        verticalScrollbar.value = String(s.camera.y);
+        listen(s, verticalScrollbar, "input", () => {
+            const y = Number(verticalScrollbar.value);
+            if (!Number.isFinite(y)) return;
+            cancelGesture(s);
+            s.camera.y = clamp(y, 0, height);
+            s.hover = null;
+            schedule(s);
+        });
+    }
     s.observer = new ResizeObserver(() => schedule(s));
     for (const view of s.views) s.observer.observe(view.canvas);
+    s.visibility = new IntersectionObserver(entries => {
+        for (const entry of entries) {
+            const view = s.views.find(item => item.canvas === entry.target);
+            view.visible = entry.isIntersecting;
+        }
+        schedule(s);
+    });
+    for (const view of s.views) s.visibility.observe(view.canvas);
+    listen(s, document, "visibilitychange", () => { if (!document.hidden) schedule(s); });
+    s.metrics = setInterval(() => reportMetrics(s), 500);
     schedule(s);
+}
+
+export function setCpuEnabled(enabled) {
+    const s = state;
+    if (!s) return;
+    s.views[0].enabled = enabled;
+    s.views[0].draws = 0;
+    s.views[0].drawMs = 0;
+    if (!enabled && s.gesture?.view === s.views[0]) cancelGesture(s);
+    if (enabled) schedule(s);
+}
+
+export function setGpuEnabled(enabled) {
+    if (!state) return;
+    state.views[1].enabled = enabled;
+    if (enabled) schedule(state);
+}
+
+export function notifyGpuFailure(message) {
+    const s = state;
+    if (s && !s.disposed) {
+        s.dotnet.invokeMethodAsync("HandleGpuFailure", message)
+            .catch(error => { if (!s.disposed) console.warn("GPU recovery failed:", error); });
+    }
+}
+
+export async function waitForDisplay() {
+    const s = state;
+    if (!s || s.disposed) return false;
+    if (document.hidden) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return false;
+    }
+    await new Promise(resolve => {
+        const frame = requestAnimationFrame(() => { clearTimeout(timeout); resolve(); });
+        const timeout = setTimeout(() => { cancelAnimationFrame(frame); resolve(); }, 100);
+    });
+    return !s.disposed && !document.hidden;
+}
+
+function reportMetrics(s) {
+    if (s.disposed || s.reporting || document.hidden) return;
+    const now = performance.now(), seconds = (now - s.metricTime) / 1000;
+    const [cpu, gpu] = s.views;
+    const values = [cpu.draws / seconds, gpu.draws / seconds,
+        cpu.draws ? cpu.drawMs / cpu.draws : 0, gpu.draws ? gpu.drawMs / gpu.draws : 0];
+    for (const view of s.views) { view.draws = 0; view.drawMs = 0; }
+    s.metricTime = now;
+    const depth = s.selected ? gpu.water[s.selected.index] : null;
+    s.reporting = true;
+    s.dotnet.invokeMethodAsync("HandlePresentationReadout", ...values, depth)
+        .catch(error => { if (!s.disposed) console.warn("Performance readout failed:", error); })
+        .finally(() => { s.reporting = false; });
 }
 
 export function renderCpu(terrain, water) {
@@ -91,12 +169,19 @@ function update(index, terrain, water) {
     const s = state;
     if (!s || s.disposed) return;
     const count = s.width * s.height;
-    const ground = snapshot(terrain, count);
     const depths = snapshot(water, count);
-    s.ground = ground;
-    s.views[index].water = depths;
-    for (const value of ground) s.base = Math.min(s.base, (value - 2) * heightScale);
-    schedule(s);
+    const view = s.views[index];
+    const waterChanged = depths.some((value, cell) => value !== view.water[cell]);
+    if (terrain) {
+        s.ground = snapshot(terrain, count);
+        s.terrainVersion++;
+        for (const value of s.ground) s.base = Math.min(s.base, (value - 2) * heightScale);
+        for (const view of s.views) view.dirty = true;
+    }
+    view.water = depths;
+    if (!terrain && !waterChanged) return;
+    view.dirty = true;
+    schedule(s, false);
 }
 
 function listen(s, target, type, handler, options) {
@@ -104,12 +189,21 @@ function listen(s, target, type, handler, options) {
     s.listeners.push(() => target.removeEventListener(type, handler, options));
 }
 
-function schedule(s) {
+function schedule(s, all = true) {
+    if (all) for (const view of s.views) view.dirty = true;
     if (s.disposed || s.frame !== null) return;
     s.frame = requestAnimationFrame(() => {
         s.frame = null;
         if (s.disposed) return;
-        for (const view of s.views) draw(s, view);
+        if (document.hidden) return;
+        for (const view of s.views) {
+            if (!view.enabled || !view.visible || !view.dirty || view.canvas.closest("[hidden]")) continue;
+            const start = performance.now();
+            draw(s, view);
+            view.drawMs += performance.now() - start;
+            view.draws++;
+            view.dirty = false;
+        }
     });
 }
 
@@ -161,64 +255,77 @@ function draw(s, view) {
     context.fillStyle = "#111e29";
     context.fillRect(0, 0, view.width, view.height);
     const b = basis(s, view);
-    const faces = [];
-    const face = (points, depth, color, index) => {
+    const geometryKey = JSON.stringify([view.width, view.height, s.camera, s.terrainVersion]);
+    if (view.geometryKey !== geometryKey) {
+        view.geometryKey = geometryKey;
+        view.geometry = new Array(s.width * s.height);
+    }
+    if (s.orderAzimuth !== s.camera.azimuth) {
+        s.orderAzimuth = s.camera.azimuth;
+        s.order = Array.from({ length: s.width * s.height }, (_, index) => index);
+        const depth = index => -b.sa * (index % s.width) + b.ca * Math.floor(index / s.width);
+        s.order.sort((a, c) => depth(a) - depth(c));
+    }
+    const preview = s.gesture?.button === 2 && s.gesture.dragged ? s.gesture.cells : null;
+    context.lineWidth = 1.5;
+    const face = (points, color, index) => {
         if (points.every(p => p[0] < -2) || points.every(p => p[0] > view.width + 2) ||
             points.every(p => p[1] < -2) || points.every(p => p[1] > view.height + 2)) return;
-        faces.push({ points, color, index, depth });
+        polygon(context, points, color);
+        if (index === null) return;
+        const outline = preview?.has(index) ? "#ffb454" :
+            s.selected?.index === index ? "#fff0a8" :
+            s.hover?.index === index ? "#baf5ff" : null;
+        if (outline) polygon(context, points, null, outline);
     };
     const level = (x, y) => x < 0 || x >= s.width || y < 0 || y >= s.height
         ? s.base : s.ground[y * s.width + x] * heightScale;
     const surface = (x, y) => x < 0 || x >= s.width || y < 0 || y >= s.height
         ? s.base : level(x, y) + Math.max(0, view.water[y * s.width + x]) * heightScale;
-    for (let y = 0; y < s.height; ++y) {
-        for (let x = 0; x < s.width; ++x) {
-            const index = y * s.width + x;
+    for (const index of s.order) {
+            const x = index % s.width, y = Math.floor(index / s.width);
             // A view ray visits disjoint XY columns in ground-depth order,
             // regardless of height. Sorting face centroids in 3D instead can
             // incorrectly draw a distant tall cliff over a nearer low column.
-            const depth = -b.sa * (x + 0.5) + b.ca * (y + 0.5);
             const z = level(x, y);
             const waterZ = surface(x, y);
-            const tone = clamp(Math.round(110 + s.ground[index] * 1.3), 80, 185);
-            const dryColor = `rgb(${tone},${Math.round(tone * 0.92)},${Math.round(tone * 0.65)})`;
-            face(top(s, b, x, y, z), depth, dryColor, index);
-            // Only camera-facing, exposed cliffs are submitted.
-            const sides = [
+            let geometry = view.geometry[index];
+            if (!geometry) {
+                const tone = clamp(Math.round(110 + s.ground[index] * 1.3), 80, 185);
+                const sides = [
                 { visible: -b.sa < 0, nx: x - 1, ny: y, a: [x, y + 1], c: [x, y], color: "#71634b" },
                 { visible: -b.sa >= 0, nx: x + 1, ny: y, a: [x + 1, y], c: [x + 1, y + 1], color: "#8a7855" },
                 { visible: b.ca < 0, nx: x, ny: y - 1, a: [x, y], c: [x + 1, y], color: "#6b604b" },
                 { visible: b.ca >= 0, nx: x, ny: y + 1, a: [x + 1, y + 1], c: [x, y + 1], color: "#827153" }
-            ];
-            for (const side of sides) {
-                if (!side.visible) continue;
-                const bottom = level(side.nx, side.ny);
+                ].filter(side => side.visible);
+                for (const side of sides) {
+                    side.bottom = level(side.nx, side.ny);
+                    if (side.bottom < z) side.points = [
+                        project(s, b, ...side.a, side.bottom), project(s, b, ...side.c, side.bottom),
+                        project(s, b, ...side.c, z), project(s, b, ...side.a, z)
+                    ];
+                }
+                geometry = view.geometry[index] = {
+                    top: top(s, b, x, y, z), sides,
+                    color: `rgb(${tone},${Math.round(tone * 0.92)},${Math.round(tone * 0.65)})`
+                };
+            }
+            face(geometry.top, geometry.color, index);
+            for (const side of geometry.sides) {
                 const sideFace = (low, high, color) => face([
                     project(s, b, ...side.a, low), project(s, b, ...side.c, low),
                     project(s, b, ...side.c, high), project(s, b, ...side.a, high)
-                ], depth, color, null);
-                if (bottom < z) sideFace(bottom, z, side.color);
+                ], color, null);
+                if (side.points) face(side.points, side.color, null);
                 const waterBottom = Math.max(z, surface(side.nx, side.ny));
                 if (waterZ > waterBottom + 0.00035) sideFace(waterBottom, waterZ, "#216a96");
             }
             if (waterZ > z + 0.00035) {
                 const waterDepth = Math.max(0, view.water[index]);
                 const light = Math.round(54 - Math.min(waterDepth, 18));
-                face(top(s, b, x, y, waterZ), depth,
+                face(top(s, b, x, y, waterZ),
                     `hsl(201 65% ${light}%)`, index);
             }
-        }
-    }
-    faces.sort((a, c) => a.depth - c.depth);
-    const preview = s.gesture?.button === 2 && s.gesture.dragged ? s.gesture.cells : null;
-    context.lineWidth = 1.5;
-    for (const f of faces) {
-        polygon(context, f.points, f.color);
-        if (f.index === null) continue;
-        const color = preview?.has(f.index) ? "#ffb454" :
-            s.selected?.index === f.index ? "#fff0a8" :
-            s.hover?.index === f.index ? "#baf5ff" : null;
-        if (color) polygon(context, f.points, null, color);
     }
 }
 
@@ -276,10 +383,11 @@ function anchor(s, view, point, hit) {
 
 function syncScrollbar(s) {
     if (s.scrollbar) s.scrollbar.value = String(clamp(s.camera.x, 0, s.width));
+    if (s.verticalScrollbar) s.verticalScrollbar.value = String(clamp(s.camera.y, 0, s.height));
 }
 
 function pointerDown(s, view, event) {
-    if (s.gesture || (event.button !== 0 && event.button !== 2) || event.isPrimary === false) return;
+    if (!view.enabled || s.gesture || (event.button !== 0 && event.button !== 2) || event.isPrimary === false) return;
     const point = local(view, event);
     const hit = pick(s, view, point);
     if (!hit) return;
@@ -341,7 +449,9 @@ function pointerMove(s, view, event) {
         if (s.gesture.pointerId === event.pointerId) moveGesture(s, view, event);
         return;
     }
-    s.hover = pick(s, view, local(view, event));
+    const hit = pick(s, view, local(view, event));
+    if (s.hover?.index === hit?.index) return;
+    s.hover = hit;
     schedule(s);
 }
 
@@ -405,6 +515,8 @@ export function dispose() {
     cancelGesture(s);
     if (s.frame !== null) cancelAnimationFrame(s.frame);
     s.observer?.disconnect();
+    s.visibility?.disconnect();
+    clearInterval(s.metrics);
     for (const remove of s.listeners) remove();
     for (const view of s.views) view.canvas.style.touchAction = view.oldTouchAction;
     s.dotnet = null;

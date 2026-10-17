@@ -13,6 +13,7 @@ public sealed class CellularFluidSimulation
     private readonly int[] _terrainHeights;
     private readonly int[] _initialTerrain;
     private readonly float[] _waterDepths;
+    private readonly float[] _stepDeltas;
 
     public CellularFluidSimulation(int width, int height, int[] terrainHeights)
     {
@@ -33,6 +34,7 @@ public sealed class CellularFluidSimulation
         _terrainHeights = (int[])terrainHeights.Clone();
         _initialTerrain = (int[])terrainHeights.Clone();
         _waterDepths = new float[terrainHeights.Length];
+        _stepDeltas = new float[terrainHeights.Length];
     }
 
     public int Width { get; }
@@ -72,7 +74,7 @@ public sealed class CellularFluidSimulation
     public void AddCenterWater(int radius, float depthInches)
         => AddWater(Width / 2, Height / 2, radius, depthInches);
 
-    public float[] AddWater(int centerX, int centerY, int radius, float depthInches)
+    public float[] AddWater(int centerX, int centerY, int radius, float depthInches, bool applyToReference = true)
     {
         if ((uint)centerX >= Width || (uint)centerY >= Height)
         {
@@ -103,7 +105,7 @@ public sealed class CellularFluidSimulation
                 var dy = y - centerY;
                 if (dx * dx + dy * dy <= radiusSquared)
                 {
-                    _waterDepths[y * Width + x] += depthInches;
+                    if (applyToReference) _waterDepths[y * Width + x] += depthInches;
                     additions[y * Width + x] = depthInches;
                 }
             }
@@ -139,7 +141,8 @@ public sealed class CellularFluidSimulation
 
     public void Step()
     {
-        var deltas = new float[_waterDepths.Length];
+        var deltas = _stepDeltas;
+        Array.Clear(deltas);
         Span<int> lowerIndices = stackalloc int[4];
         Span<float> lowerSurfaces = stackalloc float[4];
         Span<float> desiredInflows = stackalloc float[4];
@@ -214,6 +217,18 @@ public sealed class CellularFluidSimulation
 
     public int[] GetTerrainSnapshot() => (int[])_terrainHeights.Clone();
     public float[] GetWaterSnapshot() => (float[])_waterDepths.Clone();
+
+    public void SynchronizeWater(float[] water, int cycles)
+    {
+        ArgumentNullException.ThrowIfNull(water);
+        if (water.Length != _waterDepths.Length || cycles < 0 ||
+            water.Any(depth => !float.IsFinite(depth) || depth < 0))
+        {
+            throw new ArgumentException("A baseline must contain finite non-negative depths and a valid tick.", nameof(water));
+        }
+        water.CopyTo(_waterDepths, 0);
+        CycleCount = cycles;
+    }
 
     public FluidSummary GetSummary()
     {

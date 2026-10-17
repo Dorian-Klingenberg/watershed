@@ -1,4 +1,4 @@
-import { renderGpu } from "./landscape-view.js";
+import { renderGpu, notifyGpuFailure } from "./landscape-view.js";
 
 const shader = `
 struct FlowProposal {
@@ -255,8 +255,21 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
             applyPipeline,
             bindGroups,
             current: 0,
+            cycles: 0,
+            cachedWater: new Float32Array(water),
+            terrainDirty: true,
+            error: null,
             workgroupCount: Math.ceil(cellCount / 64)
         };
+        const initializedState = state;
+        const fail = message => {
+            initializedState.error = message;
+            if (state === initializedState) notifyGpuFailure(message);
+        };
+        device.lost.then(info => { if (info.reason !== "destroyed") fail(`WebGPU device lost: ${info.message}`); });
+        device.addEventListener("uncapturederror", event => {
+            fail(`WebGPU validation failed: ${event.error.message}`);
+        });
         await uploadWater(state, water);
         return { supported: true, message: "WebGPU compute ready" };
     } catch (error) {
@@ -268,6 +281,7 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
 export async function reset(terrain, water) {
     requireState();
     uploadTerrain(terrain);
+    state.cycles = 0;
     await uploadWater(state, water);
 }
 
@@ -276,44 +290,55 @@ export async function applyEdits(terrain, waterDelta) {
     if (terrain) uploadTerrain(terrain);
     if (waterDelta) {
         if (waterDelta.length !== state.cellCount) throw new Error("Water edit size does not match the field.");
-        const water = await readCurrentWater(state);
+        const water = state.cachedWater.slice();
         for (let i = 0; i < water.length; i++) water[i] += waterDelta[i];
         await uploadWater(state, water);
     } else {
-        await drawGpuSnapshot(state);
+        drawGpuSnapshot(state);
     }
 }
 
 function uploadTerrain(terrain) {
     if (terrain.length !== state.cellCount) throw new Error("Terrain size does not match the field.");
     state.terrain = Array.from(terrain);
+    state.terrainDirty = true;
     state.device.queue.writeBuffer(state.terrainBuffer, 0, new Int32Array(terrain));
 }
 
-export async function step() {
+export async function step(ticks = 1) {
     requireState();
+    if (!Number.isInteger(ticks) || ticks < 1 || ticks > 8) throw new Error("Invalid tick batch.");
     const encoder = state.device.createCommandEncoder();
-    const next = 1 - state.current;
-    const proposePass = encoder.beginComputePass();
-    proposePass.setPipeline(state.proposePipeline);
-    proposePass.setBindGroup(0, state.bindGroups[state.current]);
-    proposePass.dispatchWorkgroups(state.workgroupCount);
-    proposePass.end();
+    for (let tick = 0; tick < ticks; ++tick) {
+        const proposePass = encoder.beginComputePass();
+        proposePass.setPipeline(state.proposePipeline);
+        proposePass.setBindGroup(0, state.bindGroups[state.current]);
+        proposePass.dispatchWorkgroups(state.workgroupCount);
+        proposePass.end();
 
-    const applyPass = encoder.beginComputePass();
-    applyPass.setPipeline(state.applyPipeline);
-    applyPass.setBindGroup(0, state.bindGroups[state.current]);
-    applyPass.dispatchWorkgroups(state.workgroupCount);
-    applyPass.end();
-
+        const applyPass = encoder.beginComputePass();
+        applyPass.setPipeline(state.applyPipeline);
+        applyPass.setBindGroup(0, state.bindGroups[state.current]);
+        applyPass.dispatchWorkgroups(state.workgroupCount);
+        applyPass.end();
+        state.current = 1 - state.current;
+    }
     state.device.queue.submit([encoder.finish()]);
-    state.current = next;
-    await drawGpuSnapshot(state);
+    const water = await readCurrentWater(state);
+    requireState();
+    state.cachedWater = water;
+    state.cycles += ticks;
+    drawGpuSnapshot(state);
 }
 
-export async function snapshot() {
-    requireState();
-    return await readCurrentWater(state);
+export async function snapshot(fresh = false) {
+    if (!state) throw new Error("No GPU baseline is available.");
+    if (fresh) {
+        requireState();
+        state.cachedWater = await readCurrentWater(state);
+        requireState();
+    }
+    return { water: Array.from(state.cachedWater), cycles: state.cycles };
 }
 
 export function dispose() {
@@ -324,7 +349,7 @@ export function dispose() {
 }
 
 async function uploadWater(currentState, water) {
-    const values = new Float32Array(water);
+    const values = water instanceof Float32Array ? water : new Float32Array(water);
     if (values.length !== currentState.cellCount) {
         throw new Error("Water snapshot size does not match the GPU field.");
     }
@@ -332,12 +357,15 @@ async function uploadWater(currentState, water) {
     currentState.device.queue.writeBuffer(currentState.waterBuffers[0], 0, values);
     currentState.device.queue.writeBuffer(currentState.waterBuffers[1], 0, values);
     currentState.current = 0;
-    await drawGpuSnapshot(currentState);
+    await currentState.device.queue.onSubmittedWorkDone();
+    requireState();
+    currentState.cachedWater = values;
+    drawGpuSnapshot(currentState);
 }
 
-async function drawGpuSnapshot(currentState) {
-    const water = await readCurrentWater(currentState);
-    renderGpu(currentState.terrain, water);
+function drawGpuSnapshot(currentState) {
+    renderGpu(currentState.terrainDirty ? currentState.terrain : null, currentState.cachedWater);
+    currentState.terrainDirty = false;
 }
 
 async function readCurrentWater(currentState) {
@@ -350,7 +378,7 @@ async function readCurrentWater(currentState) {
         currentState.bufferSize);
     currentState.device.queue.submit([encoder.finish()]);
     await currentState.readbackBuffer.mapAsync(GPUMapMode.READ);
-    const water = Array.from(new Float32Array(currentState.readbackBuffer.getMappedRange()));
+    const water = new Float32Array(currentState.readbackBuffer.getMappedRange()).slice();
     currentState.readbackBuffer.unmap();
     return water;
 }
@@ -359,4 +387,5 @@ function requireState() {
     if (!state) {
         throw new Error("WebGPU is not initialized.");
     }
+    if (state.error) throw new Error(state.error);
 }

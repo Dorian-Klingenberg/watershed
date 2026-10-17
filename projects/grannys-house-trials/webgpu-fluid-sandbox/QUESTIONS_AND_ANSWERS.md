@@ -32,11 +32,31 @@ Both views share camera, selection, hover, and edit previews. Left click selects
 left drag orbits about the initially hovered terrain point, the wheel zooms about
 the hovered point, right click pours, and right drag previews then commits a
 barrier. Identical edits apply to each implementation's independent water state.
-Horizontal landscape navigation is linked, while vertical page scrolling and
+Two-axis landscape navigation is linked (horizontal below, depth-axis slider on
+the physical right), while vertical page scrolling and
 responsive layout keep the workbench usable on small screens.
 
 The current renderer uses Canvas2D-projected columns rather than the original
 flat cell map; WebGPU remains the compute backend, not a distinct renderer.
+
+### Approved performance follow-up
+
+The CPU reference can now be disabled completely without abandoning C# domain
+ownership. Its solver, water snapshots, statistics, and drawing stop; comparisons
+are disabled. Re-enabling explicitly imports a fresh GPU baseline and tick,
+announces that boundary, then returns to independent stepping and additive edits.
+GPU failure restores the last completed GPU display baseline into CPU fallback
+(or explicitly resets if recovery fails), rather than resuming stale CPU water.
+
+Run uses display-paced configurable tick batches instead of a fixed delay.
+Readouts distinguish actual dirty-draw FPS, ticks/sec, CPU/draw costs, and the
+GPU dispatch/readback wall-clock roundtrip; the latter is not actual GPU time.
+Cached display water serves selection without extra GPU reads.
+
+Workers remain an assessed option, not a requirement. Message-passing workers do
+not themselves require COOP/COEP, but shared-memory WebAssembly threads do, and
+this Pages deployment must not assume cross-origin isolation. A C# worker would
+also require a separate runtime/entry and explicit state ownership. See README.
 
 ### What kind of WebGPU application is intended?
 

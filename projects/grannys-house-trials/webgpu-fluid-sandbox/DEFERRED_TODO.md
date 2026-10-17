@@ -10,6 +10,8 @@ that remains intentionally outside its scope.
 - [ ] Iterate through additional fluid models using the sloped landscape and barriers.
 - [ ] Evaluate additional browsers after the initial Chrome target.
 - [ ] Decide whether the provisional project name should change.
+- [ ] Reassess dedicated workers only after profiling; do not assume Pages provides
+  COOP/COEP or shared-memory WASM threads (see README hosting assessment).
 
 ## First-slice choices already made
 
@@ -24,3 +26,8 @@ that remains intentionally outside its scope.
 - [x] Add Run/Pause, point pours, and barrier strokes without replacing independent GPU water.
 - [x] Add height-aware linked views with selection, anchored orbit/zoom, and horizontal navigation.
 - [x] Keep controls reachable with vertical page scrolling and responsive layout.
+- [x] Add true CPU-reference suspension, fresh-baseline re-enable, and non-stale CPU fallback.
+- [x] Add a physically right-side depth slider linked with horizontal navigation and orbit/zoom.
+- [x] Measure actual dirty-draw FPS, ticks/sec, draw/CPU cost, and explicitly labeled GPU roundtrip.
+- [x] Batch ticks per display, cache display readbacks/terrain/projection/order, reuse CPU delta storage,
+  and skip disabled/offscreen canvas drawing without introducing mixed-solver parallelism.
