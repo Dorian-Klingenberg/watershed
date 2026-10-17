@@ -11,10 +11,18 @@
     box-sizing: border-box;
 }
 
-body {
+html {
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+}
+
+html body {
     margin: 0;
     min-width: 320px;
     min-height: 100vh;
+    height: auto;
+    overflow: visible;
+    color: #e7f0ee;
     background:
         radial-gradient(ellipse at 52% -25%, #264044 0, transparent 58%),
         #101719;
@@ -22,6 +30,17 @@ body {
 
 button {
     font: inherit;
+}
+
+#blazor-error-ui {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    padding: 16px;
+    background: #482d25;
+    color: #f0c7ae;
+    z-index: 1000;
 }
 
 .workspace {
@@ -112,6 +131,7 @@ h1 {
 }
 
 .control-panel {
+    flex-wrap: wrap;
     padding: 18px 20px;
     margin-bottom: 18px;
 }
@@ -182,7 +202,30 @@ h1 {
     width: 100%;
     aspect-ratio: 3 / 2;
     background: #182526;
-    image-rendering: pixelated;
+    touch-action: none;
+    cursor: crosshair;
+}
+
+.navigation-panel {
+    margin-top: 18px;
+    padding: 16px 20px;
+    border: 1px solid #304144;
+    border-radius: 13px;
+    color: #b2c0bc;
+    background: #172124dd;
+    font-size: 0.85rem;
+}
+
+.navigation-panel input {
+    display: block;
+    width: 100%;
+    min-height: 40px;
+    accent-color: #67d5a5;
+}
+
+.navigation-panel p {
+    margin: 8px 0 0;
+    line-height: 1.6;
 }
 
 .legend {

@@ -7,6 +7,7 @@ namespace WebGpuFluidSandbox.Services;
 public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
 {
     private IJSObjectReference? _module;
+    private IJSObjectReference? _views;
 
     public async Task<GpuInitializationResult> InitializeAsync(
         ElementReference canvas,
@@ -27,10 +28,19 @@ public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
     }
 
     public ValueTask ResetAsync(CellularFluidSimulation simulation) =>
-        Module.InvokeVoidAsync("reset", simulation.GetWaterSnapshot());
+        Module.InvokeVoidAsync("reset", simulation.GetTerrainSnapshot(), simulation.GetWaterSnapshot());
 
-    public ValueTask SetWaterAsync(float[] water) =>
-        Module.InvokeVoidAsync("setWater", water);
+    public ValueTask ApplyEditsAsync(int[]? terrain, float[]? waterDelta) =>
+        Module.InvokeVoidAsync("applyEdits", terrain, waterDelta);
+
+    public async ValueTask InitializeViewsAsync<T>(
+        ElementReference cpuCanvas, ElementReference gpuCanvas, ElementReference scrollbar,
+        DotNetObjectReference<T> callback, CellularFluidSimulation simulation) where T : class
+    {
+        _views = await jsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/landscape-view.js");
+        await _views.InvokeVoidAsync("initialize", cpuCanvas, gpuCanvas, scrollbar, callback,
+            simulation.Width, simulation.Height, simulation.GetTerrainSnapshot(), simulation.GetWaterSnapshot());
+    }
 
     public ValueTask StepAsync() =>
         Module.InvokeVoidAsync("step");
@@ -44,13 +54,20 @@ public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
         float[] water,
         int width,
         int height) =>
-        Module.InvokeVoidAsync("renderCpu", canvas, terrain, water, width, height);
+        (_views ?? throw new InvalidOperationException("Views are not initialized."))
+            .InvokeVoidAsync("renderCpu", terrain, water);
 
     private IJSObjectReference Module =>
         _module ?? throw new InvalidOperationException("The WebGPU module has not been initialized.");
 
     public async ValueTask DisposeAsync()
     {
+        if (_views is not null)
+        {
+            await _views.InvokeVoidAsync("dispose");
+            await _views.DisposeAsync();
+            _views = null;
+        }
         var module = _module;
         _module = null;
         if (module is not null)

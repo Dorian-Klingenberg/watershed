@@ -20,9 +20,10 @@
     <section class="control-panel" aria-label="Simulation controls">
         <div class="control-copy">
             <span class="eyebrow">ONE FIELD · TWO IMPLEMENTATIONS</span>
-            <p>Pour water into the low basin, then advance both simulations by one synchronous tick.</p>
+            <p>Pour onto the slope, watch the spillway, and explore both implementations together.</p>
         </div>
         <div class="actions">
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ToggleRun" Disabled="@(!_initialized)">@(_running ? "Pause" : "Run")</FluentButton>
             <FluentButton Appearance="ButtonAppearance.Primary" OnClick="PourAsync" Disabled="@(_busy || !_initialized)">Pour 12 in</FluentButton>
             <FluentButton OnClick="StepAsync" Disabled="@(_busy || !_initialized)">Step @(_gpuSupported ? "both" : "CPU")</FluentButton>
             <FluentButton OnClick="CompareAsync" Disabled="@(_busy || !_initialized || !_gpuSupported)">Compare states</FluentButton>
@@ -44,7 +45,7 @@
                 </div>
                 <span class="engine-tag">Domain model</span>
             </div>
-            <canvas @ref="_cpuCanvas" class="field-canvas" aria-label="CPU water-depth field"></canvas>
+            <canvas @ref="_cpuCanvas" class="field-canvas" aria-label="Interactive CPU terrain and water view"></canvas>
             <div class="legend"><span class="dry-swatch"></span> dry terrain <span class="water-swatch"></span> water depth</div>
         </article>
 
@@ -56,9 +57,17 @@
                 </div>
                 <span class="engine-tag">WGSL · two-pass flow</span>
             </div>
-            <canvas @ref="_gpuCanvas" class="field-canvas" aria-label="GPU water-depth field"></canvas>
+            <canvas @ref="_gpuCanvas" class="field-canvas" aria-label="Interactive GPU terrain and water view"></canvas>
             <div class="legend"><span class="dry-swatch"></span> dry terrain <span class="water-swatch"></span> water depth</div>
         </article>
+    </section>
+
+    <section class="navigation-panel" aria-label="Linked landscape navigation">
+        <label for="landscape-scroll">Horizontal landscape position · both views</label>
+        <input @ref="_landscapeScroll" id="landscape-scroll" type="range" min="0" max="95" value="48" step="0.1" />
+        <p>Left click: select · Left drag: orbit · Wheel over land: zoom · Right click: pour · Right drag: draw barrier.</p>
+        <p>Scroll the page using the margin or vertical scrollbar. Touch-drag over a view orbits; swipe outside it to scroll.</p>
+        <p role="status">@_selectionText</p>
     </section>
 
     <section class="readout" aria-label="Simulation readout">
@@ -96,7 +105,7 @@
     }
 
     <footer>
-        <span>Terrain stays fixed; only water depth changes.</span>
+        <span>Barrier strokes raise terrain by 12 in from its starting height. Reset restores the scene.</span>
         <span>Comparison tolerance: @CellularFluidSimulation.ComparisonTolerance</span>
     </footer>
 </div>
@@ -108,6 +117,15 @@
     private readonly CellularFluidSimulation _simulation = CellularFluidSimulation.CreateDefault();
     private ElementReference _cpuCanvas;
     private ElementReference _gpuCanvas;
+    private ElementReference _landscapeScroll;
+    private DotNetObjectReference<Home>? _callback;
+    private readonly SemaphoreSlim _actionGate = new(1, 1);
+    private CancellationTokenSource? _runCancellation;
+    private Task? _runTask;
+    private bool _running;
+    private bool _disposed;
+    private int? _selectedIndex;
+    private string _selectionText = "Select a cell in either view to inspect it.";
     private FluidSummary _summary;
     private FluidComparisonResult? _comparison;
     private bool _gpuSupported;
@@ -128,33 +146,45 @@
             return;
         }
 
+        await _actionGate.WaitAsync();
         try
         {
-            var result = await Gpu.InitializeAsync(_gpuCanvas, _simulation);
-            _gpuSupported = result.Supported;
-            _gpuMessage = result.Message;
-        }
-        catch (Exception exception)
-        {
-            _gpuMessage = "WebGPU initialization failed";
-            _errorMessage = exception.Message;
-        }
+            if (_disposed) return;
+            try
+            {
+                _callback = DotNetObjectReference.Create(this);
+                await Gpu.InitializeViewsAsync(_cpuCanvas, _gpuCanvas, _landscapeScroll, _callback, _simulation);
+                var result = await Gpu.InitializeAsync(_gpuCanvas, _simulation);
+                _gpuSupported = result.Supported;
+                _gpuMessage = result.Message;
+            }
+            catch (Exception exception)
+            {
+                _gpuMessage = "WebGPU initialization failed";
+                _errorMessage = exception.Message;
+            }
 
-        try
-        {
-            await RenderCpuAsync();
-        }
-        catch (Exception exception)
-        {
-            _errorMessage ??= exception.Message;
-        }
+            try
+            {
+                await RenderCpuAsync();
+            }
+            catch (Exception exception)
+            {
+                _errorMessage ??= exception.Message;
+            }
 
-        _initialized = true;
-        await InvokeAsync(StateHasChanged);
+            _initialized = true;
+        }
+        finally
+        {
+            _actionGate.Release();
+        }
+        if (!_disposed) await InvokeAsync(StateHasChanged);
     }
 
     private async Task ResetAsync()
     {
+        StopRun();
         await RunActionAsync(async () =>
         {
             _simulation.Reset();
@@ -171,20 +201,23 @@
     {
         await RunActionAsync(async () =>
         {
-            _simulation.AddCenterWater(PourRadius, PourDepthInches);
+            var delta = _simulation.AddWater(_simulation.Width / 2, 12, PourRadius, PourDepthInches);
             _comparison = null;
             await RenderCpuAsync();
             if (_gpuSupported)
             {
-                await Gpu.SetWaterAsync(_simulation.GetWaterSnapshot());
+                await Gpu.ApplyEditsAsync(null, delta);
             }
         });
     }
 
-    private async Task StepAsync()
+    private Task StepAsync() => AdvanceAsync(CancellationToken.None);
+
+    private async Task AdvanceAsync(CancellationToken cancellationToken)
     {
         await RunActionAsync(async () =>
         {
+            if (cancellationToken.IsCancellationRequested) return;
             _simulation.Step();
             _comparison = null;
             await RenderCpuAsync();
@@ -193,6 +226,72 @@
                 await Gpu.StepAsync();
             }
         });
+    }
+
+    private void ToggleRun()
+    {
+        if (_running)
+        {
+            StopRun();
+            return;
+        }
+
+        if (_runTask is { IsCompleted: false }) return;
+        _runCancellation?.Dispose();
+        _runCancellation = new CancellationTokenSource();
+        _running = true;
+        _runTask = RunLoopAsync(_runCancellation.Token);
+    }
+
+    private void StopRun()
+    {
+        _running = false;
+        _runCancellation?.Cancel();
+    }
+
+    private async Task RunLoopAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await AdvanceAsync(cancellationToken);
+                await InvokeAsync(StateHasChanged);
+                if (_errorMessage is not null) break;
+                await Task.Delay(60, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        finally
+        {
+            if (_runCancellation?.Token == cancellationToken) _running = false;
+            if (!_disposed) await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    [JSInvokable]
+    public async Task HandleLandscapeAction(string action, int x, int y, int[] cells)
+    {
+        if (_disposed || !_initialized) return;
+        await RunActionAsync(async () =>
+        {
+            var cell = _simulation.GetCell(x, y);
+            _selectedIndex = cell.Y * _simulation.Width + cell.X;
+            if (action == "pour")
+            {
+                var delta = _simulation.AddWater(x, y, 1, PourDepthInches);
+                _comparison = null;
+                if (_gpuSupported) await Gpu.ApplyEditsAsync(null, delta);
+            }
+            else if (action == "barrier")
+            {
+                _simulation.AddBarrier(cells);
+                _comparison = null;
+                if (_gpuSupported) await Gpu.ApplyEditsAsync(_simulation.GetTerrainSnapshot(), null);
+            }
+            await RenderCpuAsync();
+        });
+        if (!_disposed) await InvokeAsync(StateHasChanged);
     }
 
     private async Task CompareAsync()
@@ -206,11 +305,27 @@
 
     private async Task RunActionAsync(Func<Task> action)
     {
+        await _actionGate.WaitAsync();
+        if (_disposed)
+        {
+            _actionGate.Release();
+            return;
+        }
         _busy = true;
         _errorMessage = null;
         try
         {
             await action();
+            if (_selectedIndex is int index)
+            {
+                var cell = _simulation.GetCell(index % _simulation.Width, index / _simulation.Width);
+                _selectionText = $"Cell ({cell.X}, {cell.Y}) · terrain {cell.TerrainHeight} in · CPU water {cell.WaterDepth:F3} in";
+                if (_gpuSupported)
+                {
+                    var gpuWater = await Gpu.GetSnapshotAsync();
+                    _selectionText += $" · GPU water {gpuWater[index]:F3} in";
+                }
+            }
         }
         catch (Exception exception)
         {
@@ -226,6 +341,7 @@
         {
             _summary = _simulation.GetSummary();
             _busy = false;
+            _actionGate.Release();
         }
     }
 
@@ -237,5 +353,21 @@
             _simulation.Width,
             _simulation.Height).AsTask();
 
-    public ValueTask DisposeAsync() => Gpu.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        StopRun();
+        if (_runTask is not null) await _runTask;
+        await _actionGate.WaitAsync();
+        try
+        {
+            await Gpu.DisposeAsync();
+            _callback?.Dispose();
+            _runCancellation?.Dispose();
+        }
+        finally
+        {
+            _actionGate.Release();
+        }
+    }
 }

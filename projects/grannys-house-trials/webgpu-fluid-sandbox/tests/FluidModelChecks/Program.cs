@@ -62,6 +62,40 @@ ExpectThrows<ArgumentException>(
     () => new CellularFluidSimulation(3, 3, [0, 0]),
     "terrain size must match dimensions");
 
+var edited = CellularFluidSimulation.CreateDefault();
+var originalTerrain = edited.GetTerrainSnapshot();
+Assert(edited.GetCell(48, 8).TerrainHeight > edited.GetCell(48, 48).TerrainHeight, "landscape slopes downhill");
+Assert(edited.GetCell(40, 37).TerrainHeight > edited.GetCell(40, 36).TerrainHeight, "default barrier obstructs flow");
+Assert(edited.GetCell(46, 37).TerrainHeight < edited.GetCell(44, 37).TerrainHeight, "barrier has a lower spillway");
+var delta = edited.AddWater(12, 15, 0, 3.0f);
+AssertNear(3, edited.GetCell(12, 15).WaterDepth, 0, "point pour reaches selected cell");
+AssertNear(3, delta.Sum(), 0, "point pour returns additive edit, not a reference snapshot");
+var barrierCell = 15 * edited.Width + 12;
+edited.AddBarrier([barrierCell, barrierCell]);
+Assert(edited.GetCell(12, 15).TerrainHeight == originalTerrain[barrierCell] + 12, "duplicate stroke cells do not stack");
+AssertNear(3, edited.GetCell(12, 15).WaterDepth, 0, "barrier preserves existing water");
+ExpectThrows<ArgumentOutOfRangeException>(() => edited.AddBarrier([barrierCell + 1, -1]), "invalid barrier is rejected atomically");
+Assert(edited.GetTerrainSnapshot()[barrierCell + 1] == originalTerrain[barrierCell + 1], "invalid stroke changes no cells");
+ExpectThrows<ArgumentOutOfRangeException>(() => edited.AddWater(-1, 0, 0, 1), "out-of-field pour rejected");
+ExpectThrows<ArgumentOutOfRangeException>(() => edited.GetCell(0, edited.Height), "out-of-field selection rejected");
+edited.Step();
+edited.Reset();
+Assert(edited.GetTerrainSnapshot().SequenceEqual(originalTerrain), "reset restores initial landscape");
+Assert(edited.CycleCount == 0 && edited.GetSummary().TotalWater == 0, "reset clears water and ticks");
+
+var channelTerrain = Enumerable.Repeat(100, 25).ToArray();
+channelTerrain[11] = channelTerrain[12] = channelTerrain[13] = 0;
+var blockedChannel = new CellularFluidSimulation(5, 5, channelTerrain);
+blockedChannel.AddBarrier([12]);
+blockedChannel.AddWater(1, 2, 0, 8);
+blockedChannel.Step();
+AssertNear(8, blockedChannel.GetCell(1, 2).WaterDepth, 0, "barrier pools shallow upstream water");
+AssertNear(0, blockedChannel.GetCell(2, 2).WaterDepth, 0, "water does not cross a higher barrier");
+blockedChannel.AddWater(1, 2, 0, 12);
+blockedChannel.Step();
+Assert(blockedChannel.GetCell(2, 2).WaterDepth > 0, "water overtops a submerged barrier");
+AssertNear(20, blockedChannel.GetSummary().TotalWater, 0.0001, "barrier overflow conserves water");
+
 Console.WriteLine("All fluid model checks passed.");
 
 static void Assert(bool condition, string description)

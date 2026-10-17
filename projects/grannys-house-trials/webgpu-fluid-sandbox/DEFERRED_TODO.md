@@ -5,12 +5,9 @@ that remains intentionally outside its scope.
 
 ## Deferred
 
-- [ ] Review the first field view and decide what would make the simulation more
-  useful or understandable.
 - [ ] Consider a GPU-resident renderer or the existing column-raycast approach
-  only after assessing the regular 2D cell map.
-- [ ] Consider continuous stepping, more controls, and additional fluid models
-  after the manual cellular-flow loop is reviewed.
+  after assessing the linked projected-column views.
+- [ ] Iterate through additional fluid models using the sloped landscape and barriers.
 - [ ] Evaluate additional browsers after the initial Chrome target.
 - [ ] Decide whether the provisional project name should change.
 
@@ -24,3 +21,6 @@ that remains intentionally outside its scope.
 - [x] Keep domain concepts and comparison behavior in C#; keep WebGPU resources
   behind coarse-grained JavaScript interop.
 - [x] Include a GitHub Pages deployment workflow.
+- [x] Add Run/Pause, point pours, and barrier strokes without replacing independent GPU water.
+- [x] Add height-aware linked views with selection, anchored orbit/zoom, and horizontal navigation.
+- [x] Keep controls reachable with vertical page scrolling and responsive layout.

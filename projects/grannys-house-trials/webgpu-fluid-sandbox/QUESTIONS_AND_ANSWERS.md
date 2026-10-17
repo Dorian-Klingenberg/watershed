@@ -21,6 +21,23 @@ current confirmed scope is recorded below.
 
 ## Platform and project shape
 
+### Approved interactive follow-up
+
+The user subsequently approved Run/Pause alongside the existing controls,
+an interesting downhill landscape with a channel and collecting area, and
+barriers for pooling, diversion, and overflow. Other solvers can reuse this scene;
+realistic waves are not required from the current solver.
+
+Both views share camera, selection, hover, and edit previews. Left click selects,
+left drag orbits about the initially hovered terrain point, the wheel zooms about
+the hovered point, right click pours, and right drag previews then commits a
+barrier. Identical edits apply to each implementation's independent water state.
+Horizontal landscape navigation is linked, while vertical page scrolling and
+responsive layout keep the workbench usable on small screens.
+
+The current renderer uses Canvas2D-projected columns rather than the original
+flat cell map; WebGPU remains the compute backend, not a distinct renderer.
+
 ### What kind of WebGPU application is intended?
 
 **Answer:** A browser application built with Blazor WebAssembly. The user's
@@ -126,11 +143,8 @@ pane, rather than floating controls.
 **Implementation:** The current UI presents two field views, basic controls,
 simulation readouts, and explicit comparison feedback.
 
-## Questions remaining after the first implementation
+## Questions remaining after the interactive follow-up
 
-1. After reviewing the first visual iteration, what should count as a useful
-   next improvement?
-2. Does the regular cell map communicate enough about flow before any 3D or
-   raycast renderer work is considered?
-3. Should a future version add continuous stepping, additional controls, or
-   more fluid models?
+1. Which fluid solver should be evaluated next against the same landscape?
+2. Is GPU-resident rendering warranted after assessing the projected-column views?
+3. Which additional browser or touch/stylus interactions should be supported?

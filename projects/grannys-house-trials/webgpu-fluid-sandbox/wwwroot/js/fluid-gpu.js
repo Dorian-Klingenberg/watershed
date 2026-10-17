@@ -1,3 +1,5 @@
+import { renderGpu } from "./landscape-view.js";
+
 const shader = `
 struct FlowProposal {
     totalOutflow: f32,
@@ -246,6 +248,7 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
             cellCount,
             bufferSize,
             terrain: Array.from(terrain),
+            terrainBuffer,
             waterBuffers,
             readbackBuffer,
             proposePipeline,
@@ -262,14 +265,29 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
     }
 }
 
-export async function reset(water) {
+export async function reset(terrain, water) {
     requireState();
+    uploadTerrain(terrain);
     await uploadWater(state, water);
 }
 
-export async function setWater(water) {
+export async function applyEdits(terrain, waterDelta) {
     requireState();
-    await uploadWater(state, water);
+    if (terrain) uploadTerrain(terrain);
+    if (waterDelta) {
+        if (waterDelta.length !== state.cellCount) throw new Error("Water edit size does not match the field.");
+        const water = await readCurrentWater(state);
+        for (let i = 0; i < water.length; i++) water[i] += waterDelta[i];
+        await uploadWater(state, water);
+    } else {
+        await drawGpuSnapshot(state);
+    }
+}
+
+function uploadTerrain(terrain) {
+    if (terrain.length !== state.cellCount) throw new Error("Terrain size does not match the field.");
+    state.terrain = Array.from(terrain);
+    state.device.queue.writeBuffer(state.terrainBuffer, 0, new Int32Array(terrain));
 }
 
 export async function step() {
@@ -288,7 +306,6 @@ export async function step() {
     applyPass.dispatchWorkgroups(state.workgroupCount);
     applyPass.end();
 
-    encoder.copyBufferToBuffer(state.waterBuffers[next], 0, state.readbackBuffer, 0, state.bufferSize);
     state.device.queue.submit([encoder.finish()]);
     state.current = next;
     await drawGpuSnapshot(state);
@@ -297,10 +314,6 @@ export async function step() {
 export async function snapshot() {
     requireState();
     return await readCurrentWater(state);
-}
-
-export function renderCpu(canvas, terrain, water, width, height) {
-    drawField(canvas, terrain, water, width, height);
 }
 
 export function dispose() {
@@ -324,7 +337,7 @@ async function uploadWater(currentState, water) {
 
 async function drawGpuSnapshot(currentState) {
     const water = await readCurrentWater(currentState);
-    drawField(currentState.canvas, currentState.terrain, water, currentState.width, currentState.height);
+    renderGpu(currentState.terrain, water);
 }
 
 async function readCurrentWater(currentState) {
@@ -340,41 +353,6 @@ async function readCurrentWater(currentState) {
     const water = Array.from(new Float32Array(currentState.readbackBuffer.getMappedRange()));
     currentState.readbackBuffer.unmap();
     return water;
-}
-
-function drawField(canvas, terrain, water, width, height) {
-    const context = canvas.getContext("2d");
-    if (!context) {
-        return;
-    }
-
-    canvas.width = width;
-    canvas.height = height;
-    context.imageSmoothingEnabled = false;
-    const image = context.createImageData(width, height);
-    let maxDepth = 0.001;
-    for (const depth of water) {
-        maxDepth = Math.max(maxDepth, depth);
-    }
-
-    for (let i = 0; i < water.length; i++) {
-        const depth = water[i];
-        const shade = Math.min(1, Math.max(0, terrain[i] / 56));
-        const offset = i * 4;
-        if (depth > 0.001) {
-            const intensity = Math.min(1, depth / maxDepth);
-            image.data[offset] = 35 + 24 * intensity;
-            image.data[offset + 1] = 107 + 93 * intensity;
-            image.data[offset + 2] = 143 + 103 * intensity;
-        } else {
-            image.data[offset] = 52 + 44 * shade;
-            image.data[offset + 1] = 70 + 44 * shade;
-            image.data[offset + 2] = 51 + 20 * shade;
-        }
-        image.data[offset + 3] = 255;
-    }
-
-    context.putImageData(image, 0, 0);
 }
 
 function requireState() {

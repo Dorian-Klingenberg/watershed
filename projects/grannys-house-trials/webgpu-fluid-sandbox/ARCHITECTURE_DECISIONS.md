@@ -95,20 +95,30 @@ are references for behavior and lessons only.
 
 ## Implemented architecture
 
-The following is the first implementation, not a finalized performance
+The following is the current implementation, not a finalized performance
 architecture:
 
 - `Simulation/CellularFluidSimulation.cs` owns the C# terrain, water state,
-  cellular-flow reference, center pour, and summary.
+  cellular-flow reference, point pours, barrier height policy, reset, and summary.
+- `Pages/Home.razor` serializes paired ticks and edits, owns Run/Pause, and
+  displays selected-cell information. Camera navigation remains usable while paused.
+- `wwwroot/js/landscape-view.js` owns projected height-column drawing, terrain
+  picking, linked camera/navigation, and gesture previews. Committed cell edits
+  are dispatched to C#; it does not own fluid or terrain-edit rules.
 - `wwwroot/js/fluid-gpu.js` owns WebGPU resources and executes the WGSL
   propose/apply passes. The GPU state stays in ping-pong buffers between actions.
-- A reset or pour uploads a complete water snapshot; a manual step runs both
-  implementations and reads the GPU result back to JavaScript for its cell map.
+- Reset uploads the complete starting field. Pours send additive edits, preserving
+  each implementation's independent water state. Barrier strokes update terrain
+  without replacing water. Each paired tick reads GPU water back for drawing.
 - After each tick, water on the field's outer boundary is drained.
 - `Compare states` requests a GPU snapshot across interop and compares it to the
   C# snapshot, reporting mismatch count, maximum cell error, and water-total
   error.
 - When WebGPU cannot initialize, the C# reference remains available.
+- Both views share selection, hover, camera, and horizontal navigation. Vertical
+  page scrolling and responsive layout keep controls reachable on small screens.
+- The sloped scene and barriers are reusable across future solver experiments;
+  momentum-based waves remain outside the current cellular solver's scope.
 - `tests/FluidModelChecks` exercises conservation, flow, repeatability, boundary
   pours, input validation, and comparison behavior.
 - `.github/workflows/deploy-webgpu-fluid-sandbox.yml` publishes the static app to

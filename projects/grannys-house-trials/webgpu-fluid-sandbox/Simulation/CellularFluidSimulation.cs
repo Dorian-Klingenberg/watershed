@@ -11,6 +11,7 @@ public sealed class CellularFluidSimulation
     private const int MaximumDimension = 1024;
     private const int MaximumCellCount = 262_144;
     private readonly int[] _terrainHeights;
+    private readonly int[] _initialTerrain;
     private readonly float[] _waterDepths;
 
     public CellularFluidSimulation(int width, int height, int[] terrainHeights)
@@ -30,6 +31,7 @@ public sealed class CellularFluidSimulation
         Width = width;
         Height = height;
         _terrainHeights = (int[])terrainHeights.Clone();
+        _initialTerrain = (int[])terrainHeights.Clone();
         _waterDepths = new float[terrainHeights.Length];
     }
 
@@ -42,16 +44,18 @@ public sealed class CellularFluidSimulation
         const int width = 96;
         const int height = 64;
         var terrain = new int[width * height];
-        var centerX = width / 2;
-        var centerY = height / 2;
-
         for (var y = 0; y < height; y++)
         {
             for (var x = 0; x < width; x++)
             {
-                var dx = x - centerX;
-                var dy = y - centerY;
-                terrain[y * width + x] = (int)MathF.Floor((dx * dx + dy * dy) / 64.0f + 0.5f);
+                var channelX = width / 2.0f + 8.0f * MathF.Sin(y / 12.0f);
+                var bank = MathF.Min(14.0f, MathF.Abs(x - channelX) * 0.65f);
+                var slope = MathF.Max(0, 44 - y) * 0.7f + MathF.Max(0, 20 - y) * 0.6f;
+                var basinRim = y > 48 ? (y - 48) * 0.65f : 0;
+                var barrier = y is >= 37 and <= 38 && x is >= 30 and <= 61
+                    ? (x is >= 45 and <= 48 ? 5 : 12)
+                    : 0;
+                terrain[y * width + x] = (int)MathF.Round(slope + bank + basinRim + barrier);
             }
         }
 
@@ -61,11 +65,19 @@ public sealed class CellularFluidSimulation
     public void Reset()
     {
         Array.Clear(_waterDepths);
+        _initialTerrain.CopyTo(_terrainHeights, 0);
         CycleCount = 0;
     }
 
     public void AddCenterWater(int radius, float depthInches)
+        => AddWater(Width / 2, Height / 2, radius, depthInches);
+
+    public float[] AddWater(int centerX, int centerY, int radius, float depthInches)
     {
+        if ((uint)centerX >= Width || (uint)centerY >= Height)
+        {
+            throw new ArgumentOutOfRangeException(nameof(centerX));
+        }
         if (radius < 0 || radius > Math.Max(Width, Height))
         {
             throw new ArgumentOutOfRangeException(nameof(radius));
@@ -76,8 +88,7 @@ public sealed class CellularFluidSimulation
             throw new ArgumentOutOfRangeException(nameof(depthInches));
         }
 
-        var centerX = Width / 2;
-        var centerY = Height / 2;
+        var additions = new float[_waterDepths.Length];
         var radiusSquared = radius * radius;
         var minX = Math.Max(0, centerX - radius);
         var maxX = Math.Min(Width - 1, centerX + radius);
@@ -93,9 +104,37 @@ public sealed class CellularFluidSimulation
                 if (dx * dx + dy * dy <= radiusSquared)
                 {
                     _waterDepths[y * Width + x] += depthInches;
+                    additions[y * Width + x] = depthInches;
                 }
             }
         }
+
+        return additions;
+    }
+
+    public void AddBarrier(int[] cells)
+    {
+        ArgumentNullException.ThrowIfNull(cells);
+        if (cells.Length > _terrainHeights.Length || cells.Any(index => (uint)index >= _terrainHeights.Length))
+        {
+            throw new ArgumentOutOfRangeException(nameof(cells));
+        }
+
+        foreach (var index in cells)
+        {
+            _terrainHeights[index] = (int)Math.Min(int.MaxValue, (long)_initialTerrain[index] + 12);
+        }
+    }
+
+    public FluidCell GetCell(int x, int y)
+    {
+        if ((uint)x >= Width || (uint)y >= Height)
+        {
+            throw new ArgumentOutOfRangeException(nameof(x));
+        }
+
+        var index = y * Width + x;
+        return new FluidCell(x, y, _terrainHeights[index], _waterDepths[index]);
     }
 
     public void Step()
@@ -239,3 +278,5 @@ public sealed class CellularFluidSimulation
 }
 
 public readonly record struct FluidSummary(int Cycles, int WetCells, double TotalWater, float MaximumDepth);
+
+public sealed record FluidCell(int X, int Y, int TerrainHeight, float WaterDepth);
