@@ -38,7 +38,7 @@ export function initialize(cpuCanvas, gpuCanvas, scrollbar, verticalScrollbar, d
         span: Math.max(width, height) + (maximum - minimum) * heightScale,
         views: [], listeners: [], frame: null, queue: Promise.resolve(),
         selected: null, hover: null, gesture: null, disposed: false,
-        order: null, orderAzimuth: null, terrainVersion: 0, metricTime: performance.now()
+        order: null, orderAzimuth: null, terrainVersion: 0, metricTime: performance.now(), waits: new Set()
     };
     for (const canvas of [cpuCanvas, gpuCanvas]) {
         const context = canvas.getContext("2d");
@@ -99,7 +99,10 @@ export function initialize(cpuCanvas, gpuCanvas, scrollbar, verticalScrollbar, d
         schedule(s);
     });
     for (const view of s.views) s.visibility.observe(view.canvas);
-    listen(s, document, "visibilitychange", () => { if (!document.hidden) schedule(s); });
+    listen(s, document, "visibilitychange", () => {
+        if (document.hidden) cancelWaits(s);
+        else schedule(s);
+    });
     s.metrics = setInterval(() => reportMetrics(s), 500);
     schedule(s);
 }
@@ -131,15 +134,29 @@ export function notifyGpuFailure(message) {
 export async function waitForDisplay() {
     const s = state;
     if (!s || s.disposed) return false;
-    if (document.hidden) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        return false;
-    }
-    await new Promise(resolve => {
-        const frame = requestAnimationFrame(() => { clearTimeout(timeout); resolve(); });
-        const timeout = setTimeout(() => { cancelAnimationFrame(frame); resolve(); }, 100);
+    return await new Promise(resolve => {
+        let frame = null, timeout = null, complete = false;
+        const finish = visible => {
+            if (complete) return;
+            complete = true;
+            if (frame !== null) cancelAnimationFrame(frame);
+            if (timeout !== null) clearTimeout(timeout);
+            s.waits.delete(cancel);
+            resolve(visible && !s.disposed && !document.hidden);
+        };
+        const cancel = () => finish(false);
+        s.waits.add(cancel);
+        if (document.hidden) timeout = setTimeout(cancel, 100);
+        else frame = requestAnimationFrame(() => finish(true));
     });
-    return !s.disposed && !document.hidden;
+}
+
+function cancelWaits(s) {
+    for (const cancel of [...s.waits]) cancel();
+}
+
+export function cancelPendingWaits() {
+    if (state) cancelWaits(state);
 }
 
 function reportMetrics(s) {
@@ -512,6 +529,7 @@ export function dispose() {
     if (!s) return;
     state = null;
     s.disposed = true;
+    cancelWaits(s);
     cancelGesture(s);
     if (s.frame !== null) cancelAnimationFrame(s.frame);
     s.observer?.disconnect();

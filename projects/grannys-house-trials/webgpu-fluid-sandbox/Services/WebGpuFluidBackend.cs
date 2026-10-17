@@ -8,6 +8,8 @@ public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
 {
     private IJSObjectReference? _module;
     private IJSObjectReference? _views;
+    private readonly SemaphoreSlim _sessionGate = new(1, 1);
+    private bool _sessionActive;
 
     public async Task<GpuInitializationResult> InitializeAsync(
         ElementReference canvas,
@@ -38,6 +40,9 @@ public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
         ElementReference cpuCanvas, ElementReference gpuCanvas, ElementReference scrollbar, ElementReference verticalScrollbar,
         DotNetObjectReference<T> callback, CellularFluidSimulation simulation) where T : class
     {
+        // A remounted page must not initialize over the previous page's async cleanup.
+        await _sessionGate.WaitAsync();
+        _sessionActive = true;
         _views = await jsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/landscape-view.js");
         await _views.InvokeVoidAsync("initialize", cpuCanvas, gpuCanvas, scrollbar, verticalScrollbar, callback,
             simulation.Width, simulation.Height, simulation.GetTerrainSnapshot(), simulation.GetWaterSnapshot());
@@ -58,6 +63,9 @@ public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
     public ValueTask<bool> WaitForDisplayAsync() =>
         Views.InvokeAsync<bool>("waitForDisplay");
 
+    public ValueTask CancelPendingWaitsAsync() =>
+        _views?.InvokeVoidAsync("cancelPendingWaits") ?? ValueTask.CompletedTask;
+
     public ValueTask RenderCpuAsync(
         ElementReference canvas,
         int[]? terrain,
@@ -74,24 +82,34 @@ public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_views is not null)
-        {
-            await _views.InvokeVoidAsync("dispose");
-            await _views.DisposeAsync();
-            _views = null;
-        }
+        if (!_sessionActive) return;
+        _sessionActive = false;
+        var views = _views;
         var module = _module;
+        _views = null;
         _module = null;
-        if (module is not null)
+        try
         {
             try
             {
-                await module.InvokeVoidAsync("dispose");
+                if (views is not null)
+                {
+                    try { await views.InvokeVoidAsync("dispose"); }
+                    finally { await views.DisposeAsync(); }
+                }
             }
             finally
             {
-                await module.DisposeAsync();
+                if (module is not null)
+                {
+                    try { await module.InvokeVoidAsync("dispose"); }
+                    finally { await module.DisposeAsync(); }
+                }
             }
+        }
+        finally
+        {
+            _sessionGate.Release();
         }
     }
 }

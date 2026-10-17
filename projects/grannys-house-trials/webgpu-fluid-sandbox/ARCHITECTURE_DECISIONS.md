@@ -134,6 +134,11 @@ architecture:
   1/2/4/8-tick batches amortize one GPU readback; manual Step remains one tick.
   CPU delta storage, unchanged terrain, projected geometry, and column order are
   reused. Only dirty, visible, enabled canvases redraw.
+- Pause/disposal cancel and resolve pending display waits before awaiting the run
+  loop; visibility changes also resolve waits so a suspended animation frame
+  cannot strand component disposal. Reset commits cached water/terrain/tick only
+  after upload completion; a failed partial reset invalidates recovery and
+  explicitly resets CPU state.
 - Actual redraw FPS, ticks/sec, draw cost, CPU step cost, and GPU dispatch/readback
   wall-clock roundtrip are sampled every 500 ms. The latter is not GPU execution
   time. Selection reads cached display depths without another GPU map or full

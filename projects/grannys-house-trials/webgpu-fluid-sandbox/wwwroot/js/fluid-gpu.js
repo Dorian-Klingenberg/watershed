@@ -280,9 +280,12 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
 
 export async function reset(terrain, water) {
     requireState();
-    uploadTerrain(terrain);
-    state.cycles = 0;
-    await uploadWater(state, water);
+    if (terrain.length !== state.cellCount) throw new Error("Terrain size does not match the field.");
+    const nextTerrain = Array.from(terrain);
+    // A partial reset cannot safely pair old cached water with C#'s reset terrain.
+    state.recoveryInvalid = true;
+    state.device.queue.writeBuffer(state.terrainBuffer, 0, new Int32Array(nextTerrain));
+    await uploadWater(state, water, { terrain: nextTerrain, cycles: 0 });
 }
 
 export async function applyEdits(terrain, waterDelta) {
@@ -333,6 +336,7 @@ export async function step(ticks = 1) {
 
 export async function snapshot(fresh = false) {
     if (!state) throw new Error("No GPU baseline is available.");
+    if (state.recoveryInvalid) throw new Error("An incomplete GPU reset invalidated the recovery baseline.");
     if (fresh) {
         requireState();
         state.cachedWater = await readCurrentWater(state);
@@ -348,7 +352,7 @@ export function dispose() {
     }
 }
 
-async function uploadWater(currentState, water) {
+async function uploadWater(currentState, water, baseline = null) {
     const values = water instanceof Float32Array ? water : new Float32Array(water);
     if (values.length !== currentState.cellCount) {
         throw new Error("Water snapshot size does not match the GPU field.");
@@ -360,6 +364,12 @@ async function uploadWater(currentState, water) {
     await currentState.device.queue.onSubmittedWorkDone();
     requireState();
     currentState.cachedWater = values;
+    if (baseline) {
+        currentState.terrain = baseline.terrain;
+        currentState.terrainDirty = true;
+        currentState.cycles = baseline.cycles;
+        currentState.recoveryInvalid = false;
+    }
     drawGpuSnapshot(currentState);
 }
 

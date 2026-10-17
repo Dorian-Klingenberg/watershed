@@ -223,7 +223,7 @@
 
     private async Task ResetAsync()
     {
-        StopRun();
+        await StopRunAsync();
         await RunActionAsync(async () =>
         {
             _simulation.Reset();
@@ -283,11 +283,11 @@
         });
     }
 
-    private void ToggleRun()
+    private async Task ToggleRun()
     {
         if (_running)
         {
-            StopRun();
+            await StopRunAsync();
             return;
         }
 
@@ -298,10 +298,11 @@
         _runTask = RunLoopAsync(_runCancellation.Token);
     }
 
-    private void StopRun()
+    private async Task StopRunAsync()
     {
         _running = false;
         _runCancellation?.Cancel();
+        await Gpu.CancelPendingWaitsAsync();
     }
 
     private async Task RunLoopAsync(CancellationToken cancellationToken)
@@ -320,7 +321,7 @@
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         catch (Exception exception)
         {
-            StopRun();
+            await StopRunAsync();
             _errorMessage = exception.Message;
         }
         finally
@@ -444,7 +445,7 @@
         {
             if (exception is JSException)
             {
-                StopRun();
+                await StopRunAsync();
                 // The last displayed GPU field is recoverable even after device loss.
                 // Never resume a reference that was frozen while GPU-only ticks ran.
                 try
@@ -492,7 +493,7 @@
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
-        StopRun();
+        await StopRunAsync();
         if (_runTask is not null) await _runTask;
         await _actionGate.WaitAsync();
         try

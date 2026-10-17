@@ -60,6 +60,13 @@ Run advances serialized batches paced by browser display opportunities, not a fi
 
 When WebGPU is unavailable, Run/Step and terrain edits remain available on the CPU, and reference-off is disabled. Device loss/validation failure stops Run and recovers the **last completed display snapshot and its tick** into the CPU before exposing fallback controls. Unconfirmed GPU work or edits may be lost; a failed recovery explicitly resets the CPU instead of silently reviving stale reference water.
 
+Reset commits cached water, terrain, and tick together only after the upload
+completes. A partially failed reset invalidates recovery and explicitly resets the
+CPU, rather than labeling previous water as tick zero on different terrain.
+Pause and disposal explicitly resolve pending display waits before awaiting the
+run loop; becoming hidden also cancels a pending animation-frame wait, including
+the race where the tab hides immediately after scheduling.
+
 ## Conceptual boundary
 
 The C# simulation owns terrain generation, barrier policy, water edits, reference state, statistics, and comparison policy. The browser GPU module owns WebGPU resources and dispatch; WGSL performs the numeric flow pass. A separate presentation module owns projection, picking, shared camera state, and gesture previews, without implementing simulation rules. Pours send additive water edits applied to each active implementation's own state; they never overwrite GPU water with the CPU reference. Reset uploads the complete starting field. GPU water is read back once per display batch and cached in JavaScript. Selection uses that display cache without another GPU readback or whole-field transfer to C#. Explicit comparison transfers the completed cache; reference re-enable requests a fresh readback.
