@@ -93,6 +93,8 @@ The core fascination of the game is not heroic narrative but:
 
 ## Core Magic Context
 
+We are currently uncertain if this would even be required for a gameplay mechanism at this point. 
+
 The world includes two broad paths to power.
 
 ### The Slow Path
