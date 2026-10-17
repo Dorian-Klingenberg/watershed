@@ -1,10 +1,10 @@
 # WebGPU Fluid Sandbox — Architecture Decisions
 
-This is the running decision ledger for the proposed browser-based fluid
-simulation workbench. It records decisions and working assumptions from planning;
-it does not authorize implementation. The project is intended to have a clean,
-independent home and no code dependencies on the existing Granny's House Trials
-work. Existing experiments are references for behavior and lessons only.
+This is the decision ledger for the browser-based fluid simulation workbench. It
+records the planning decisions and the initial implementation choices. The
+project lives in this directory as a clean, independent application with no code
+dependencies on the existing Granny's House Trials work. Existing experiments
+are references for behavior and lessons only.
 
 ## Decision Ledger
 
@@ -35,12 +35,12 @@ work. Existing experiments are references for behavior and lessons only.
   have no code dependencies on prior work.
 - **Clarification:** Existing code, renderer behavior, shaders, and measurements
   may be studied and recreated; they are references, not dependencies.
-- **Open detail:** The final project name and long-term repository location have
-  not been confirmed. This directory is a planning location only.
+- **Implementation:** The approved implementation lives in this directory. The
+  name remains provisional.
 
 ### ADR-004: Isolate browser GPU concerns from domain concepts
 
-- **Status:** Accepted boundary; implementation details open
+- **Status:** Accepted and implemented
 - **Decision:** Treat the GPU API and browser GPU resource management as a
   platform boundary, not as the home for domain concepts.
 - **Direction:** Domain concepts should not become trapped in JavaScript.
@@ -48,9 +48,10 @@ work. Existing experiments are references for behavior and lessons only.
   browser-side module is the expected place for WebGPU interactions.
 - **Interop constraint:** Prefer a small number of coarse operations over
   per-cell or per-frame interop.
-- **Open detail:** The precise division of canonical simulation behavior,
-  compute-kernel behavior, GPU state ownership, and C# reference behavior needs
-  further discussion.
+- **Implementation:** C# owns the domain-facing model, CPU reference, actions,
+  statistics, and comparison. A coarse JavaScript interop module owns WebGPU
+  resources and dispatch. WGSL contains the numeric operations required by the
+  GPU kernel, not application-domain concepts.
 
 ### ADR-005: Start by recreating the cellular-fluid experiment
 
@@ -59,13 +60,15 @@ work. Existing experiments are references for behavior and lessons only.
   more advanced fluid models.
 - **Scope:** Focus on the fluid simulation itself and only the minimum useful
   interactivity for a first platform iteration.
-- **Candidate controls:** Reset, add a small center pour, and step the
-  simulation. These are suggestions, not a final control specification.
+- **Controls:** Reset, pour water at the center, step both implementations once,
+  and request a CPU/GPU comparison.
+- **Reference:** Include the C# implementation in the first slice. Compare every
+  cell with a `0.0001` absolute tolerance on explicit request.
 - **Deferred:** MAC-grid and other advanced fluid simulations.
 
 ### ADR-006: Revisit the existing renderer before deciding the WebGPU rendering path
 
-- **Status:** Review finding; first-iteration choice open
+- **Status:** Review finding; first-iteration choice implemented
 - **Finding:** The existing renderer is unconventional. It draws a full-screen
   triangle, reconstructs a camera ray per pixel, and uses a pixel shader to
   traverse a grid of variable-height columns with DDA. It does not first build a
@@ -76,23 +79,46 @@ work. Existing experiments are references for behavior and lessons only.
 - **GPU precedent:** The existing Phase 1 compute experiment reads results back
   for the existing renderer. Phase 2 keeps water GPU-resident and renders from
   GPU terrain and water buffers, using snapshots for inspection or edits.
-- **Open detail:** Decide whether the first visible iteration should reproduce
-  the raycast renderer or use a simpler temporary display while validating
-  compute.
+- **Implementation:** Use a regular 2D cell map for the first visible iteration.
+  The GPU field is read back for drawing after a manual step; raycast rendering
+  is deferred.
 
 ### ADR-007: Browser target and success criteria
 
-- **Status:** Initial direction accepted; criteria open
+- **Status:** Initial direction implemented; broader criteria remain open
 - **Decision:** Chrome is acceptable as the initial browser target.
 - **Success criteria:** Intentionally undefined for now. The user wants to see
   an early iteration before deciding what visual and interaction qualities are
   right.
 
-## Current Architecture
+## Implemented architecture
 
-The following is the current **planning model**, not a finalized implementation
-contract. Solid direction reflects user decisions; dashed notes reflect
-implementation details still under discussion.
+The following is the first implementation, not a finalized performance
+architecture:
+
+- `Simulation/CellularFluidSimulation.cs` owns the C# terrain, water state,
+  cellular-flow reference, center pour, and summary.
+- `wwwroot/js/fluid-gpu.js` owns WebGPU resources and executes the WGSL
+  propose/apply passes. The GPU state stays in ping-pong buffers between actions.
+- A reset or pour uploads a complete water snapshot; a manual step runs both
+  implementations and reads the GPU result back to JavaScript for its cell map.
+- `Compare states` requests a GPU snapshot across interop and compares it to the
+  C# snapshot, reporting mismatch count, maximum cell error, and water-total
+  error.
+- When WebGPU cannot initialize, the C# reference remains available.
+- `tests/FluidModelChecks` exercises conservation, flow, repeatability, boundary
+  pours, input validation, and comparison behavior.
+- `.github/workflows/deploy-webgpu-fluid-sandbox.yml` publishes the static app to
+  GitHub Pages.
+
+The earlier diagrams below are conceptual planning sketches; the current
+implementation boundary is described above and in [README.md](./README.md).
+
+## Historical architecture sketches
+
+These original planning sketches are retained for decision history. They are
+not the implementation contract; see the preceding implementation summary and
+the project README for the current architecture.
 
 ### Interaction sequence: Blazor/C# and browser GPU boundary
 
@@ -134,9 +160,8 @@ sequenceDiagram
     end
 ```
 
-The call granularity and state ownership shown here are proposed. In particular,
-the first iteration has not yet chosen between a GPU-resident rendering path and
-a CPU-visible compatibility path.
+The detailed call granularity and state ownership in this historical sketch are
+superseded by the implemented architecture above.
 
 ### Main component class diagram
 
@@ -211,9 +236,8 @@ classDiagram
     WebGpuBackend --> Canvas : configures presentation
 ```
 
-The component names and operations are conceptual. TypeScript is the current
-language recommendation for the browser module, not a confirmed choice. WGSL is
-the expected WebGPU shader language if WebGPU is used.
+The component names and operations in this historical sketch are conceptual.
+The current browser adapter is plain JavaScript; WGSL is used for WebGPU compute.
 
 ## References Reviewed
 
