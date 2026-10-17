@@ -104,6 +104,8 @@ Assert(suspended.GetWaterSnapshot().SequenceEqual(frozen), "GPU-only pour create
 AssertNear(7, gpuOnlyEdit.Sum(), 0, "GPU-only domain edit retains the same brush policy");
 suspended.AddBarrier([11]);
 Assert(suspended.GetCell(1, 2).TerrainHeight == 12, "terrain policy remains active without CPU stepping");
+Assert(suspended.GetTerrainHeight(1, 2) == 12, "terrain-only inspection remains available without reading reference water");
+ExpectThrows<ArgumentOutOfRangeException>(() => suspended.GetTerrainHeight(5, 0), "terrain-only inspection validates coordinates");
 Assert(suspended.CycleCount == 0, "domain edits do not advance the disabled reference");
 var baseline = new float[25];
 baseline[12] = 9;

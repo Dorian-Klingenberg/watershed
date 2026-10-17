@@ -396,6 +396,11 @@ footer {
         grid-template-columns: 1fr;
     }
 
+    .card-heading {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
     .readout {
         display: grid;
         grid-template-columns: repeat(2, 1fr);

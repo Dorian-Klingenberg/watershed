@@ -130,13 +130,18 @@ public sealed class CellularFluidSimulation
 
     public FluidCell GetCell(int x, int y)
     {
+        var terrainHeight = GetTerrainHeight(x, y);
+        return new FluidCell(x, y, terrainHeight, _waterDepths[y * Width + x]);
+    }
+
+    public int GetTerrainHeight(int x, int y)
+    {
         if ((uint)x >= Width || (uint)y >= Height)
         {
             throw new ArgumentOutOfRangeException(nameof(x));
         }
 
-        var index = y * Width + x;
-        return new FluidCell(x, y, _terrainHeights[index], _waterDepths[index]);
+        return _terrainHeights[y * Width + x];
     }
 
     public void Step()

@@ -341,8 +341,8 @@
         if (_disposed || !_initialized) return;
         await RunActionAsync(async () =>
         {
-            var cell = _simulation.GetCell(x, y);
-            _selectedIndex = cell.Y * _simulation.Width + cell.X;
+            _simulation.GetTerrainHeight(x, y);
+            _selectedIndex = y * _simulation.Width + x;
             if (action == "pour")
             {
                 var delta = _simulation.AddWater(x, y, 1, PourDepthInches, _cpuEnabled);
@@ -418,9 +418,10 @@
         }
         if (_selectedIndex is int index)
         {
-            var cell = _simulation.GetCell(index % _simulation.Width, index / _simulation.Width);
-            _selectionText = $"Cell ({cell.X}, {cell.Y}) · terrain {cell.TerrainHeight} in";
-            if (_cpuEnabled) _selectionText += $" · CPU water {cell.WaterDepth:F3} in";
+            var x = index % _simulation.Width;
+            var y = index / _simulation.Width;
+            _selectionText = $"Cell ({x}, {y}) · terrain {_simulation.GetTerrainHeight(x, y)} in";
+            if (_cpuEnabled) _selectionText += $" · CPU water {_simulation.GetCell(x, y).WaterDepth:F3} in";
             if (_gpuSupported && gpuDepth is double depth) _selectionText += $" · GPU water {depth:F3} in";
         }
         await InvokeAsync(StateHasChanged);
