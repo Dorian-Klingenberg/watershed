@@ -1,6 +1,5 @@
 @page "/"
 @inject WebGpuFluidBackend Gpu
-@inject IJSRuntime JS
 @implements IAsyncDisposable
 
 <PageTitle>Cellular Fluid Lab</PageTitle>
@@ -24,10 +23,10 @@
             <p>Pour water into the low basin, then advance both simulations by one synchronous tick.</p>
         </div>
         <div class="actions">
-            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="PourAsync" Disabled="@_busy">Pour 12 in</FluentButton>
-            <FluentButton OnClick="StepAsync" Disabled="@_busy">Step both</FluentButton>
-            <FluentButton OnClick="CompareAsync" Disabled="@(_busy || !_gpuSupported)">Compare states</FluentButton>
-            <FluentButton OnClick="ResetAsync" Disabled="@_busy">Reset</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="PourAsync" Disabled="@(_busy || !_initialized)">Pour 12 in</FluentButton>
+            <FluentButton OnClick="StepAsync" Disabled="@(_busy || !_initialized)">Step @(_gpuSupported ? "both" : "CPU")</FluentButton>
+            <FluentButton OnClick="CompareAsync" Disabled="@(_busy || !_initialized || !_gpuSupported)">Compare states</FluentButton>
+            <FluentButton OnClick="ResetAsync" Disabled="@(_busy || !_initialized)">Reset</FluentButton>
         </div>
     </section>
 
@@ -112,6 +111,7 @@
     private FluidSummary _summary;
     private FluidComparisonResult? _comparison;
     private bool _gpuSupported;
+    private bool _initialized;
     private bool _busy;
     private string _gpuMessage = "Checking WebGPU support…";
     private string? _errorMessage;
@@ -133,7 +133,6 @@
             var result = await Gpu.InitializeAsync(_gpuCanvas, _simulation);
             _gpuSupported = result.Supported;
             _gpuMessage = result.Message;
-            await RenderCpuAsync();
         }
         catch (Exception exception)
         {
@@ -141,6 +140,16 @@
             _errorMessage = exception.Message;
         }
 
+        try
+        {
+            await RenderCpuAsync();
+        }
+        catch (Exception exception)
+        {
+            _errorMessage ??= exception.Message;
+        }
+
+        _initialized = true;
         await InvokeAsync(StateHasChanged);
     }
 
@@ -150,12 +159,11 @@
         {
             _simulation.Reset();
             _comparison = null;
+            await RenderCpuAsync();
             if (_gpuSupported)
             {
                 await Gpu.ResetAsync(_simulation);
             }
-
-            await RenderCpuAsync();
         });
     }
 
@@ -165,12 +173,11 @@
         {
             _simulation.AddCenterWater(PourRadius, PourDepthInches);
             _comparison = null;
+            await RenderCpuAsync();
             if (_gpuSupported)
             {
                 await Gpu.SetWaterAsync(_simulation.GetWaterSnapshot());
             }
-
-            await RenderCpuAsync();
         });
     }
 
@@ -180,12 +187,11 @@
         {
             _simulation.Step();
             _comparison = null;
+            await RenderCpuAsync();
             if (_gpuSupported)
             {
                 await Gpu.StepAsync();
             }
-
-            await RenderCpuAsync();
         });
     }
 
@@ -208,6 +214,12 @@
         }
         catch (Exception exception)
         {
+            if (exception is JSException)
+            {
+                _gpuSupported = false;
+                _gpuMessage = "WebGPU stopped; the CPU reference remains available.";
+            }
+
             _errorMessage = exception.Message;
         }
         finally

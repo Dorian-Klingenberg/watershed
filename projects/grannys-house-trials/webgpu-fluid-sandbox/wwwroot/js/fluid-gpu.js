@@ -13,7 +13,7 @@ struct FluidParameters {
     maxFlow: f32,
     settleRate: f32,
     minimumWater: f32,
-    padding: u32,
+    drainEdges: u32,
 };
 
 @group(0) @binding(0) var<storage, read> terrain: array<i32>;
@@ -150,13 +150,18 @@ fn apply(@builtin(global_invocation_id) invocation: vec3<u32>) {
         delta += proposals[index + params.width].sendUp;
     }
 
-    waterOut[index] = max(0.0, waterIn[index] + delta);
+    var nextWater = max(0.0, waterIn[index] + delta);
+    if (params.drainEdges != 0u &&
+        (x == 0u || x + 1u == params.width || y == 0u || y + 1u == params.height)) {
+        nextWater = 0.0;
+    }
+    waterOut[index] = nextWater;
 }
 `;
 
 let state;
 
-export async function initialize(canvas, width, height, terrain, water, maxFlow, settleRate, minimumWater) {
+export async function initialize(canvas, width, height, terrain, water, maxFlow, settleRate, minimumWater, drainEdges) {
     if (!navigator.gpu) {
         return { supported: false, message: "WebGPU is not available in this browser; the CPU reference remains usable." };
     }
@@ -218,7 +223,7 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
         view.setFloat32(8, maxFlow, true);
         view.setFloat32(12, settleRate, true);
         view.setFloat32(16, minimumWater, true);
-        view.setUint32(20, 0, true);
+        view.setUint32(20, drainEdges ? 1 : 0, true);
 
         device.queue.writeBuffer(terrainBuffer, 0, new Int32Array(terrain));
         device.queue.writeBuffer(parameterBuffer, 0, params);
@@ -235,7 +240,6 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
 
         state = {
             canvas,
-            context: canvas.getContext("2d"),
             device,
             width,
             height,
@@ -297,6 +301,13 @@ export async function snapshot() {
 
 export function renderCpu(canvas, terrain, water, width, height) {
     drawField(canvas, terrain, water, width, height);
+}
+
+export function dispose() {
+    if (state) {
+        state.device.destroy();
+        state = undefined;
+    }
 }
 
 async function uploadWater(currentState, water) {

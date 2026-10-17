@@ -2,11 +2,13 @@ using WebGpuFluidSandbox.Simulation;
 
 var terrain = new[]
 {
-    0, 0, 0,
-    0, 10, 0,
-    0, 0, 0
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 10, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0
 };
-var simulation = new CellularFluidSimulation(3, 3, terrain);
+var simulation = new CellularFluidSimulation(5, 5, terrain);
 simulation.AddCenterWater(radius: 0, depthInches: 8.0f);
 AssertNear(8.0, simulation.GetSummary().TotalWater, 0.0001, "center pour volume");
 
@@ -14,17 +16,20 @@ var beforeStep = simulation.GetWaterSnapshot();
 simulation.Step();
 var afterStep = simulation.GetWaterSnapshot();
 Assert(simulation.CycleCount == 1, "step advances the cycle");
-Assert(afterStep[4] < beforeStep[4], "water leaves the raised center");
-Assert(afterStep.Where((_, index) => index != 4).Any(depth => depth > 0.0f), "water reaches lower neighbors");
+Assert(afterStep[12] < beforeStep[12], "water leaves the raised center");
+Assert(afterStep.Where((_, index) => index != 12).Any(depth => depth > 0.0f), "water reaches lower neighbors");
 AssertNear(8.0, simulation.GetSummary().TotalWater, 0.0001, "closed-field water conservation");
 Assert(afterStep.All(depth => depth >= 0.0f && float.IsFinite(depth)), "water depths remain finite and non-negative");
 
 var edgePour = new CellularFluidSimulation(2, 2, new int[4]);
 edgePour.AddCenterWater(radius: 1, depthInches: 2.0f);
 AssertNear(6.0, edgePour.GetSummary().TotalWater, 0.0001, "center pour clips at field boundaries");
+edgePour.Step();
+Assert(edgePour.GetWaterSnapshot().All(depth => depth == 0.0f), "boundary water drains from the field");
 
 var firstRun = CellularFluidSimulation.CreateDefault();
 firstRun.AddCenterWater(radius: 4, depthInches: 12.0f);
+var initialDefaultWater = firstRun.GetSummary().TotalWater;
 var secondRun = CellularFluidSimulation.CreateDefault();
 secondRun.AddCenterWater(radius: 4, depthInches: 12.0f);
 for (var i = 0; i < 20; i++)
@@ -33,6 +38,11 @@ for (var i = 0; i < 20; i++)
     secondRun.Step();
 }
 
+AssertNear(
+    initialDefaultWater,
+    firstRun.GetSummary().TotalWater,
+    0.02,
+    "default field retains the center pour before it reaches the boundary");
 var deterministicComparison = FluidComparison.Compare(firstRun.GetWaterSnapshot(), secondRun.GetWaterSnapshot(), 0.0f);
 Assert(deterministicComparison.Matches, "repeated CPU runs are deterministic");
 

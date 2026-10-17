@@ -6,6 +6,7 @@ public sealed class CellularFluidSimulation
     public const float SettleRate = 0.5f;
     public const float MinimumWaterInches = 0.001f;
     public const float ComparisonTolerance = 0.0001f;
+    public const bool DrainEdges = true;
 
     private const int MaximumDimension = 1024;
     private const int MaximumCellCount = 262_144;
@@ -164,6 +165,11 @@ public sealed class CellularFluidSimulation
             _waterDepths[i] = Math.Max(0.0f, _waterDepths[i] + deltas[i]);
         }
 
+        if (DrainEdges)
+        {
+            DrainBoundary();
+        }
+
         CycleCount++;
     }
 
@@ -214,6 +220,21 @@ public sealed class CellularFluidSimulation
         lowerSurfaces[lowerCount] = neighborSurface;
         lowerCount++;
         surfaceSum += neighborSurface;
+    }
+
+    private void DrainBoundary()
+    {
+        for (var x = 0; x < Width; x++)
+        {
+            _waterDepths[x] = 0.0f;
+            _waterDepths[(Height - 1) * Width + x] = 0.0f;
+        }
+
+        for (var y = 0; y < Height; y++)
+        {
+            _waterDepths[y * Width] = 0.0f;
+            _waterDepths[y * Width + Width - 1] = 0.0f;
+        }
     }
 }
 

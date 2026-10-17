@@ -22,7 +22,8 @@ public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
             simulation.GetWaterSnapshot(),
             CellularFluidSimulation.MaxFlowInches,
             CellularFluidSimulation.SettleRate,
-            CellularFluidSimulation.MinimumWaterInches);
+            CellularFluidSimulation.MinimumWaterInches,
+            CellularFluidSimulation.DrainEdges);
     }
 
     public ValueTask ResetAsync(CellularFluidSimulation simulation) =>
@@ -50,9 +51,18 @@ public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_module is not null)
+        var module = _module;
+        _module = null;
+        if (module is not null)
         {
-            await _module.DisposeAsync();
+            try
+            {
+                await module.InvokeVoidAsync("dispose");
+            }
+            finally
+            {
+                await module.DisposeAsync();
+            }
         }
     }
 }

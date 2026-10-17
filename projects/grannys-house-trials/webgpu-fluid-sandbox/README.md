@@ -26,6 +26,7 @@ The first implementation focuses on platform feasibility and the cellular-fluid 
 
 - Reset the field, pour water into its center, and manually advance one tick.
 - Run the same synchronous cellular-flow rule in C# and WGSL.
+- Let water leaving the grid drain from the four field boundaries.
 - Compare CPU and GPU water snapshots on request using an absolute per-cell tolerance.
 - Render side-by-side cell maps with regular 2D drawing.
 - Keep the project independent of previous implementations. Existing code and measurements are references, not dependencies.
@@ -52,7 +53,7 @@ flowchart LR
 
 The GPU buffer is the active compute state between edits. The C# CPU model advances alongside it as an inspectable reference.
 
-## Simulation and display loop (proposed)
+## Simulation and display loop
 
 Each control action updates both implementations and refreshes their cell maps. Comparison requests read back the GPU state and report mismatched cells, maximum absolute error, and total-water difference.
 
@@ -84,11 +85,11 @@ sequenceDiagram
 
 The existing experiment is useful as behavioral and rendering reference, but it is not a dependency. Its renderer uses a full-screen triangle and a pixel-shader raycast that traverses variable-height columns with DDA, rather than first building a conventional terrain mesh. Terrain height and fractional water depth are separate inputs to the derived water surface and shading.
 
-The first browser iteration is currently directed toward **regular rendering** while the simulation is established. Recreating the column-raycast renderer in WGSL may be explored later. The existing work also provides two GPU precedents—readback for a separate renderer, and GPU-resident water with snapshots for inspection—but neither is yet the chosen browser architecture.
+The first browser iteration uses **regular 2D cell rendering** while the simulation is established. The WebGPU state is read back to JavaScript for drawing after each manual step. Recreating the column-raycast renderer in WGSL may be explored later. Existing D3D12 work provides behavior and rendering references, not code dependencies.
 
 ## Open decisions
 
-The companion planning documents hold the full decision history. The main unresolved choices include:
+The companion documents hold the implementation decisions and follow-up questions. The main unresolved choices include:
 
 - What visual or interaction qualities should be improved after reviewing the first iteration.
 - Whether a faster GPU-resident rendering path is warranted after the cell-map experiment.

@@ -25,8 +25,8 @@ are references for behavior and lessons only.
   around the WebGPU visualization pane.
 - **Constraints:** Keep browser JavaScript interop as limited as practical. Dear
   ImGui is not the intended UI.
-- **Open detail:** The exact control layout and component selection remain
-  undecided.
+- **Implementation:** Fluent UI buttons sit above side-by-side CPU and GPU field
+  views.
 
 ### ADR-003: Keep the project independent of prior implementations
 
@@ -62,6 +62,8 @@ are references for behavior and lessons only.
   interactivity for a first platform iteration.
 - **Controls:** Reset, pour water at the center, step both implementations once,
   and request a CPU/GPU comparison.
+- **Boundary behavior:** Drain water from the outer grid cells after each tick,
+  matching the initial experiment's open-edge behavior.
 - **Reference:** Include the C# implementation in the first slice. Compare every
   cell with a `0.0001` absolute tolerance on explicit request.
 - **Deferred:** MAC-grid and other advanced fluid simulations.
@@ -102,6 +104,7 @@ architecture:
   propose/apply passes. The GPU state stays in ping-pong buffers between actions.
 - A reset or pour uploads a complete water snapshot; a manual step runs both
   implementations and reads the GPU result back to JavaScript for its cell map.
+- After each tick, water on the field's outer boundary is drained.
 - `Compare states` requests a GPU snapshot across interop and compares it to the
   C# snapshot, reporting mismatch count, maximum cell error, and water-total
   error.

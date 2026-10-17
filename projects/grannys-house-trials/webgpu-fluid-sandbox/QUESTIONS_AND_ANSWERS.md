@@ -12,6 +12,7 @@ current confirmed scope is recorded below.
 - Include both the C# CPU reference and the WGSL GPU implementation from the
   beginning.
 - Include reset, center pour, manual step, and explicit CPU/GPU comparison.
+- Drain water at the field boundary after each tick.
 - Use GitHub Pages as a free static deployment target.
 - Keep the project independent of previous code and keep domain concepts in C#;
   the JavaScript module is a browser/GPU adapter.

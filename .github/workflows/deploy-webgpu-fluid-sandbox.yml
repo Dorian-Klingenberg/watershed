@@ -34,6 +34,12 @@ jobs:
         id: pages
         uses: actions/configure-pages@v5
 
+      - name: Run simulation checks
+        run: >
+          dotnet run
+          --project projects/grannys-house-trials/webgpu-fluid-sandbox/tests/FluidModelChecks/FluidModelChecks.csproj
+          --configuration Release
+
       - name: Publish application
         run: >
           dotnet publish
@@ -54,6 +60,8 @@ jobs:
           index = site / "index.html"
           base_path = os.environ["BASE_PATH"].rstrip("/") + "/"
           content = index.read_text(encoding="utf-8")
+          if '<base href="/" />' not in content:
+              raise RuntimeError("Could not find the Blazor base href placeholder.")
           content = content.replace('<base href="/" />', f'<base href="{base_path}" />', 1)
           index.write_text(content, encoding="utf-8")
           shutil.copyfile(index, site / "404.html")
