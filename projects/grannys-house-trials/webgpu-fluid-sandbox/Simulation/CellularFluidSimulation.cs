@@ -7,6 +7,9 @@ public sealed class CellularFluidSimulation
     public const float MinimumWaterInches = 0.001f;
     public const float ComparisonTolerance = 0.0001f;
     public const bool DrainEdges = true;
+    public const float TimeStepSeconds = 0.016f;
+    public const float Gravity = 32.174f;
+    public const float StateTolerance = 0.002f;
 
     private const int MaximumDimension = 1024;
     private const int MaximumCellCount = 262_144;
@@ -14,6 +17,10 @@ public sealed class CellularFluidSimulation
     private readonly int[] _initialTerrain;
     private readonly float[] _waterDepths;
     private readonly float[] _stepDeltas;
+    private readonly float[] _momentum;
+    private readonly float[] _proposed;
+    private readonly float[] _transfers;
+    private readonly float[] _scales;
 
     public CellularFluidSimulation(int width, int height, int[] terrainHeights)
     {
@@ -35,11 +42,30 @@ public sealed class CellularFluidSimulation
         _initialTerrain = (int[])terrainHeights.Clone();
         _waterDepths = new float[terrainHeights.Length];
         _stepDeltas = new float[terrainHeights.Length];
+        _momentum = new float[terrainHeights.Length * 2];
+        _proposed = new float[_momentum.Length];
+        _transfers = new float[_momentum.Length];
+        _scales = new float[terrainHeights.Length];
     }
 
     public int Width { get; }
     public int Height { get; }
     public int CycleCount { get; private set; }
+    public FluidAlgorithm Algorithm { get; private set; }
+
+    public void SelectAlgorithm(FluidAlgorithm algorithm)
+    {
+        if (!Enum.IsDefined(algorithm)) throw new ArgumentOutOfRangeException(nameof(algorithm));
+        Algorithm = algorithm;
+        ClearFluid();
+    }
+
+    private void ClearFluid()
+    {
+        Array.Clear(_waterDepths);
+        Array.Clear(_momentum);
+        CycleCount = 0;
+    }
 
     public static CellularFluidSimulation CreateDefault()
     {
@@ -66,7 +92,7 @@ public sealed class CellularFluidSimulation
 
     public void Reset()
     {
-        Array.Clear(_waterDepths);
+        ClearFluid();
         _initialTerrain.CopyTo(_terrainHeights, 0);
         CycleCount = 0;
     }
@@ -124,7 +150,12 @@ public sealed class CellularFluidSimulation
 
         foreach (var index in cells)
         {
-            _terrainHeights[index] = (int)Math.Min(int.MaxValue, (long)_initialTerrain[index] + 12);
+            var height = (int)Math.Min(int.MaxValue, (long)_initialTerrain[index] + 12);
+            if (_terrainHeights[index] == height) continue;
+            _terrainHeights[index] = height;
+            _momentum[2 * index] = _momentum[2 * index + 1] = 0;
+            if (index % Width > 0) _momentum[2 * (index - 1)] = 0;
+            if (index >= Width) _momentum[2 * (index - Width) + 1] = 0;
         }
     }
 
@@ -146,6 +177,12 @@ public sealed class CellularFluidSimulation
 
     public void Step()
     {
+        if (Algorithm != FluidAlgorithm.Cellular)
+        {
+            StepMomentum();
+            CycleCount++;
+            return;
+        }
         var deltas = _stepDeltas;
         Array.Clear(deltas);
         Span<int> lowerIndices = stackalloc int[4];
@@ -222,8 +259,25 @@ public sealed class CellularFluidSimulation
 
     public int[] GetTerrainSnapshot() => (int[])_terrainHeights.Clone();
     public float[] GetWaterSnapshot() => (float[])_waterDepths.Clone();
+    public FluidState GetStateSnapshot() => new(GetWaterSnapshot(), (float[])_momentum.Clone(), CycleCount, Algorithm);
+
+    public void SynchronizeState(FluidState state)
+    {
+        if (state.Algorithm != Algorithm || state.Momentum.Length != _momentum.Length ||
+            state.Momentum.Any(value => !float.IsFinite(value)))
+            throw new ArgumentException("Invalid algorithm or momentum baseline.", nameof(state));
+        ImportWater(state.Water, state.Cycles);
+        state.Momentum.CopyTo(_momentum, 0);
+    }
 
     public void SynchronizeWater(float[] water, int cycles)
+    {
+        if (Algorithm != FluidAlgorithm.Cellular)
+            throw new InvalidOperationException("Momentum solvers require a complete state baseline.");
+        ImportWater(water, cycles);
+    }
+
+    private void ImportWater(float[] water, int cycles)
     {
         ArgumentNullException.ThrowIfNull(water);
         if (water.Length != _waterDepths.Length || cycles < 0 ||
@@ -243,11 +297,11 @@ public sealed class CellularFluidSimulation
 
         foreach (var depth in _waterDepths)
         {
+            totalWater += depth;
+            maxDepth = Math.Max(maxDepth, depth);
             if (depth > MinimumWaterInches)
             {
                 wetCellCount++;
-                totalWater += depth;
-                maxDepth = Math.Max(maxDepth, depth);
             }
         }
 
@@ -295,8 +349,83 @@ public sealed class CellularFluidSimulation
             _waterDepths[y * Width + Width - 1] = 0.0f;
         }
     }
+
+    private float Transfer(int edge) => edge < 0 ? 0 : _transfers[edge];
+
+    private void StepMomentum()
+    {
+        // Each cell owns its east and south face. Outer faces are implicit zero.
+        for (var i = 0; i < _waterDepths.Length; i++)
+        {
+            for (var axis = 0; axis < 2; axis++)
+            {
+                var edge = 2 * i + axis;
+                var neighbor = axis == 0 ? (i % Width + 1 < Width ? i + 1 : -1)
+                    : (i + Width < _waterDepths.Length ? i + Width : -1);
+                _proposed[edge] = _transfers[edge] = 0;
+                if (neighbor < 0) continue;
+                var crest = Math.Max(_terrainHeights[i], _terrainHeights[neighbor]);
+                var left = Math.Max(0, (_terrainHeights[i] - crest + _waterDepths[i]) / 12);
+                var right = Math.Max(0, (_terrainHeights[neighbor] - crest + _waterDepths[neighbor]) / 12);
+                if (left == 0 && right == 0) continue;
+                var head = left - right;
+                var old = _momentum[edge];
+                var area = Algorithm == FluidAlgorithm.Mac ? 1 : 0.25f;
+                var next = old + TimeStepSeconds * area * Gravity * head;
+                var donor = next >= 0 ? left : right;
+                if (donor <= 0) continue;
+                if (Algorithm == FluidAlgorithm.TerrainHead)
+                {
+                    // Manning-style semi-implicit rough-bed loss; radius in feet.
+                    var radius = Math.Max(donor, 0.001f);
+                    var radiusPower = MathF.Pow(radius, 4.0f / 3);
+                    next /= 1 + TimeStepSeconds * Gravity * 0.04f * 0.04f * Math.Abs(next) / (area * radiusPower);
+                }
+                else next *= Algorithm == FluidAlgorithm.Mac ? 1 - 0.02f * TimeStepSeconds : 0.94f;
+                var speedLimit = Math.Max(0, 0.45f / TimeStepSeconds - MathF.Sqrt(Gravity * Math.Max(left, right)));
+                var limit = speedLimit * (Algorithm == FluidAlgorithm.Mac ? 1 : area);
+                next = Math.Clamp(next, -limit, limit);
+                _proposed[edge] = next;
+                // MAC transports upwind depth, pipes integrate old/new volume rates.
+                var transfer = Algorithm == FluidAlgorithm.Mac ? next * donor * TimeStepSeconds * 12
+                    : (old + next) * 0.5f * TimeStepSeconds * 12;
+                if ((transfer > 0 && left > 0) || (transfer < 0 && right > 0))
+                    _transfers[edge] = transfer;
+            }
+        }
+        for (var i = 0; i < _waterDepths.Length; i++)
+        {
+            var west = i % Width > 0 ? 2 * (i - 1) : -1;
+            var north = i >= Width ? 2 * (i - Width) + 1 : -1;
+            var outgoing = Math.Max(0, -Transfer(west)) + Math.Max(0, Transfer(2 * i)) +
+                Math.Max(0, -Transfer(north)) + Math.Max(0, Transfer(2 * i + 1));
+            _scales[i] = outgoing > 0 ? Math.Min(1, _waterDepths[i] * 0.25f / outgoing) : 1;
+        }
+        for (var i = 0; i < _waterDepths.Length; i++)
+        {
+            for (var axis = 0; axis < 2; axis++)
+            {
+                var edge = 2 * i + axis;
+                var neighbor = axis == 0 ? i + 1 : i + Width;
+                var scale = _transfers[edge] >= 0 ? _scales[i] : _scales[neighbor];
+                _transfers[edge] *= scale;
+                _momentum[edge] = _proposed[edge] * scale;
+            }
+        }
+        for (var i = 0; i < _waterDepths.Length; i++)
+        {
+            var delta = i % Width > 0 ? Transfer(2 * (i - 1)) : 0;
+            delta -= Transfer(2 * i);
+            if (i >= Width) delta += Transfer(2 * (i - Width) + 1);
+            delta -= Transfer(2 * i + 1);
+            _waterDepths[i] = Math.Max(0, _waterDepths[i] + delta);
+        }
+        if (DrainEdges) DrainBoundary();
+    }
 }
 
+public enum FluidAlgorithm { Cellular, PipeFlux, TerrainHead, Mac }
+public sealed record FluidState(float[] Water, float[] Momentum, int Cycles, FluidAlgorithm Algorithm);
 public readonly record struct FluidSummary(int Cycles, int WetCells, double TotalWater, float MaximumDepth);
 
 public sealed record FluidCell(int X, int Y, int TerrainHeight, float WaterDepth);

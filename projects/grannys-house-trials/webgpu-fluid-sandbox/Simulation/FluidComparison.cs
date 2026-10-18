@@ -2,6 +2,22 @@ namespace WebGpuFluidSandbox.Simulation;
 
 public static class FluidComparison
 {
+    public static FluidComparisonResult Compare(FluidState reference, FluidState candidate)
+    {
+        if (reference.Algorithm != candidate.Algorithm || reference.Cycles != candidate.Cycles)
+            throw new ArgumentException("Complete states must have the same algorithm and tick.");
+        var depthTolerance = reference.Algorithm == FluidAlgorithm.Cellular
+            ? CellularFluidSimulation.ComparisonTolerance : CellularFluidSimulation.StateTolerance;
+        var water = Compare(reference.Water, candidate.Water, depthTolerance);
+        var momentum = Compare(reference.Momentum, candidate.Momentum, CellularFluidSimulation.StateTolerance);
+        return water with
+        {
+            Matches = water.Matches && momentum.Matches,
+            MomentumValuesCompared = momentum.CellsCompared,
+            MismatchedMomentumValues = momentum.MismatchedCells,
+            MaximumMomentumDifference = momentum.MaximumDifference
+        };
+    }
     public static FluidComparisonResult Compare(
         ReadOnlySpan<float> reference,
         ReadOnlySpan<float> candidate,
@@ -56,4 +72,9 @@ public sealed record FluidComparisonResult(
     int MismatchedCells,
     float MaximumDifference,
     double TotalWaterDifference,
-    bool Matches);
+    bool Matches)
+{
+    public int MomentumValuesCompared { get; init; }
+    public int MismatchedMomentumValues { get; init; }
+    public float MaximumMomentumDifference { get; init; }
+}

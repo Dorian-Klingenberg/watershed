@@ -51,6 +51,14 @@ Assert(passingComparison.Matches && passingComparison.MismatchedCells == 0, "com
 var failingComparison = FluidComparison.Compare([1.0f, 2.0f], [1.01f, 2.0f], 0.0001f);
 Assert(!failingComparison.Matches && failingComparison.MismatchedCells == 1, "comparison reports divergent cells");
 AssertNear(0.01, failingComparison.TotalWaterDifference, 0.00001, "comparison reports total-water error");
+var cellularState = new FluidState([1], [0, 0], 1, FluidAlgorithm.Cellular);
+var cellularDrift = new FluidState([1.0002f], [0, 0], 1, FluidAlgorithm.Cellular);
+Assert(!FluidComparison.Compare(cellularState, cellularDrift).Matches, "cellular complete-state check retains original 0.0001 in tolerance");
+var momentumOnly = new FluidState([1], [0.01f, 0], 1, FluidAlgorithm.Cellular);
+var separateErrors = FluidComparison.Compare(cellularState, momentumOnly);
+Assert(separateErrors.MismatchedCells == 0 && separateErrors.MaximumDifference == 0 &&
+    separateErrors.MismatchedMomentumValues == 1 && separateErrors.MaximumMomentumDifference == 0.01f,
+    "depth and face mismatches and errors retain separate units");
 
 ExpectThrows<ArgumentOutOfRangeException>(
     () => simulation.AddCenterWater(radius: -1, depthInches: 1.0f),
@@ -133,7 +141,100 @@ for (var i = 0; i < 20; i++) suspended.Step();
 var allocatedBySteps = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
 Assert(allocatedBySteps == 0, "CPU ticks reuse their delta buffer without managed allocations");
 
-Console.WriteLine("All fluid model checks passed.");
+foreach (var algorithm in Enum.GetValues<FluidAlgorithm>())
+{
+    var model = new CellularFluidSimulation(9, 9, Enumerable.Range(0, 81)
+        .Select(i => i % 9 is 0 or 8 || i / 9 is 0 or 8 ? 1000 : i % 3).ToArray());
+    model.SelectAlgorithm(algorithm);
+    var lake = model.GetStateSnapshot();
+    for (var i = 0; i < 81; i++)
+        lake.Water[i] = Math.Max(0, 12 - model.GetTerrainSnapshot()[i]);
+    model.SynchronizeState(lake);
+    for (var i = 0; i < 100; i++) model.Step();
+    Assert(FluidComparison.Compare(lake.Water, model.GetWaterSnapshot(), 0.00001f).Matches, $"{algorithm} lake at rest over varied bed");
+    Assert(model.GetStateSnapshot().Momentum.All(value => value == 0), $"{algorithm} resting face state");
+    model.SelectAlgorithm(algorithm);
+    model.AddWater(4, 4, 1, 72);
+    var mass = model.GetSummary().TotalWater;
+    for (var i = 0; i < 400; i++) model.Step();
+    var complete = model.GetStateSnapshot();
+    Assert(complete.Water.All(value => float.IsFinite(value) && value >= 0), $"{algorithm} stable nonnegative depth");
+    Assert(complete.Momentum.All(float.IsFinite), $"{algorithm} finite face state");
+    AssertNear(mass, complete.Water.Sum(v => (double)v), 0.01, $"{algorithm} closed basin conserves all water including film");
+    var peer = new CellularFluidSimulation(9, 9, model.GetTerrainSnapshot());
+    peer.SelectAlgorithm(algorithm);
+    peer.SynchronizeState(complete);
+    complete.Water[0] = 900;
+    complete.Momentum[0] = 99;
+    Assert(peer.GetStateSnapshot().Momentum[0] != 99 && peer.GetWaterSnapshot()[0] != 900, $"{algorithm} complete import copies state");
+    for (var i = 0; i < 50; i++) { model.Step(); peer.Step(); }
+    Assert(FluidComparison.Compare(model.GetStateSnapshot(), peer.GetStateSnapshot()).Matches, $"{algorithm} complete resume deterministic");
+    if (algorithm != FluidAlgorithm.Cellular)
+    {
+        ExpectThrows<InvalidOperationException>(() => model.SynchronizeWater(new float[81], 0), $"{algorithm} depth-only import rejected");
+        var bad = model.GetStateSnapshot();
+        bad.Momentum[0] = float.NaN;
+        ExpectThrows<ArgumentException>(() => model.SynchronizeState(bad), $"{algorithm} invalid momentum import rejected");
+        var velocityOnly = model.GetStateSnapshot();
+        velocityOnly.Momentum[0] += 1;
+        Assert(!FluidComparison.Compare(model.GetStateSnapshot(), velocityOnly).Matches, $"{algorithm} comparison includes momentum");
+    }
+    var initialBed = model.GetTerrainSnapshot();
+    model.AddBarrier([40]);
+    var editedBed = model.GetTerrainSnapshot();
+    var stateAfterEdit = model.GetStateSnapshot();
+    Assert(new[] { 80, 81, 78, 63 }.All(edge => stateAfterEdit.Momentum[edge] == 0), $"{algorithm} edits clear all incident faces");
+    model.SelectAlgorithm(FluidAlgorithm.Mac);
+    Assert(model.GetTerrainSnapshot().SequenceEqual(editedBed), $"{algorithm} switching preserves edited terrain");
+    Assert(model.CycleCount == 0 && model.GetStateSnapshot().Water.All(v => v == 0) &&
+        model.GetStateSnapshot().Momentum.All(v => v == 0), $"{algorithm} switch clears full fluid state");
+    model.Reset();
+    Assert(model.Algorithm == FluidAlgorithm.Mac && model.GetTerrainSnapshot().SequenceEqual(initialBed),
+        $"{algorithm} Reset retains algorithm restores initial terrain");
+
+    var barrier = new CellularFluidSimulation(5, 5, channelTerrain);
+    barrier.SelectAlgorithm(algorithm);
+    barrier.AddBarrier([12]);
+    barrier.AddWater(1, 2, 0, 8);
+    for (var i = 0; i < 30; i++) barrier.Step();
+    AssertNear(0, barrier.GetCell(2, 2).WaterDepth, 0, $"{algorithm} dry elevated neighbor blocks flow");
+    barrier.AddWater(1, 2, 0, 12);
+    for (var i = 0; i < 30; i++) barrier.Step();
+    Assert(barrier.GetCell(2, 2).WaterDepth > 0, $"{algorithm} overtops actual terrain crest");
+    var highBed = channelTerrain.Select(v => v + 100).ToArray();
+    var elevated = new CellularFluidSimulation(5, 5, highBed);
+    elevated.SelectAlgorithm(algorithm);
+    elevated.AddWater(2, 2, 0, 12);
+    elevated.Step();
+    Assert(elevated.GetCell(1, 2).WaterDepth > 0, $"{algorithm} no absolute-height magic wall");
+    if (algorithm != FluidAlgorithm.Cellular)
+    {
+        var units = new CellularFluidSimulation(5, 5, new int[25]);
+        units.SelectAlgorithm(algorithm);
+        units.AddCenterWater(0, 12);
+        units.Step();
+        var impulse = 0.016f * 32.174f;
+        var rate = algorithm == FluidAlgorithm.Mac ? impulse * (1 - 0.02f * 0.016f) : impulse * 0.25f;
+        if (algorithm == FluidAlgorithm.PipeFlux) rate *= 0.94f;
+        if (algorithm == FluidAlgorithm.TerrainHead)
+            rate /= 1 + 0.016f * 32.174f * 0.04f * 0.04f * rate / 0.25f;
+        var expectedDepth = rate * 0.016f * 12 * (algorithm == FluidAlgorithm.Mac ? 1 : 0.5f);
+        AssertNear(rate, units.GetStateSnapshot().Momentum[24], 0.000001, $"{algorithm} pressure impulse units");
+        AssertNear(expectedDepth, units.GetCell(3, 2).WaterDepth, 0.000001, $"{algorithm} rate-to-inches continuity units");
+        var movingLake = units.GetStateSnapshot();
+        Array.Fill(movingLake.Water, 12);
+        Array.Clear(movingLake.Momentum);
+        movingLake.Momentum[24] = 0.1f;
+        units.SynchronizeState(movingLake);
+        units.Step();
+        Assert(units.GetStateSnapshot().Momentum[24] > 0, $"{algorithm} face inertia persists without head impulse");
+        var beforeAllocation = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 20; i++) units.Step();
+        Assert(GC.GetAllocatedBytesForCurrentThread() == beforeAllocation, $"{algorithm} ticks allocate no managed state");
+    }
+}
+
+Console.WriteLine("All fluid model checks passed (four algorithms, complete-state lifecycle and terrain behavior).");
 
 static void Assert(bool condition, string description)
 {

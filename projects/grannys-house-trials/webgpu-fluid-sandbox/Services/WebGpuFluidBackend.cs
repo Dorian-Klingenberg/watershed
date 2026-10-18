@@ -26,12 +26,14 @@ public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
             CellularFluidSimulation.MaxFlowInches,
             CellularFluidSimulation.SettleRate,
             CellularFluidSimulation.MinimumWaterInches,
-            CellularFluidSimulation.DrainEdges);
+            CellularFluidSimulation.DrainEdges,
+            (int)simulation.Algorithm);
     }
 
     public ValueTask ResetAsync(CellularFluidSimulation simulation, bool cpuEnabled) =>
         Module.InvokeVoidAsync("reset", simulation.GetTerrainSnapshot(),
-            cpuEnabled ? simulation.GetWaterSnapshot() : new float[simulation.Width * simulation.Height]);
+            cpuEnabled ? simulation.GetWaterSnapshot() : new float[simulation.Width * simulation.Height],
+            (int)simulation.Algorithm);
 
     public ValueTask ApplyEditsAsync(int[]? terrain, float[]? waterDelta) =>
         Module.InvokeVoidAsync("applyEdits", terrain, waterDelta);
@@ -115,4 +117,7 @@ public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
 }
 
 public sealed record GpuInitializationResult(bool Supported, string Message);
-public sealed record GpuBaseline(float[] Water, int Cycles);
+public sealed record GpuBaseline(float[] Water, float[] Momentum, int Cycles, FluidAlgorithm Algorithm)
+{
+    public FluidState ToState() => new(Water, Momentum, Cycles, Algorithm);
+}

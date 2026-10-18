@@ -93,20 +93,51 @@ are references for behavior and lessons only.
   an early iteration before deciding what visual and interaction qualities are
   right.
 
+### ADR-008: Separate algorithms from scenarios and execution backends
+
+- **Status:** Accepted and implemented
+- **Decision:** Offer Cellular, Pipe-flux shallow water, Terrain-head pipe flow,
+  and staggered MAC shallow water in the existing landscape on both CPU and GPU.
+  Historical cellular optimization variants are not separate physics choices.
+- **State:** C# owns algorithm identity, fixed-step/unit policy and independent
+  reference depth plus all signed face state. WGSL reproduces those equations.
+  Cellular uses two passes; momentum models use edge proposal, donor-budget
+  limiting, then depth divergence/state commit. Face state is shared on each
+  interior east/south edge; exterior faces are implicit zero.
+- **Lifecycle:** Switching pauses and clears all fluid/ticks, preserving current
+  terrain and camera. Reset retains algorithm but restores starting terrain.
+  Terrain edits clear incident face state. Complete GPU baselines contain depth,
+  face state, tick and algorithm; recovery/re-enable import them atomically.
+  Comparison validates identity and checks depth and face values: cellular
+  retains 0.0001 in depth tolerance; momentum models use 0.002 in depth and
+  0.002 ft³/s pipe-rate or 0.002 ft/s MAC-velocity tolerance. Depth/face mismatch
+  counts and maximum errors stay separate, not mixed across units.
+- **Limits:** Fixed 0.016 s momentum ticks, local Courant speed cap and 25% donor
+  budget target ordinary pours, not arbitrary flood magnitudes. Terrain crests
+  are overtoppable, never absolute-height walls. MAC velocity advection,
+  additional historical models, erosion and scenario selection remain deferred.
+  See README for equations, units and deliberate departures from C++ references.
+- **Fidelity:** The momentum solvers are adapted recreations, not exact C++ ports.
+  The browser uses its own documented timestep, pipe area, friction and shared-edge
+  storage; C#/WGSL comparisons validate matching browser equations, not the old
+  executable's trajectories or byte-identical floating-point results. Pours retain
+  face impulse; terrain edits invalidate only changed cells' incident faces.
+
 ## Implemented architecture
 
 The following is the current implementation, not a finalized performance
 architecture:
 
 - `Simulation/CellularFluidSimulation.cs` owns the C# terrain, water state,
-  cellular-flow reference, point pours, barrier height policy, reset, and summary.
+  four-algorithm reference and face state, point pours, barrier height policy, reset, and summary.
 - `Pages/Home.razor` serializes paired ticks and edits, owns Run/Pause, and
   displays selected-cell information. Camera navigation remains usable while paused.
 - `wwwroot/js/landscape-view.js` owns projected height-column drawing, terrain
   picking, linked camera/navigation, and gesture previews. Committed cell edits
   are dispatched to C#; it does not own fluid or terrain-edit rules.
 - `wwwroot/js/fluid-gpu.js` owns WebGPU resources and executes the WGSL
-  propose/apply passes. The GPU state stays in ping-pong buffers between actions.
+  two cellular or three momentum passes. GPU depths stay in ping-pong buffers
+  and persistent face state in a separate buffer between actions.
 - Reset uploads the complete starting field. Pours send additive edits, preserving
   each active implementation's independent water state. Barrier strokes update terrain
   without replacing water. Each display batch reads GPU water back once for drawing.
@@ -125,7 +156,7 @@ architecture:
   The depth-axis slider sits physically to the right of the views. Vertical
   page scrolling and responsive layout keep controls reachable on small screens.
 - The sloped scene and barriers are reusable across future solver experiments;
-  momentum-based waves remain outside the current cellular solver's scope.
+  momentum-based waves are available in the three non-cellular algorithms.
 - `tests/FluidModelChecks` exercises conservation, flow, repeatability, boundary
   pours, input validation, and comparison behavior.
 - `.github/workflows/deploy-webgpu-fluid-sandbox.yml` publishes the static app to
@@ -140,6 +171,9 @@ architecture:
   after upload completion; a failed partial reset invalidates recovery and
   explicitly resets CPU state. Backend view sessions serialize old-page disposal
   and new-page initialization so asynchronous cleanup cannot clear remounted views.
+- Terrain/water edits invalidate recovery before queued writes begin and restore
+  validity only after queue completion. A partially failed edit explicitly resets
+  fallback instead of pairing old cached depths with newly edited terrain/face state.
 - Actual redraw FPS, ticks/sec, draw cost, CPU step cost, and GPU dispatch/readback
   wall-clock roundtrip are sampled every 500 ms. The latter is not GPU execution
   time. Selection reads cached display depths without another GPU map or full

@@ -7,7 +7,10 @@ that remains intentionally outside its scope.
 
 - [ ] Consider a GPU-resident renderer or the existing column-raycast approach
   after assessing the linked projected-column views.
-- [ ] Iterate through additional fluid models using the sloped landscape and barriers.
+- [ ] Revisit remaining historical heightfield SWE, virtual-pipe, O'Brien volume-only,
+  slosh scenario presets, and hydraulic erosion/rain branches after the four models.
+- [ ] Consider a scenario picker separately from algorithm/execution selection.
+- [ ] Consider MAC velocity self-advection (currently omitted/off).
 - [ ] Evaluate additional browsers after the initial Chrome target.
 - [ ] Decide whether the provisional project name should change.
 - [ ] Reassess dedicated workers only after profiling; do not assume Pages provides
@@ -18,6 +21,9 @@ that remains intentionally outside its scope.
 - [x] Use Blazor WebAssembly with Fluent UI Blazor controls.
 - [x] Keep the app independent of earlier implementations.
 - [x] Implement the cellular-fluid model in both C# and WGSL.
+- [x] Add paired Pipe-flux, Terrain-head and staggered MAC models, preserving the current
+  landscape; switch pauses/clears complete fluid state without discarding terrain edits.
+- [x] Compare/import/export complete depth and face state for reference re-enable/fallback.
 - [x] Use reset, a center pour, manual stepping, and explicit CPU/GPU comparison.
 - [x] Start with regular 2D cell rendering.
 - [x] Keep domain concepts and comparison behavior in C#; keep WebGPU resources

@@ -21,6 +21,23 @@ current confirmed scope is recorded below.
 
 ## Platform and project shape
 
+### Approved algorithm-selector follow-up
+
+Four real numeric models now run on both C# and WebGPU: Cellular, Pipe-flux
+shallow water, Terrain-head pipe flow, and staggered MAC shallow water. The
+existing landscape remains the shared scenario; execution optimizations and
+historical scenario names are not presented as extra algorithms.
+
+Changing algorithm pauses and clears depths, face rates/velocities and ticks,
+but preserves the current edited terrain and camera. Reset instead restores the
+starting scene while retaining the chosen algorithm. Complete-state comparison,
+reference re-enable and GPU-failure recovery include all face state, not just
+water depths. Pipe-flux uses linearly damped volume rates, Terrain-head adds
+depth-dependent rough-bed friction, and MAC transports donor depth with genuine
+face velocity state. MAC velocity advection and other historical/erosion
+branches are explicitly deferred. See README for units, numerical safeguards,
+comparison tolerance and behavioral references.
+
 ### Approved interactive follow-up
 
 The user subsequently approved Run/Pause alongside the existing controls,

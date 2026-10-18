@@ -4,7 +4,7 @@ This directory now contains the first runnable implementation of the browser-bas
 
 ## At a glance
 
-The workbench runs the cellular-fluid experiment using **Blazor WebAssembly** for the application shell and **WebGPU** for compute.
+The workbench runs four fluid algorithms using **Blazor WebAssembly** for the application shell and **WebGPU** for compute, with a matched C# reference for each.
 
 The aim is to make an early interactive iteration available for review. Broader success criteria and future simulation scope remain open.
 
@@ -34,7 +34,85 @@ The first implementation focuses on platform feasibility and the cellular-fluid 
 - Render linked height-aware landscapes with projected columns, retaining independent CPU/GPU water results.
 - Keep the project independent of previous implementations. Existing code and measurements are references, not dependencies.
 
-Advanced models such as MAC-grid simulation and the existing column-raycast renderer are later considerations. The cellular solver demonstrates redistribution, pooling, and overflow, not momentum-based waves.
+## Algorithms, scenario, and execution
+
+The **Algorithm** selector changes the numeric model in both implementations.
+The existing sloped landscape is the scenario; CPU/WebGPU are execution backends,
+not different algorithms. Changing algorithm pauses Run and clears water, all
+face state, and ticks while preserving **current edited terrain and camera**.
+Reset instead restores starting terrain and clears fluid while retaining the
+selected algorithm. CPU-only fallback supports all four.
+
+| Algorithm | Persistent state and model |
+| --- | --- |
+| Cellular | Depth-only synchronous four-neighbor redistribution; no momentum or physical seconds per tick. |
+| Pipe-flux shallow water (adapted) | Signed edge volume rates, free-surface pressure impulse through fixed 0.25 ft² virtual pipes, linear damping (0.94/tick), old/new trapezoidal volume transport. |
+| Terrain-head pipe flow (adapted) | Signed pipe volume rates and trapezoidal transport, but depth-dependent semi-implicit Manning-style rough-bed friction (n=0.04), rather than constant linear damping. Shallow flow loses more momentum than deep flow. |
+| Staggered MAC shallow water (adapted) | Persistent face velocities, gravity impulse and linear drag (0.02/s); first-order donor-depth continuity flux, **not** fixed-pipe-area transport. Velocity self-advection remains deferred/off, not an exposed nonfunctional option. |
+
+The three momentum models use 1 ft cells, gravity 32.174 ft/s² and fixed
+0.016 s ticks. Public/render depths and terrain are inches; pipe states are
+ft³/s and MAC states ft/s. Two signed face values per cell represent east/south
+interior faces; opposite directions share that face and external faces are
+implicit zero. Momentum is a convenient label for these rate/velocity states,
+not conserved mechanical momentum.
+
+Hydrostatic crest reconstruction uses depth above the higher neighboring bed.
+Dry high neighbors block flow until overtopped; **no terrain-height threshold
+turns a cell into an absolute wall**. Equal free surfaces over varied beds stay
+at rest. Pours add depth without clearing existing face impulse. Terrain edits
+preserve volume and clear only faces incident to cells whose bed actually changed;
+unaffected faces retain their state.
+Transport shares a donor budget of at most 25% of its starting depth per tick,
+scaling persistent face state by the same factor. A local wave-speed-based
+velocity cap limits advective Courant number (0.45 minus gravity-wave
+contribution); extreme depths exceeding that fixed-step budget stall rather
+than claim a physically valid CFL step. Normal 12–72 in pours are the intended
+range. This is an experimental positivity-limited approximation, not a
+production flood solver, incompressible Navier–Stokes, or a calibrated erosion model.
+Only outer grid cells drain; enclosed terrain basins conserve water.
+
+Complete baseline exports/imports contain depths, **all face rates/velocities**,
+algorithm identity and tick. Reference re-enable and device-loss recovery import
+that complete state, not just depths. Each completed GPU display batch caches
+both depth and face state together; there is still no CPU snapshot transfer or
+solver/draw/summary work while the CPU reference is off. Comparison checks
+algorithm/tick and every depth and face value. Cellular retains its original
+0.0001 in absolute depth tolerance; momentum models use 0.002 in for depth and
+0.002 ft³/s (pipes) or 0.002 ft/s (MAC) for face state. Depth/face mismatch
+counts and maximum errors are reported separately, never combined across units;
+water-total error is in cell-inches. Reference re-enable explicitly starts a new
+independent baseline.
+
+These are **adapted recreations, not exact ports or parameter-equivalent
+reproductions** of the earlier pipe-flux, terrain-head and MAC headers and lesson
+documents under `../subprojects/grass-field-003/`; none are dependencies. In
+particular, original Terrain-head uses 0.005 s ticks, 0.05 ft² pipes and Manning
+n=0.045, while this browser adaptation uses 0.016 s, 0.25 ft² and n=0.04.
+Both retain old/new trapezoidal transport and depth-dependent friction. Original
+Pipe-flux has separately stored mirrored directional fluxes in inch-based
+experiment units; this adaptation stores each signed shared edge once in ft³/s,
+with a physically dimensioned pressure impulse instead of the original tunable
+pressure/conductance scaling. Its constant linear damping still distinguishes
+it from Terrain-head's nonlinear rough-bed loss. Browser C#/WGSL comparisons
+validate **these browser models against one another**, not equivalence to C++.
+The browser versions deliberately use four neighbors, overtoppable terrain,
+positivity limiting and complete-state recovery. Historical cellular
+round/parallel/active-source/GPU variants are execution optimizations of cellular
+physics, not extra algorithm choices. Original heightfield SWE, virtual-pipe,
+O'Brien volume-only, slosh scenario presets, hydraulic erosion/rain and other
+historical branches remain **deferred**, as do new scenario selection and MAC
+velocity advection. The column-raycast renderer is also still deferred.
+
+Headless Chromium/SwiftShader regression checks covered at least 448 ticks per
+algorithm, including a real barrier stroke, another pour, GPU-only stepping and
+reference re-enable. Observed maximum depth error was below 0.000005 in; pipe
+rate errors were below 0.0000011 ft³/s and MAC velocity error below 0.000004 ft/s.
+Water-total error stayed below 0.0001 cell-inches. These are sampled results,
+not bitwise-equality claims or guarantees against floating-point drift over
+arbitrarily long runs or other adapters. The declared complete-state tolerance
+remains 0.0001 in for cellular depth, 0.002 in for momentum-model depth,
+0.002 ft³/s for pipe rates and 0.002 ft/s for MAC.
 
 ## Navigation and controls
 
@@ -48,6 +126,7 @@ Advanced models such as MAC-grid simulation and the existing column-raycast rend
 | Horizontal landscape slider | Move both cameras sideways together |
 | Vertical landscape slider, physically right of the views | Move both cameras along the other terrain axis |
 | CPU reference: on/off | Suspend the reference; re-enable from a fresh GPU baseline |
+| Algorithm | Pause; clear water, face state and ticks; preserve edited terrain/camera |
 | Ticks / display | Run 1, 2 (default), 4, or 8 ticks per display snapshot; manual Step remains one tick |
 
 Selection, hover, barrier previews, and camera state are linked. A movement threshold distinguishes clicks from drags; canceling a gesture discards its pending edit. Overlapping barrier strokes do not repeatedly raise the same cells. Terrain edits preserve water depth rather than displacing water volume.
@@ -60,9 +139,10 @@ Run advances serialized batches paced by browser display opportunities, not a fi
 
 When WebGPU is unavailable, Run/Step and terrain edits remain available on the CPU, and reference-off is disabled. Device loss/validation failure stops Run and recovers the **last completed display snapshot and its tick** into the CPU before exposing fallback controls. Unconfirmed GPU work or edits may be lost; a failed recovery explicitly resets the CPU instead of silently reviving stale reference water.
 
-Reset commits cached water, terrain, and tick together only after the upload
-completes. A partially failed reset invalidates recovery and explicitly resets the
-CPU, rather than labeling previous water as tick zero on different terrain.
+Reset commits cached water, terrain, face state and tick together only after the
+upload completes. All edits invalidate recovery until their queued writes are
+confirmed: a partially failed barrier/pour or reset explicitly resets the CPU
+instead of combining old depths with partly edited terrain or face state.
 Pause and disposal explicitly resolve pending display waits before awaiting the
 run loop; becoming hidden also cancels a pending animation-frame wait, including
 the race where the tab hides immediately after scheduling.
@@ -89,7 +169,7 @@ The GPU buffer is the active compute state between edits. When enabled, the C# C
 
 ## Simulation and display loop
 
-Each simulation action updates the active implementations. A batch dispatches all paired WGSL passes before one readback; the CPU delta buffer is reused across ticks. Unchanged terrain is not recopied through interop every tick. Camera gestures redraw visible, enabled views without advancing either solver. Terrain projection geometry and column order are reused until terrain/camera/viewport changes; hover redraws only when the hovered cell changes. Comparison reports mismatched cells, maximum absolute error, and total-water difference.
+Each simulation action updates the active implementations. A batch dispatches all paired WGSL passes before one readback; the CPU delta buffer is reused across ticks. Unchanged terrain is not recopied through interop every tick. Camera gestures redraw visible, enabled views without advancing either solver. Terrain projection geometry and column order are reused until terrain/camera/viewport changes; hover redraws only when the hovered cell changes. Comparison reports mismatched depth/face values, maximum absolute errors, and total-water difference.
 
 Performance readouts are sampled every 500 ms rather than rerendering the Blazor tree every tick:
 
@@ -167,6 +247,22 @@ The companion documents hold the implementation decisions and follow-up question
 
 - Run locally with `dotnet run --project projects/grannys-house-trials/webgpu-fluid-sandbox/WebGpuFluidSandbox.csproj`.
 - Run the CPU model checks with `dotnet run --project projects/grannys-house-trials/webgpu-fluid-sandbox/tests/FluidModelChecks/FluidModelChecks.csproj`.
+- Browser regression checks use Node's built-in WebSocket/CDP client, without
+  installing packages: start the app, launch a **disposable external-profile**
+  Chromium with `--headless --remote-debugging-port=9222 --enable-unsafe-webgpu`
+  (software-GPU environments may also need `--use-angle=swiftshader`), then run
+  `node projects/grannys-house-trials/webgpu-fluid-sandbox/tests/browser-checks.mjs`.
+  Set `FLUID_TEST_URL` / `FLUID_CDP_URL` for non-default endpoints
+  (`http://127.0.0.1:5119` / `http://127.0.0.1:9222`). Do not point this at a
+  personal browser session: the suite edits/reloads its first tab and simulates
+  unavailable WebGPU. Stop that disposable browser and server afterward.
+  It checks each model after at least 128 paired ticks, a real barrier/pour and
+  128 further paired ticks, 64 GPU-only ticks followed by complete-state resume
+  and 128 paired ticks; it also checks no CPU drawing while off, switch/reset,
+  responsive widths and fallback. Completed-baseline GPU-loss notification is
+  fault-injected; another check destroys the actual WebGPU device during a
+  barrier upload and verifies explicit reset rather than mixed-state recovery.
+  Physical driver resets remain untested.
 - Publish static files with `dotnet publish projects/grannys-house-trials/webgpu-fluid-sandbox/WebGpuFluidSandbox.csproj --configuration Release`.
 - The GitHub Actions workflow publishes the app to GitHub Pages from `main`; set the repository's Pages source to **GitHub Actions** once in repository settings.
 - WebGPU requires a supporting browser and a secure context. When it is unavailable, the C# CPU model remains available.

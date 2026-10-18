@@ -16,6 +16,7 @@ struct FluidParameters {
     settleRate: f32,
     minimumWater: f32,
     drainEdges: u32,
+    algorithm: u32,
 };
 
 @group(0) @binding(0) var<storage, read> terrain: array<i32>;
@@ -23,6 +24,96 @@ struct FluidParameters {
 @group(0) @binding(2) var<storage, read_write> proposals: array<FlowProposal>;
 @group(0) @binding(3) var<storage, read_write> waterOut: array<f32>;
 @group(0) @binding(4) var<uniform> params: FluidParameters;
+@group(0) @binding(5) var<storage, read_write> momentum: array<vec2<f32>>;
+@group(0) @binding(6) var<storage, read_write> edges: array<vec4<f32>>;
+@group(0) @binding(7) var<storage, read_write> scales: array<f32>;
+
+fn edgeTransfer(i: u32, axis: u32) -> f32 {
+    return edges[i][axis + 2u];
+}
+fn scaledTransfer(i: u32, axis: u32) -> f32 {
+    let transfer = edgeTransfer(i, axis);
+    let neighbor = i + select(params.width, 1u, axis == 0u);
+    if (transfer < 0.0) { return transfer * scales[neighbor]; }
+    return transfer * scales[i];
+}
+
+@compute @workgroup_size(64)
+fn proposeMomentum(@builtin(global_invocation_id) id: vec3<u32>) {
+    let i = id.x;
+    if (i >= params.width * params.height) { return; }
+    var result = vec4<f32>(0.0);
+    for (var axis = 0u; axis < 2u; axis++) {
+        let neighbor = i + select(params.width, 1u, axis == 0u);
+        if ((axis == 0u && i % params.width + 1u == params.width) ||
+            neighbor >= params.width * params.height) { continue; }
+        let crest = max(terrain[i], terrain[neighbor]);
+        let left = max(0.0, (f32(terrain[i] - crest) + waterIn[i]) / 12.0);
+        let right = max(0.0, (f32(terrain[neighbor] - crest) + waterIn[neighbor]) / 12.0);
+        if (left == 0.0 && right == 0.0) { continue; }
+        let head = left - right;
+        let old = momentum[i][axis];
+        let area = select(0.25, 1.0, params.algorithm == 3u);
+        var next = old + 0.016 * area * 32.174 * head;
+        let donor = select(right, left, next >= 0.0);
+        if (donor <= 0.0) { continue; }
+        if (params.algorithm == 2u) {
+            let radius = max(donor, 0.001);
+            let radiusPower = pow(radius, 4.0 / 3.0);
+            next /= 1.0 + 0.016 * 32.174 * 0.04 * 0.04 * abs(next) / (area * radiusPower);
+        } else {
+            next *= select(0.94, 1.0 - 0.02 * 0.016, params.algorithm == 3u);
+        }
+        let speedLimit = max(0.0, 0.45 / 0.016 - sqrt(32.174 * max(left, right)));
+        let limit = speedLimit * select(area, 1.0, params.algorithm == 3u);
+        next = clamp(next, -limit, limit);
+        result[axis] = next;
+        var transfer = (old + next) * 0.5 * 0.016 * 12.0;
+        if (params.algorithm == 3u) { transfer = next * donor * 0.016 * 12.0; }
+        if ((transfer > 0.0 && left > 0.0) || (transfer < 0.0 && right > 0.0)) {
+            result[axis + 2u] = transfer;
+        }
+    }
+    edges[i] = result;
+}
+
+@compute @workgroup_size(64)
+fn limitMomentum(@builtin(global_invocation_id) id: vec3<u32>) {
+    let i = id.x;
+    if (i >= params.width * params.height) { return; }
+    var west = 0.0;
+    var north = 0.0;
+    if (i % params.width > 0u) { west = edgeTransfer(i - 1u, 0u); }
+    if (i >= params.width) { north = edgeTransfer(i - params.width, 1u); }
+    let outgoing = max(0.0, -west) + max(0.0, edgeTransfer(i, 0u)) +
+        max(0.0, -north) + max(0.0, edgeTransfer(i, 1u));
+    var scale = 1.0;
+    if (outgoing > 0.0) { scale = min(1.0, waterIn[i] * 0.25 / outgoing); }
+    scales[i] = scale;
+}
+
+@compute @workgroup_size(64)
+fn applyMomentum(@builtin(global_invocation_id) id: vec3<u32>) {
+    let i = id.x;
+    if (i >= params.width * params.height) { return; }
+    let x = i % params.width;
+    let y = i / params.width;
+    var delta = 0.0;
+    if (x > 0u) { delta += scaledTransfer(i - 1u, 0u); }
+    delta -= scaledTransfer(i, 0u);
+    if (y > 0u) { delta += scaledTransfer(i - params.width, 1u); }
+    delta -= scaledTransfer(i, 1u);
+    var nextWater = max(0.0, waterIn[i] + delta);
+    if (params.drainEdges != 0u &&
+        (x == 0u || x + 1u == params.width || y == 0u || y + 1u == params.height)) { nextWater = 0.0; }
+    waterOut[i] = nextWater;
+    for (var axis = 0u; axis < 2u; axis++) {
+        let neighbor = i + select(params.width, 1u, axis == 0u);
+        var scale = scales[i];
+        if (edgeTransfer(i, axis) < 0.0) { scale = scales[neighbor]; }
+        momentum[i][axis] = edges[i][axis] * scale;
+    }
+}
 
 @compute @workgroup_size(64)
 fn propose(@builtin(global_invocation_id) invocation: vec3<u32>) {
@@ -163,7 +254,7 @@ fn apply(@builtin(global_invocation_id) invocation: vec3<u32>) {
 
 let state;
 
-export async function initialize(canvas, width, height, terrain, water, maxFlow, settleRate, minimumWater, drainEdges) {
+export async function initialize(canvas, width, height, terrain, water, maxFlow, settleRate, minimumWater, drainEdges, algorithm = 0) {
     if (!navigator.gpu) {
         return { supported: false, message: "WebGPU is not available in this browser; the CPU reference remains usable." };
     }
@@ -194,9 +285,14 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
         const readbackBuffer = device.createBuffer({
-            size: bufferSize,
+            size: bufferSize * 3,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
         });
+        const momentumBuffer = device.createBuffer({
+            size: bufferSize * 2, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
+        });
+        const edgeBuffer = device.createBuffer({ size: bufferSize * 4, usage: GPUBufferUsage.STORAGE });
+        const scaleBuffer = device.createBuffer({ size: bufferSize, usage: GPUBufferUsage.STORAGE });
 
         const bindGroupLayout = device.createBindGroupLayout({
             entries: [
@@ -204,7 +300,8 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
                 { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
                 { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
                 { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
-                { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } }
+                { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+                ...[5, 6, 7].map(binding => ({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } }))
             ]
         });
         const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
@@ -217,6 +314,11 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
             layout: pipelineLayout,
             compute: { module, entryPoint: "apply" }
         });
+        const momentumPipelines = ["proposeMomentum", "limitMomentum", "applyMomentum"].map(entryPoint =>
+            device.createComputePipeline({ layout: pipelineLayout, compute: { module, entryPoint } }));
+        const compilation = await module.getCompilationInfo();
+        const errors = compilation.messages.filter(message => message.type === "error");
+        if (errors.length) { device.destroy(); throw new Error(errors.map(error => error.message).join("\n")); }
 
         const params = new ArrayBuffer(32);
         const view = new DataView(params);
@@ -226,6 +328,7 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
         view.setFloat32(12, settleRate, true);
         view.setFloat32(16, minimumWater, true);
         view.setUint32(20, drainEdges ? 1 : 0, true);
+        view.setUint32(24, algorithm, true);
 
         device.queue.writeBuffer(terrainBuffer, 0, new Int32Array(terrain));
         device.queue.writeBuffer(parameterBuffer, 0, params);
@@ -236,7 +339,10 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
                 { binding: 1, resource: { buffer: input } },
                 { binding: 2, resource: { buffer: proposalBuffer } },
                 { binding: 3, resource: { buffer: waterBuffers[1 - index] } },
-                { binding: 4, resource: { buffer: parameterBuffer } }
+                { binding: 4, resource: { buffer: parameterBuffer } },
+                { binding: 5, resource: { buffer: momentumBuffer } },
+                { binding: 6, resource: { buffer: edgeBuffer } },
+                { binding: 7, resource: { buffer: scaleBuffer } }
             ]
         }));
 
@@ -253,10 +359,12 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
             readbackBuffer,
             proposePipeline,
             applyPipeline,
+            momentumPipelines, momentumBuffer, edgeBuffer, scaleBuffer, parameterBuffer, params, algorithm,
             bindGroups,
             current: 0,
             cycles: 0,
             cachedWater: new Float32Array(water),
+            cachedMomentum: new Float32Array(cellCount * 2),
             terrainDirty: true,
             error: null,
             workgroupCount: Math.ceil(cellCount / 64)
@@ -278,31 +386,51 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
     }
 }
 
-export async function reset(terrain, water) {
+export async function reset(terrain, water, algorithm = 0) {
     requireState();
     if (terrain.length !== state.cellCount) throw new Error("Terrain size does not match the field.");
     const nextTerrain = Array.from(terrain);
     // A partial reset cannot safely pair old cached water with C#'s reset terrain.
     state.recoveryInvalid = true;
+    new DataView(state.params).setUint32(24, algorithm, true);
+    state.device.queue.writeBuffer(state.parameterBuffer, 0, state.params);
+    state.device.queue.writeBuffer(state.momentumBuffer, 0, new Float32Array(state.cellCount * 2));
     state.device.queue.writeBuffer(state.terrainBuffer, 0, new Int32Array(nextTerrain));
-    await uploadWater(state, water, { terrain: nextTerrain, cycles: 0 });
+    await uploadWater(state, water, { terrain: nextTerrain, cycles: 0, algorithm });
 }
 
 export async function applyEdits(terrain, waterDelta) {
     requireState();
+    if (terrain && terrain.length !== state.cellCount) throw new Error("Terrain size does not match the field.");
+    if (waterDelta && waterDelta.length !== state.cellCount) throw new Error("Water edit size does not match the field.");
+    if (!terrain && !waterDelta) return;
+    // C# already owns the edited terrain. A failed upload must reset fallback,
+    // not import pre-edit depths with partly updated terrain or face state.
+    state.recoveryInvalid = true;
     if (terrain) uploadTerrain(terrain);
     if (waterDelta) {
-        if (waterDelta.length !== state.cellCount) throw new Error("Water edit size does not match the field.");
         const water = state.cachedWater.slice();
         for (let i = 0; i < water.length; i++) water[i] += waterDelta[i];
         await uploadWater(state, water);
     } else {
-        drawGpuSnapshot(state);
+        await state.device.queue.onSubmittedWorkDone();
     }
+    requireState();
+    state.recoveryInvalid = false;
+    if (!waterDelta) drawGpuSnapshot(state);
 }
 
 function uploadTerrain(terrain) {
     if (terrain.length !== state.cellCount) throw new Error("Terrain size does not match the field.");
+    const momentum = state.cachedMomentum.slice();
+    for (let i = 0; i < terrain.length; i++) {
+        if (terrain[i] === state.terrain[i]) continue;
+        momentum[2 * i] = momentum[2 * i + 1] = 0;
+        if (i % state.width > 0) momentum[2 * (i - 1)] = 0;
+        if (i >= state.width) momentum[2 * (i - state.width) + 1] = 0;
+    }
+    state.device.queue.writeBuffer(state.momentumBuffer, 0, momentum);
+    state.cachedMomentum = momentum;
     state.terrain = Array.from(terrain);
     state.terrainDirty = true;
     state.device.queue.writeBuffer(state.terrainBuffer, 0, new Int32Array(terrain));
@@ -313,6 +441,17 @@ export async function step(ticks = 1) {
     if (!Number.isInteger(ticks) || ticks < 1 || ticks > 8) throw new Error("Invalid tick batch.");
     const encoder = state.device.createCommandEncoder();
     for (let tick = 0; tick < ticks; ++tick) {
+        if (state.algorithm !== 0) {
+            for (const pipeline of state.momentumPipelines) {
+                const pass = encoder.beginComputePass();
+                pass.setPipeline(pipeline);
+                pass.setBindGroup(0, state.bindGroups[state.current]);
+                pass.dispatchWorkgroups(state.workgroupCount);
+                pass.end();
+            }
+            state.current = 1 - state.current;
+            continue;
+        }
         const proposePass = encoder.beginComputePass();
         proposePass.setPipeline(state.proposePipeline);
         proposePass.setBindGroup(0, state.bindGroups[state.current]);
@@ -327,22 +466,26 @@ export async function step(ticks = 1) {
         state.current = 1 - state.current;
     }
     state.device.queue.submit([encoder.finish()]);
-    const water = await readCurrentWater(state);
+    const complete = await readCurrentWater(state);
     requireState();
-    state.cachedWater = water;
+    state.cachedWater = complete.water;
+    state.cachedMomentum = complete.momentum;
     state.cycles += ticks;
     drawGpuSnapshot(state);
 }
 
 export async function snapshot(fresh = false) {
     if (!state) throw new Error("No GPU baseline is available.");
-    if (state.recoveryInvalid) throw new Error("An incomplete GPU reset invalidated the recovery baseline.");
+    if (state.recoveryInvalid) throw new Error("An incomplete GPU reset or edit invalidated the recovery baseline.");
     if (fresh) {
         requireState();
-        state.cachedWater = await readCurrentWater(state);
+        const complete = await readCurrentWater(state);
+        state.cachedWater = complete.water;
+        state.cachedMomentum = complete.momentum;
         requireState();
     }
-    return { water: Array.from(state.cachedWater), cycles: state.cycles };
+    return { water: Array.from(state.cachedWater), momentum: Array.from(state.cachedMomentum),
+        cycles: state.cycles, algorithm: state.algorithm };
 }
 
 export function dispose() {
@@ -368,6 +511,8 @@ async function uploadWater(currentState, water, baseline = null) {
         currentState.terrain = baseline.terrain;
         currentState.terrainDirty = true;
         currentState.cycles = baseline.cycles;
+        currentState.algorithm = baseline.algorithm;
+        currentState.cachedMomentum = new Float32Array(currentState.cellCount * 2);
         currentState.recoveryInvalid = false;
     }
     drawGpuSnapshot(currentState);
@@ -386,11 +531,13 @@ async function readCurrentWater(currentState) {
         currentState.readbackBuffer,
         0,
         currentState.bufferSize);
+    encoder.copyBufferToBuffer(currentState.momentumBuffer, 0, currentState.readbackBuffer,
+        currentState.bufferSize, currentState.bufferSize * 2);
     currentState.device.queue.submit([encoder.finish()]);
     await currentState.readbackBuffer.mapAsync(GPUMapMode.READ);
-    const water = new Float32Array(currentState.readbackBuffer.getMappedRange()).slice();
+    const values = new Float32Array(currentState.readbackBuffer.getMappedRange()).slice();
     currentState.readbackBuffer.unmap();
-    return water;
+    return { water: values.slice(0, currentState.cellCount), momentum: values.slice(currentState.cellCount) };
 }
 
 function requireState() {
