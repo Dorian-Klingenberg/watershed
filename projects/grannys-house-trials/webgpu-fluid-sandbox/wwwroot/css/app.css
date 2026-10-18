@@ -44,9 +44,10 @@ button {
 }
 
 .workspace {
-    width: min(1180px, calc(100% - 48px));
-    margin: 0 auto;
-    padding: 54px 0 32px;
+    width: 100%;
+    min-height: 100vh;
+    margin: 0;
+    padding: 32px clamp(18px, 2vw, 48px) 24px;
 }
 
 .masthead,
@@ -508,10 +509,81 @@ footer {
     font-size: 0.74rem;
 }
 
+@media (min-width: 1200px) and (min-height: 1000px) {
+    .workspace {
+        padding-top: 20px;
+        padding-bottom: 18px;
+    }
+
+    .masthead {
+        margin-bottom: 14px;
+    }
+
+    .simulation-controls {
+        margin-bottom: 10px;
+    }
+
+    .field-card {
+        padding: 14px;
+    }
+
+    .card-heading {
+        margin-bottom: 10px;
+    }
+
+    .field-canvas {
+        height: min(46vh, 720px);
+        aspect-ratio: auto;
+    }
+
+    .vertical-navigation {
+        min-height: min(46vh, 720px);
+    }
+
+    .depth-legend {
+        gap: 6px;
+        margin: 7px 0;
+    }
+
+    .navigation-panel {
+        margin-top: 10px;
+        padding: 10px 16px;
+    }
+
+    .navigation-panel input {
+        min-height: 30px;
+    }
+
+    .navigation-panel p {
+        margin-top: 4px;
+        line-height: 1.35;
+    }
+
+    .readout {
+        margin-top: 10px;
+        padding: 10px 16px;
+    }
+
+    .comparison {
+        margin-top: 10px;
+        padding: 12px 16px;
+    }
+
+    .parameter-controls {
+        gap: 8px;
+        padding: 10px;
+        margin-bottom: 0;
+    }
+
+    .control-group {
+        padding: 10px;
+    }
+}
+
 @media (max-width: 760px) {
     .workspace {
-        width: min(100% - 28px, 560px);
-        padding-top: 30px;
+        width: 100%;
+        padding: 24px 14px;
     }
 
     .masthead,
@@ -540,6 +612,11 @@ footer {
 
     .field-pair {
         grid-template-columns: 1fr;
+    }
+
+    .field-canvas {
+        height: auto;
+        aspect-ratio: 3 / 2;
     }
 
     .card-heading {
