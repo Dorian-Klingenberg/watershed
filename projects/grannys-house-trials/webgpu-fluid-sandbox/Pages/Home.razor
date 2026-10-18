@@ -64,7 +64,7 @@
                     <option value="carve">Carve channel</option>
                 </select>
             </label>
-            <FluentButton OnClick="SaveTerrainMapAsync" Disabled="@(!_initialized)">Save / export map</FluentButton>
+            <FluentButton id="save-terrain-map" OnClick="SaveTerrainMapAsync" Disabled="@(!_initialized)">Save / export map</FluentButton>
             <FluentButton OnClick="RestoreSavedTerrainAsync" Disabled="@(!_initialized)">Restore saved map</FluentButton>
             <label class="batch-control">Import map JSON
                 <InputFile OnChange="ImportTerrainMapAsync" accept=".json,application/json" disabled="@(!_initialized)" />
@@ -343,17 +343,24 @@
     {
         try
         {
-            _mapModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/terrain-map.js");
-            var map = new TerrainMapFile(1, "incline-flat-workbench", _simulation.Width, _simulation.Height,
-                _simulation.GetTerrainSnapshot());
-            var json = System.Text.Json.JsonSerializer.Serialize(map);
-            await _mapModule.InvokeVoidAsync("saveMap", json);
+            var json = SerializeTerrainMap();
+            if (_mapModule is not null) await _mapModule.InvokeVoidAsync("storeMap", json);
             _mapStatus = "Map saved in this browser and exported as JSON.";
         }
         catch (Exception exception)
         {
             _errorMessage = $"Map save failed: {exception.Message}";
         }
+    }
+
+    private string SerializeTerrainMap() => System.Text.Json.JsonSerializer.Serialize(
+        new TerrainMapFile(1, "incline-flat-workbench", _simulation.Width, _simulation.Height,
+            _simulation.GetTerrainSnapshot()));
+
+    private async Task UpdateTerrainMapCacheAsync()
+    {
+        if (_mapModule is not null)
+            await _mapModule.InvokeVoidAsync("setMapData", SerializeTerrainMap());
     }
 
     private async Task RestoreSavedTerrainAsync()
@@ -463,6 +470,7 @@
         _experimentModified = false;
         if (_gpuSupported) await Gpu.ResetAsync(_simulation, _cpuEnabled);
         await RenderCpuAsync();
+        await UpdateTerrainMapCacheAsync();
     }
 
     protected override void OnInitialized()
@@ -481,6 +489,17 @@
         try
         {
             if (_disposed) return;
+            try
+            {
+                _mapModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/terrain-map.js");
+                await _mapModule.InvokeVoidAsync("initializeSaveButton", "save-terrain-map");
+                await UpdateTerrainMapCacheAsync();
+            }
+            catch (Exception exception)
+            {
+                _mapStatus = $"Map save controls unavailable: {exception.Message}";
+            }
+
             try
             {
                 _callback = DotNetObjectReference.Create(this);
@@ -532,6 +551,7 @@
                 await Gpu.ResetAsync(_simulation, _cpuEnabled);
             }
 
+            await UpdateTerrainMapCacheAsync();
             _gpuCycles = 0;
             await RenderCpuAsync();
             _referenceStatus = _cpuEnabled ? "Independent CPU reference enabled · reset baseline at tick 0."
@@ -704,6 +724,7 @@
                 _comparison = null;
                 if (_gpuSupported) await Gpu.ApplyEditsAsync(_terrainForCpu, null);
                 _mapStatus = _terrainEditMode == "carve" ? "Carved 12 in into the terrain." : "Raised terrain by 12 in.";
+                await UpdateTerrainMapCacheAsync();
             }
             if (action is "pour" or "barrier" or "carve") await RenderCpuAsync();
             _selectionText = $"Cell ({x}, {y}) · terrain {_simulation.GetTerrainHeight(x, y)} in";
