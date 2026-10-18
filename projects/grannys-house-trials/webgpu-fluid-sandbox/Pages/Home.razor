@@ -706,6 +706,8 @@
                 _mapStatus = _terrainEditMode == "carve" ? "Carved 12 in into the terrain." : "Raised terrain by 12 in.";
             }
             if (action is "pour" or "barrier" or "carve") await RenderCpuAsync();
+            _selectionText = $"Cell ({x}, {y}) · terrain {_simulation.GetTerrainHeight(x, y)} in";
+            if (_cpuEnabled) _selectionText += $" · CPU water {_simulation.GetCell(x, y).WaterDepth:F3} in";
         });
         if (!_disposed) await InvokeAsync(StateHasChanged);
     }

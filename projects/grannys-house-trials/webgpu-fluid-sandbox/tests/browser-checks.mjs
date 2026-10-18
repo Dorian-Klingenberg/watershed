@@ -81,6 +81,12 @@ await send("Page.addScriptToEvaluateOnNewDocument", {source:`(() => {
 await send("Page.navigate", { url: baseUrl });
 await send("Emulation.setDeviceMetricsOverride", {width:1368,height:912,deviceScaleFactor:1,mobile:false});
 await wait(`document.body?.innerText.includes('WebGPU compute ready')`);
+// A reused browser tab may retain edited terrain from an interrupted earlier run.
+await select("Terrain scene",0);
+await select("Fluid algorithm",0);
+await click("Reset");
+await wait(`document.querySelectorAll('.navigation-panel p[role="status"]')[1].textContent.includes('reset baseline at tick 0')`);
+await sleep(300);
 console.log(await evaluate("document.body.innerText.slice(0,550)"));
 const palette = await evaluate(`import('./js/landscape-view.js').then(({waterDepthColor: color}) => {
     const top=Array.from({length:73},(_,i)=>color(i));
@@ -157,6 +163,7 @@ for (let algorithm = 0; algorithm < 4; algorithm++) {
     await send("Input.dispatchMouseEvent", {type:"mousePressed", ...point, button:"left",clickCount:1});
     await send("Input.dispatchMouseEvent", {type:"mouseReleased", ...point, button:"left",clickCount:1});
     await wait(`document.querySelector('.navigation-panel p[role="status"]').textContent.includes('terrain')`);
+    await sleep(250); // Let the periodic selection readout catch up after the awaited click callback.
     const initialTerrain = await evaluate(`Number(document.querySelector('.navigation-panel p[role="status"]').textContent.match(/terrain (\\d+)/)[1])`);
     await send("Input.dispatchMouseEvent", {type:"mousePressed", ...point, button:"right",buttons:2,clickCount:1});
     await send("Input.dispatchMouseEvent", {type:"mouseMoved", x:point.x+35,y:point.y,button:"right",buttons:2});
