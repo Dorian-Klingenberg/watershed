@@ -39,7 +39,7 @@ const click = async text => evaluate(`(() => {
     b.click();
 })()`);
 const saveMap = async () => {
-    await click("Save / export map");
+    await click("Save / export");
     await wait(`!!localStorage.getItem('webgpu-fluid-sandbox.saved-terrain.v1')`);
     return JSON.parse(await evaluate(`localStorage.getItem('webgpu-fluid-sandbox.saved-terrain.v1')`));
 };
@@ -231,7 +231,7 @@ for(let scene=0;scene<5;scene++) for(let algorithm=0;algorithm<4;algorithm++){
         for(const direction of ["Forward","Reverse"]){
           await click(direction);
             await wait(`import('./js/fluid-gpu.js').then(m=>m.snapshot()).then(s=>s.cycles===0&&s.direction===${direction==="Forward"?1:2}).catch(()=>false)`);
-            await click("Advance 128 experiment ticks");
+            await click("Advance 128 ticks");
             await wait(`Number(document.querySelector('.readout .metric strong').textContent)===128`,180000);
             await compare(`Tesla ${algorithm} ${direction}`);
             const baseline=await evaluate(`import('./js/fluid-gpu.js').then(m=>m.snapshot())`);
@@ -280,7 +280,7 @@ await select("Terrain scene",3);
 for(const direction of ["Forward","Reverse"]){
     await click(direction);
     await wait(`import('./js/fluid-gpu.js').then(m=>m.snapshot()).then(s=>s.cycles===0&&s.direction===${direction==="Forward"?1:2}).catch(()=>false)`);
-    await click("Advance 128 experiment ticks");
+    await click("Advance 128 ticks");
     await wait(`Number(document.querySelector('.readout .metric strong').textContent)===128`,180000);
     await compare(`advective Tesla ${direction}`);
     console.log("Tesla advective MAC",direction,await evaluate(`document.querySelector('.experiment-readout').innerText`));

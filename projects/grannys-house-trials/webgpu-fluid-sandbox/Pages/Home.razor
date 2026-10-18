@@ -86,7 +86,6 @@
             <span class="depth-band"><span class="depth-swatch depth-@band"></span>@band–@(band + 1)</span>
         }
         <span class="depth-band"><span class="depth-swatch depth-12"></span>12+</span>
-        <span>Above 12 in continues darkening · contours mark band changes</span>
     </div>
 
     <section class="navigation-panel" aria-label="Linked landscape navigation">
@@ -232,8 +231,6 @@
 @code {
     private const int PourRadius = 4;
     private const float PourDepthInches = 12.0f;
-    private float DepthTolerance => _simulation.Algorithm == FluidAlgorithm.Cellular
-        ? CellularFluidSimulation.ComparisonTolerance : CellularFluidSimulation.StateTolerance;
     private string FaceStateUnit => _simulation.Algorithm == FluidAlgorithm.Mac ? "ft/s"
         : _simulation.Algorithm == FluidAlgorithm.Cellular ? "(unused, zero state)" : "ft³/s";
     private string ExperimentFlowUnit => _simulation.Algorithm == FluidAlgorithm.Cellular ? "ft³/tick" : "ft³/s";
@@ -495,6 +492,8 @@
             }
             catch (Exception exception)
             {
+                _cpuEnabled = true;
+                _referenceStatus = "CPU fallback active.";
                 _gpuMessage = "WebGPU initialization failed";
                 _errorMessage = exception.Message;
             }

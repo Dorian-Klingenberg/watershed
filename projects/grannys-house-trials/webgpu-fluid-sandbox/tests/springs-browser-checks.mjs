@@ -100,7 +100,7 @@ assert(snapshot.water.every(v=>v===0),"paused creation does not pour a column");
 const sourceSelection=await evaluate(`document.querySelector('.navigation-panel p[role="status"]').textContent`);
 assert(sourceSelection.includes('spring 0.50 ft³/s'),"selected source shows rate");
 console.log('real right-click creation and repeated-click rate passed',sourceSelection);
-await click('Save / export map');await sleep(300);
+await click('Save / export');await sleep(300);
 const saved=await evaluate(`JSON.parse(localStorage.getItem('webgpu-fluid-sandbox.saved-terrain.v1'))`);
 assert.equal(saved.Version,2);assert.equal(saved.Springs.length,1);assert.equal(saved.Springs[0].FlowCubicFeetPerSecond,.5);
 for(let algorithm=0;algorithm<4;algorithm++) {
