@@ -89,6 +89,10 @@ h1 {
     letter-spacing: -0.045em;
 }
 
+.masthead h1:focus {
+    outline: none;
+}
+
 .intro,
 .control-copy p {
     margin-bottom: 0;
@@ -532,12 +536,12 @@ footer {
     }
 
     .field-canvas {
-        height: min(46vh, 720px);
+        height: min(40vh, 640px);
         aspect-ratio: auto;
     }
 
     .vertical-navigation {
-        min-height: min(46vh, 720px);
+        min-height: min(40vh, 640px);
     }
 
     .depth-legend {
@@ -546,17 +550,23 @@ footer {
     }
 
     .navigation-panel {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
+        align-items: center;
+        gap: 8px 14px;
         margin-top: 10px;
         padding: 10px 16px;
     }
 
     .navigation-panel input {
         min-height: 30px;
+        margin: 0;
     }
 
     .navigation-panel p {
-        margin-top: 4px;
+        margin: 0;
         line-height: 1.35;
+        white-space: nowrap;
     }
 
     .readout {
@@ -577,6 +587,23 @@ footer {
 
     .control-group {
         padding: 10px;
+    }
+}
+
+@media (min-width: 1900px) and (min-height: 1000px) {
+    .masthead {
+        margin-bottom: 10px;
+    }
+
+    .masthead h1 {
+        margin-bottom: 4px;
+        font-size: 2.5rem;
+    }
+
+    .performance {
+        margin-top: 6px;
+        padding-top: 7px;
+        padding-bottom: 7px;
     }
 }
 
