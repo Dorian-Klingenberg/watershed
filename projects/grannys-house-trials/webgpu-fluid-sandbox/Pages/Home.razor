@@ -367,7 +367,7 @@
     {
         try
         {
-            _mapModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/terrain-map.js");
+            _mapModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/terrain-map.js?v=2");
             var json = await _mapModule.InvokeAsync<string?>("loadMap");
             if (json is null) { _mapStatus = "This browser has no saved map yet."; return; }
             await ApplyTerrainMapJsonAsync(json);
@@ -491,7 +491,7 @@
             if (_disposed) return;
             try
             {
-                _mapModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/terrain-map.js");
+                _mapModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/terrain-map.js?v=2");
                 await _mapModule.InvokeVoidAsync("initializeSaveButton", "save-terrain-map");
                 await UpdateTerrainMapCacheAsync();
             }
