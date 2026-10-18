@@ -11,10 +11,18 @@
     box-sizing: border-box;
 }
 
-body {
+html {
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+}
+
+html body {
     margin: 0;
     min-width: 320px;
     min-height: 100vh;
+    height: auto;
+    overflow: visible;
+    color: #e7f0ee;
     background:
         radial-gradient(ellipse at 52% -25%, #264044 0, transparent 58%),
         #101719;
@@ -22,6 +30,17 @@ body {
 
 button {
     font: inherit;
+}
+
+#blazor-error-ui {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    padding: 16px;
+    background: #482d25;
+    color: #f0c7ae;
+    z-index: 1000;
 }
 
 .workspace {
@@ -112,6 +131,7 @@ h1 {
 }
 
 .control-panel {
+    flex-wrap: wrap;
     padding: 18px 20px;
     margin-bottom: 18px;
 }
@@ -136,6 +156,51 @@ h1 {
     gap: 9px;
 }
 
+.depth-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0;
+    color: #c0d4df;
+    font-size: 0.8rem;
+}
+
+.depth-key {
+    padding: 5px 9px;
+    border: 1px solid #8ab5cf;
+    border-radius: 4px;
+    color: white;
+    text-shadow: 0 1px 2px #000;
+}
+
+.depth-band {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.depth-swatch {
+    width: 18px;
+    height: 18px;
+    border: 1px solid #8ab5cf;
+    border-radius: 4px;
+}
+
+.depth-0 { background: var(--water-depth-0); }
+.depth-1 { background: var(--water-depth-1); }
+.depth-2 { background: var(--water-depth-2); }
+.depth-3 { background: var(--water-depth-3); }
+.depth-4 { background: var(--water-depth-4); }
+.depth-5 { background: var(--water-depth-5); }
+.depth-6 { background: var(--water-depth-6); }
+.depth-7 { background: var(--water-depth-7); }
+.depth-8 { background: var(--water-depth-8); }
+.depth-9 { background: var(--water-depth-9); }
+.depth-10 { background: var(--water-depth-10); }
+.depth-11 { background: var(--water-depth-11); }
+.depth-12 { background: var(--water-depth-12); }
+
 .actions fluent-button {
     --accent-fill-rest: #3f8d7b;
     --accent-fill-hover: #4ba18d;
@@ -146,6 +211,64 @@ h1 {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 18px;
+}
+
+.landscape-navigation {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    gap: 10px;
+}
+
+.field-pair.single-view {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.field-card[hidden] {
+    display: none;
+}
+
+.vertical-navigation {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-height: 160px;
+}
+
+.vertical-navigation label {
+    writing-mode: vertical-rl;
+    font-size: 0.75rem;
+    color: #b2c0bc;
+}
+
+.vertical-navigation input {
+    writing-mode: vertical-lr;
+    direction: rtl;
+    flex: 1;
+    width: 40px;
+    min-height: 120px;
+    accent-color: #67d5a5;
+}
+
+.batch-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #b2c0bc;
+    font-size: 0.8rem;
+}
+
+.batch-control select {
+    min-height: 32px;
+}
+
+.performance, .readout {
+    flex-wrap: wrap;
+}
+
+.performance small {
+    display: block;
+    margin-top: 5px;
 }
 
 .field-card {
@@ -182,7 +305,30 @@ h1 {
     width: 100%;
     aspect-ratio: 3 / 2;
     background: #182526;
-    image-rendering: pixelated;
+    touch-action: none;
+    cursor: crosshair;
+}
+
+.navigation-panel {
+    margin-top: 18px;
+    padding: 16px 20px;
+    border: 1px solid #304144;
+    border-radius: 13px;
+    color: #b2c0bc;
+    background: #172124dd;
+    font-size: 0.85rem;
+}
+
+.navigation-panel input {
+    display: block;
+    width: 100%;
+    min-height: 40px;
+    accent-color: #67d5a5;
+}
+
+.navigation-panel p {
+    margin: 8px 0 0;
+    line-height: 1.6;
 }
 
 .legend {
@@ -203,7 +349,7 @@ h1 {
 }
 
 .water-swatch {
-    background: #3aa8d4;
+    background: var(--water-depth-1, #198df0);
 }
 
 .dry-swatch {
@@ -293,6 +439,11 @@ footer {
 
     .field-pair {
         grid-template-columns: 1fr;
+    }
+
+    .card-heading {
+        flex-wrap: wrap;
+        gap: 10px;
     }
 
     .readout {

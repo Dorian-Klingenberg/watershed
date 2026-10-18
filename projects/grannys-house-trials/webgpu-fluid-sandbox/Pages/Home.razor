@@ -2,14 +2,14 @@
 @inject WebGpuFluidBackend Gpu
 @implements IAsyncDisposable
 
-<PageTitle>Cellular Fluid Lab</PageTitle>
+<PageTitle>Fluid Algorithm Lab</PageTitle>
 
 <div class="workspace">
     <header class="masthead">
         <div>
-            <p class="eyebrow">WEBGPU FLUID SANDBOX · FIRST EXPERIMENT</p>
-            <h1>Cellular Fluid Lab</h1>
-            <p class="intro">A small water field, stepped in parallel on the GPU and in a C# reference.</p>
+            <p class="eyebrow">WEBGPU FLUID SANDBOX · FOUR MODELS · ONE LANDSCAPE</p>
+            <h1>Fluid Algorithm Lab</h1>
+            <p class="intro">A GPU water field with an optional independent C# reference.</p>
         </div>
         <div class="engine-status @(_gpuSupported ? "ready" : "waiting")" role="status">
             <span class="status-dot"></span>
@@ -20,23 +20,104 @@
     <section class="control-panel" aria-label="Simulation controls">
         <div class="control-copy">
             <span class="eyebrow">ONE FIELD · TWO IMPLEMENTATIONS</span>
-            <p>Pour water into the low basin, then advance both simulations by one synchronous tick.</p>
+            <p>Explore terrain, solver parameters, and controlled reservoir experiments.</p>
         </div>
         <div class="actions">
-            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="PourAsync" Disabled="@(_busy || !_initialized)">Pour 12 in</FluentButton>
-            <FluentButton OnClick="StepAsync" Disabled="@(_busy || !_initialized)">Step @(_gpuSupported ? "both" : "CPU")</FluentButton>
-            <FluentButton OnClick="CompareAsync" Disabled="@(_busy || !_initialized || !_gpuSupported)">Compare states</FluentButton>
-            <FluentButton OnClick="ResetAsync" Disabled="@(_busy || !_initialized)">Reset</FluentButton>
+            <label class="batch-control">Algorithm
+                <select value="@((int)_simulation.Algorithm)" @onchange="ChangeAlgorithmAsync" disabled="@(!_initialized)" aria-label="Fluid algorithm">
+                    <option value="0">Cellular</option>
+                    <option value="1">Pipe-flux shallow water</option>
+                    <option value="2">Terrain-head pipe flow</option>
+                    <option value="3">Staggered MAC shallow water</option>
+                </select>
+            </label>
+            <label class="batch-control">Terrain
+                <select value="@((int)_simulation.Scene)" @onchange="ChangeSceneAsync" disabled="@(!_initialized)" aria-label="Terrain scene">
+                    <option value="0">Slope and spillway</option>
+                    <option value="1">Enclosed basin</option>
+                    <option value="2">Water slide</option>
+                    <option value="3">Single-stage Tesla channel</option>
+                </select>
+            </label>
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ToggleRun" Disabled="@(!_initialized)">@(_running ? "Pause" : "Run")</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="PourAsync" Disabled="@(!_initialized)">Pour 12 in</FluentButton>
+            <FluentButton OnClick="StepAsync" Disabled="@(!_initialized)">Step @(_gpuSupported ? (_cpuEnabled ? "both" : "GPU") : "CPU")</FluentButton>
+            <FluentButton OnClick="ToggleCpuAsync" Disabled="@(!_initialized || !_gpuSupported)">CPU reference: @(_cpuEnabled ? "on" : "off")</FluentButton>
+            <FluentButton OnClick="CompareAsync" Disabled="@(!_initialized || !_gpuSupported || !_cpuEnabled)">Compare states</FluentButton>
+            <FluentButton OnClick="ResetAsync" Disabled="@(!_initialized)">Reset</FluentButton>
+            <label class="batch-control">Ticks / display
+                <select @bind="_ticksPerDisplay" aria-label="Ticks per display">
+                    <option value="1">1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option>
+                </select>
+            </label>
         </div>
     </section>
+
+    <section class="control-panel" aria-label="Algorithm settings">
+        <div class="actions">
+            @foreach (var knob in RelevantKnobs)
+            {
+                <label class="batch-control">@knob.Label
+                    <input type="number" aria-label="@knob.Label" min="@knob.Min" max="@knob.Max" step="@knob.Step"
+                        value="@knob.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                        @onchange="e => ChangeSettingAsync(knob.Key, e)" disabled="@(!_initialized)" />
+                </label>
+            }
+            @if (_simulation.Algorithm == FluidAlgorithm.Mac)
+            {
+                <label><input type="checkbox" aria-label="MAC velocity advection" checked="@_simulation.Settings.MacAdvection"
+                    @onchange="ChangeAdvectionAsync" disabled="@(!_initialized)" /> First-order upwind velocity advection</label>
+            }
+            <FluentButton OnClick="RestoreDefaultsAsync" Disabled="@(!_initialized)">Restore algorithm defaults</FluentButton>
+        </div>
+        <p>Changes pause and clear water, face state and ticks; edited terrain and camera stay unchanged.</p>
+        <p class="algorithm-help">@AlgorithmHelp</p>
+    </section>
+
+    @if (_simulation.Scene == TerrainScene.Tesla)
+    {
+        <section class="control-panel" aria-label="Tesla experiment">
+            <div class="actions">
+                <FluentButton OnClick="() => StartExperimentAsync(ExperimentDirection.Forward)" Disabled="@(!_initialized)">Forward experiment</FluentButton>
+                <FluentButton OnClick="() => StartExperimentAsync(ExperimentDirection.Reverse)" Disabled="@(!_initialized)">Reverse experiment</FluentButton>
+                <FluentButton OnClick="StepExperimentAsync" Disabled="@(!_initialized || _simulation.Direction == ExperimentDirection.None)">Advance 128 experiment ticks</FluentButton>
+            </div>
+            <div>
+                <p>Each experiment restores the same flat-bottom channel, pauses at tick 0, and fixes reservoir depths to 18 / 12 in (Δhead 6 in), swapped in reverse. Run or Step to advance. Unforced channel starts uniformly at 15 in.</p>
+                <p>Experimental depth-averaged model: no guaranteed resistance difference, check-valve closure, or resolved turbulence.</p>
+                <p role="status" class="experiment-readout">Direction: @_simulation.Direction · main-channel section signed discharge @(_experiment.Discharge.ToString("F5")) @ExperimentFlowUnit · bypass section signed flow @(_experiment.BypassFlow.ToString("F5")) @ExperimentFlowUnit.</p>
+                @if (_experimentModified)
+                {
+                    <p>Manual edits invalidate the controlled comparison. Restart a direction to restore the repeatable experiment.</p>
+                }
+                <p>Last completed tick only (not a steady-state estimate). Positive = left-to-right. Main-channel section x=75, y=29–36; bypass section x=52, y=11–17. @ExperimentMeasurementHelp Bypass flow measures branch throughput, not vorticity or closed-loop circulation.</p>
+                <p>Record forward/reverse at identical ticks and settings. Different transient or steady results are measurements, not a claim of physical rectification.</p>
+                @if (_forwardSample is { } forward && _reverseSample is { } reverse)
+                {
+                    <p>Latest forward: @forward.Reading.Discharge.ToString("F5") @ExperimentFlowUnit at tick @forward.Tick;
+                        reverse: @reverse.Reading.Discharge.ToString("F5") @ExperimentFlowUnit at tick @reverse.Tick.</p>
+                    @if (forward.Tick == reverse.Tick)
+                    {
+                        <p>Measured |forward| − |reverse|: @((Math.Abs(forward.Reading.Discharge) - Math.Abs(reverse.Reading.Discharge)).ToString("F5")) @ExperimentFlowUnit
+                            at equal tick @forward.Tick (transient sample, not guaranteed resistance).</p>
+                    }
+                    else
+                    {
+                        <p>Unequal sample times: no directional difference reported. Step the shorter trial to the same tick.</p>
+                    }
+                }
+            </div>
+        </section>
+    }
 
     @if (_errorMessage is not null)
     {
         <div class="alert" role="alert">@_errorMessage</div>
     }
 
-    <section class="field-pair" aria-label="CPU and GPU simulation views">
-        <article class="field-card">
+    <div class="landscape-navigation">
+    <section class="field-pair @(!_cpuEnabled || !_gpuSupported ? "single-view" : null)" aria-label="CPU and GPU simulation views">
+        <article class="field-card" hidden="@(!_cpuEnabled)">
             <div class="card-heading">
                 <div>
                     <span class="eyebrow">REFERENCE</span>
@@ -44,28 +125,54 @@
                 </div>
                 <span class="engine-tag">Domain model</span>
             </div>
-            <canvas @ref="_cpuCanvas" class="field-canvas" aria-label="CPU water-depth field"></canvas>
+            <canvas @ref="_cpuCanvas" class="field-canvas" aria-label="Interactive CPU terrain and water view"></canvas>
             <div class="legend"><span class="dry-swatch"></span> dry terrain <span class="water-swatch"></span> water depth</div>
         </article>
 
-        <article class="field-card">
+        <article class="field-card" hidden="@(!_gpuSupported)">
             <div class="card-heading">
                 <div>
                     <span class="eyebrow">COMPUTE</span>
                     <h2>WebGPU</h2>
                 </div>
-                <span class="engine-tag">WGSL · two-pass flow</span>
+                <span class="engine-tag">WGSL · @_simulation.Algorithm</span>
             </div>
-            <canvas @ref="_gpuCanvas" class="field-canvas" aria-label="GPU water-depth field"></canvas>
+            <canvas @ref="_gpuCanvas" class="field-canvas" aria-label="Interactive GPU terrain and water view"></canvas>
             <div class="legend"><span class="dry-swatch"></span> dry terrain <span class="water-swatch"></span> water depth</div>
         </article>
+    </section>
+    <div class="vertical-navigation">
+        <label for="landscape-vertical">Depth position · both views</label>
+        <input @ref="_landscapeVertical" id="landscape-vertical" aria-label="Vertical landscape position · both views" type="range" min="0" max="64" value="32" step="0.1" />
+    </div>
+    </div>
+
+    <div class="depth-legend" aria-label="Water depth in inches">
+        <span>Water depth · 1-inch bands</span>
+        @for (var band = 0; band < 12; band++)
+        {
+            <span class="depth-band"><span class="depth-swatch depth-@band"></span>@band–@(band + 1)</span>
+        }
+        <span class="depth-band"><span class="depth-swatch depth-12"></span>12+</span>
+        <span>Above 12 in continues darkening · contours mark band changes</span>
+    </div>
+
+    <section class="navigation-panel" aria-label="Linked landscape navigation">
+        <label for="landscape-scroll">Horizontal landscape position · both views</label>
+        <input @ref="_landscapeScroll" id="landscape-scroll" type="range" min="0" max="95" value="48" step="0.1" />
+        <p>Left click: select · Left drag: orbit · Wheel over land: zoom · Right click: pour · Right drag: draw barrier.</p>
+        <p>Scroll the page using the margin or vertical scrollbar. Touch-drag over a view orbits; swipe outside it to scroll.</p>
+        <p role="status">@_selectionText</p>
+        <p role="status">@_referenceStatus</p>
     </section>
 
     <section class="readout" aria-label="Simulation readout">
         <div class="metric">
             <span class="eyebrow">TICK</span>
-            <strong>@_summary.Cycles</strong>
+            <strong>@(_gpuSupported ? _gpuCycles : _simulation.CycleCount)</strong>
         </div>
+        @if (_cpuEnabled)
+        {
         <div class="metric">
             <span class="eyebrow">WET CELLS</span>
             <strong>@_summary.WetCells</strong>
@@ -78,6 +185,19 @@
             <span class="eyebrow">MAX DEPTH</span>
             <strong>@_summary.MaximumDepth.ToString("F2") <small>in</small></strong>
         </div>
+        }
+        else
+        {
+            <p>GPU authoritative · CPU snapshots and statistics suspended.</p>
+        }
+    </section>
+
+    <section class="readout performance" aria-label="Performance readout">
+        <div class="metric"><span class="eyebrow">CPU / GPU DRAW FPS</span><strong>@_cpuFps.ToString("F1") / @_gpuFps.ToString("F1")</strong></div>
+        <div class="metric"><span class="eyebrow">TICKS / SEC</span><strong>@_ticksPerSecond.ToString("F1")</strong></div>
+        <div class="metric"><span class="eyebrow">CPU / GPU DRAW MS</span><strong>@_cpuDrawMs.ToString("F2") / @_gpuDrawMs.ToString("F2")</strong></div>
+        <div class="metric"><span class="eyebrow">CPU STEP MS / TICK</span><strong>@(_cpuEnabled ? _cpuStepMs.ToString("F2") : "off")</strong></div>
+        <div class="metric"><span class="eyebrow">GPU DISPATCH + READBACK MS / BATCH</span><strong>@(_gpuSupported ? _gpuRoundtripMs.ToString("F2") : "unavailable")</strong><small>Wall-clock roundtrip, not GPU execution time</small></div>
     </section>
 
     @if (_comparison is not null)
@@ -88,33 +208,168 @@
                 <h2>@(_comparison.Matches ? "States agree within tolerance" : "States differ")</h2>
             </div>
             <p>
-                @_comparison.CellsCompared cells · @_comparison.MismatchedCells outside tolerance ·
-                max error @_comparison.MaximumDifference.ToString("G5") ·
-                water-total error @_comparison.TotalWaterDifference.ToString("G5")
+                @_comparison.CellsCompared depths + @_comparison.MomentumValuesCompared face values ·
+                @_comparison.MismatchedCells depth mismatches · @_comparison.MismatchedMomentumValues face mismatches ·
+                max depth error @_comparison.MaximumDifference.ToString("G5") in ·
+                water-total error @_comparison.TotalWaterDifference.ToString("G5") cell-inches ·
+                max face error @_comparison.MaximumMomentumDifference.ToString("G5") @FaceStateUnit
             </p>
         </section>
     }
 
     <footer>
-        <span>Terrain stays fixed; only water depth changes.</span>
-        <span>Comparison tolerance: @CellularFluidSimulation.ComparisonTolerance</span>
+        <span>Barrier strokes raise terrain by 12 in from its starting height. Reset restores the scene.</span>
+        <span>Depth tolerance: @DepthTolerance in. Face tolerance: @CellularFluidSimulation.StateTolerance @FaceStateUnit. One cell = 1 ft². @(_simulation.Algorithm == FluidAlgorithm.Cellular ? "Cellular ticks have no physical duration." : "Fixed tick = 0.016 s.")</span>
     </footer>
 </div>
 
 @code {
     private const int PourRadius = 4;
     private const float PourDepthInches = 12.0f;
+    private float DepthTolerance => _simulation.Algorithm == FluidAlgorithm.Cellular
+        ? CellularFluidSimulation.ComparisonTolerance : CellularFluidSimulation.StateTolerance;
+    private string FaceStateUnit => _simulation.Algorithm == FluidAlgorithm.Mac ? "ft/s"
+        : _simulation.Algorithm == FluidAlgorithm.Cellular ? "(unused, zero state)" : "ft³/s";
+    private string ExperimentFlowUnit => _simulation.Algorithm == FluidAlgorithm.Cellular ? "ft³/tick" : "ft³/s";
+    private string ExperimentMeasurementHelp => _simulation.Algorithm == FluidAlgorithm.Cellular
+        ? "Cellular reports actual transferred volume per algorithmic tick in ft³/tick; it has no physical seconds per tick."
+        : "Flow sums actual limited face transfers across 1-ft² cells, converted to ft³ and divided by the 0.016-s tick.";
+    private string AlgorithmHelp => _simulation.Algorithm switch
+    {
+        FluidAlgorithm.Cellular => "Maximum flow caps each cell's outgoing depth per tick. Higher settle rate redistributes more of the free-surface imbalance each tick. Neither creates inertia or physical time.",
+        FluidAlgorithm.PipeFlux => "Larger pipe area strengthens pressure-driven volume flow. Higher retention preserves more face-flow inertia each tick; lower retention damps it faster.",
+        FluidAlgorithm.TerrainHead => "Larger area strengthens pressure-driven pipe flow. Higher Manning roughness increases bed-friction losses, especially in shallow water.",
+        _ => "Higher damping removes face velocity faster. Optional upwind advection transports velocity with the flow before pressure and drag; first-order transport also introduces numerical diffusion."
+    };
 
     private readonly CellularFluidSimulation _simulation = CellularFluidSimulation.CreateDefault();
     private ElementReference _cpuCanvas;
     private ElementReference _gpuCanvas;
+    private ElementReference _landscapeScroll;
+    private ElementReference _landscapeVertical;
+    private DotNetObjectReference<Home>? _callback;
+    private readonly SemaphoreSlim _actionGate = new(1, 1);
+    private CancellationTokenSource? _runCancellation;
+    private Task? _runTask;
+    private bool _running;
+    private bool _disposed;
+    private int? _selectedIndex;
+    private string _selectionText = "Select a cell in either view to inspect it.";
     private FluidSummary _summary;
+    private bool _summaryDirty;
     private FluidComparisonResult? _comparison;
     private bool _gpuSupported;
     private bool _initialized;
-    private bool _busy;
     private string _gpuMessage = "Checking WebGPU support…";
     private string? _errorMessage;
+    private bool _cpuEnabled = true;
+    private int _gpuCycles;
+    private int _ticksPerDisplay = 2;
+    private int[]? _terrainForCpu;
+    private string _referenceStatus = "Independent CPU reference enabled · initial baseline at tick 0.";
+    private double _cpuFps, _gpuFps, _cpuDrawMs, _gpuDrawMs, _cpuStepMs, _gpuRoundtripMs, _ticksPerSecond;
+    private long _metricStart = System.Diagnostics.Stopwatch.GetTimestamp();
+    private int _metricTicks;
+    private ExperimentReadout _experiment = new(0, 0);
+    private (int Tick, ExperimentReadout Reading)? _forwardSample, _reverseSample;
+    private bool _experimentModified;
+    private sealed record Knob(string Key, string Label, float Value, float Min, float Max, string Step);
+    private Knob[] RelevantKnobs => _simulation.Algorithm switch
+    {
+        FluidAlgorithm.Cellular => [
+            new("flow", "Maximum flow (in/tick)", _simulation.Settings.CellularMaxFlow, 0.01f, 12, "0.1"),
+            new("settle", "Settle rate", _simulation.Settings.CellularSettleRate, 0.01f, 1, "0.01")],
+        FluidAlgorithm.PipeFlux => [
+            new("pipe", "Pipe area (ft²)", _simulation.Settings.PipeArea, 0.01f, 1, "0.01"),
+            new("retention", "Momentum retention / tick", _simulation.Settings.PipeRetention, 0, 1, "0.01")],
+        FluidAlgorithm.TerrainHead => [
+            new("terrain", "Terrain-head area (ft²)", _simulation.Settings.TerrainHeadArea, 0.01f, 1, "0.01"),
+            new("roughness", "Manning roughness", _simulation.Settings.ManningRoughness, 0.001f, 0.2f, "0.001")],
+        _ => [new("damping", "MAC damping (1/s)", _simulation.Settings.MacDamping, 0, 5, "0.01")]
+    };
+
+    private Task ChangeSettingAsync(string key, ChangeEventArgs args)
+    {
+        if (!float.TryParse(args.Value?.ToString(), System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var value))
+        {
+            _errorMessage = "Enter a finite numeric setting.";
+            return Task.CompletedTask;
+        }
+        var s = _simulation.Settings;
+        return ApplySettingsAsync(key switch
+        {
+            "flow" => s with { CellularMaxFlow = value }, "settle" => s with { CellularSettleRate = value },
+            "pipe" => s with { PipeArea = value }, "retention" => s with { PipeRetention = value },
+            "terrain" => s with { TerrainHeadArea = value }, "roughness" => s with { ManningRoughness = value },
+            _ => s with { MacDamping = value }
+        });
+    }
+
+    private Task ChangeAdvectionAsync(ChangeEventArgs args) =>
+        ApplySettingsAsync(_simulation.Settings with { MacAdvection = args.Value is true });
+
+    private Task RestoreDefaultsAsync()
+    {
+        var s = _simulation.Settings;
+        var defaults = _simulation.Algorithm switch
+        {
+            FluidAlgorithm.Cellular => s with { CellularMaxFlow = 2, CellularSettleRate = 0.5f },
+            FluidAlgorithm.PipeFlux => s with { PipeArea = 0.25f, PipeRetention = 0.94f },
+            FluidAlgorithm.TerrainHead => s with { TerrainHeadArea = 0.25f, ManningRoughness = 0.04f },
+            _ => s with { MacDamping = 0.02f, MacAdvection = false }
+        };
+        return ApplySettingsAsync(defaults);
+    }
+
+    private async Task ApplySettingsAsync(FluidSettings settings)
+    {
+        await StopRunAsync();
+        await RunActionAsync(async () =>
+        {
+            _simulation.Configure(settings);
+            _forwardSample = _reverseSample = null;
+            await ResetBackendAsync();
+            _referenceStatus = "Settings applied · paused · complete fluid state cleared; terrain and camera preserved.";
+        });
+    }
+
+    private async Task ChangeSceneAsync(ChangeEventArgs args)
+    {
+        await StopRunAsync();
+        await RunActionAsync(async () =>
+        {
+            _simulation.SelectScene((TerrainScene)int.Parse(args.Value!.ToString()!));
+            _forwardSample = _reverseSample = null;
+            _terrainForCpu = _simulation.GetTerrainSnapshot();
+            await ResetBackendAsync();
+            _referenceStatus = "Terrain scene selected · paused · fluid cleared; camera preserved.";
+        });
+    }
+
+    private async Task StartExperimentAsync(ExperimentDirection direction)
+    {
+        await StopRunAsync();
+        await RunActionAsync(async () =>
+        {
+            _simulation.StartExperiment(direction, _cpuEnabled);
+            _experimentModified = false;
+            _terrainForCpu = _simulation.GetTerrainSnapshot();
+            await ResetBackendAsync();
+            _referenceStatus = $"{direction} experiment · paused at tick 0 · fixed reservoir heads; Run or Step.";
+        });
+    }
+
+    private async Task ResetBackendAsync()
+    {
+        _comparison = null;
+        _summaryDirty = true;
+        _gpuCycles = 0;
+        _experiment = new(0, 0);
+        _experimentModified = false;
+        if (_gpuSupported) await Gpu.ResetAsync(_simulation, _cpuEnabled);
+        await RenderCpuAsync();
+    }
 
     protected override void OnInitialized()
     {
@@ -128,42 +383,84 @@
             return;
         }
 
+        await _actionGate.WaitAsync();
         try
         {
-            var result = await Gpu.InitializeAsync(_gpuCanvas, _simulation);
-            _gpuSupported = result.Supported;
-            _gpuMessage = result.Message;
-        }
-        catch (Exception exception)
-        {
-            _gpuMessage = "WebGPU initialization failed";
-            _errorMessage = exception.Message;
-        }
+            if (_disposed) return;
+            try
+            {
+                _callback = DotNetObjectReference.Create(this);
+                await Gpu.InitializeViewsAsync(_cpuCanvas, _gpuCanvas, _landscapeScroll, _landscapeVertical, _callback, _simulation);
+                var result = await Gpu.InitializeAsync(_gpuCanvas, _simulation);
+                _gpuSupported = result.Supported;
+                _gpuMessage = result.Message;
+                await Gpu.SetGpuEnabledAsync(_gpuSupported);
+                if (!_gpuSupported) _referenceStatus = "CPU fallback active · WebGPU unavailable.";
+            }
+            catch (Exception exception)
+            {
+                _gpuMessage = "WebGPU initialization failed";
+                _errorMessage = exception.Message;
+            }
 
-        try
-        {
-            await RenderCpuAsync();
-        }
-        catch (Exception exception)
-        {
-            _errorMessage ??= exception.Message;
-        }
+            try
+            {
+                await RenderCpuAsync();
+            }
+            catch (Exception exception)
+            {
+                _errorMessage ??= exception.Message;
+            }
 
-        _initialized = true;
-        await InvokeAsync(StateHasChanged);
+            _initialized = true;
+        }
+        finally
+        {
+            _actionGate.Release();
+        }
+        if (!_disposed) await InvokeAsync(StateHasChanged);
     }
 
     private async Task ResetAsync()
     {
+        await StopRunAsync();
         await RunActionAsync(async () =>
         {
             _simulation.Reset();
+            _forwardSample = _reverseSample = null;
+            _experimentModified = false;
+            _experiment = new(0, 0);
+            _summaryDirty = true;
+            _terrainForCpu = _simulation.GetTerrainSnapshot();
             _comparison = null;
-            await RenderCpuAsync();
             if (_gpuSupported)
             {
-                await Gpu.ResetAsync(_simulation);
+                await Gpu.ResetAsync(_simulation, _cpuEnabled);
             }
+
+            _gpuCycles = 0;
+            await RenderCpuAsync();
+            _referenceStatus = _cpuEnabled ? "Independent CPU reference enabled · reset baseline at tick 0."
+                : "CPU reference off · reset GPU baseline at tick 0.";
+        });
+    }
+
+    private async Task ChangeAlgorithmAsync(ChangeEventArgs args)
+    {
+        var algorithm = (FluidAlgorithm)int.Parse(args.Value!.ToString()!);
+        await StopRunAsync();
+        await RunActionAsync(async () =>
+        {
+            _simulation.SelectAlgorithm(algorithm);
+            _forwardSample = _reverseSample = null;
+            _experimentModified = false;
+            _experiment = new(0, 0);
+            _comparison = null;
+            _summaryDirty = true;
+            _gpuCycles = 0;
+            if (_gpuSupported) await Gpu.ResetAsync(_simulation, _cpuEnabled);
+            await RenderCpuAsync();
+            _referenceStatus = $"{algorithm} selected · paused · water, face state and ticks cleared; current terrain and camera preserved.";
         });
     }
 
@@ -171,42 +468,225 @@
     {
         await RunActionAsync(async () =>
         {
-            _simulation.AddCenterWater(PourRadius, PourDepthInches);
+            _forwardSample = _reverseSample = null;
+            _experimentModified = _simulation.Direction != ExperimentDirection.None;
+            var point = _simulation.PourLocation;
+            var delta = _simulation.AddWater(point.X, point.Y, PourRadius, PourDepthInches, _cpuEnabled);
+            if (_cpuEnabled) _summaryDirty = true;
             _comparison = null;
             await RenderCpuAsync();
             if (_gpuSupported)
             {
-                await Gpu.SetWaterAsync(_simulation.GetWaterSnapshot());
+                await Gpu.ApplyEditsAsync(null, delta);
             }
         });
     }
 
-    private async Task StepAsync()
+    private Task StepAsync() => AdvanceAsync(CancellationToken.None, 1);
+
+    private async Task StepExperimentAsync()
     {
+        await StopRunAsync();
         await RunActionAsync(async () =>
         {
-            _simulation.Step();
-            _comparison = null;
-            await RenderCpuAsync();
-            if (_gpuSupported)
-            {
-                await Gpu.StepAsync();
-            }
+            if (_simulation.Direction == ExperimentDirection.None) return;
+            for (var batch = 0; batch < 16; batch++)
+                await AdvanceCoreAsync(CancellationToken.None, 8);
         });
+    }
+
+    private Task AdvanceAsync(CancellationToken cancellationToken, int ticks) =>
+        RunActionAsync(() => AdvanceCoreAsync(cancellationToken, ticks));
+
+    private async Task AdvanceCoreAsync(CancellationToken cancellationToken, int ticks)
+    {
+        if (cancellationToken.IsCancellationRequested) return;
+        if (_cpuEnabled)
+        {
+            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+            for (var i = 0; i < ticks; i++) _simulation.Step();
+            _summaryDirty = true;
+            _cpuStepMs = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds / ticks;
+        }
+        _comparison = null;
+        await RenderCpuAsync();
+        if (_gpuSupported)
+        {
+            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+            await Gpu.StepAsync(ticks);
+            _gpuRoundtripMs = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+            _gpuCycles += ticks;
+        }
+        _metricTicks += ticks;
+        if (_simulation.Direction != ExperimentDirection.None)
+        {
+            _experiment = _gpuSupported ? await Gpu.MeasureAsync(_simulation) : _simulation.MeasureExperiment();
+            var sample = (_gpuSupported ? _gpuCycles : _simulation.CycleCount, _experiment);
+            if (!_experimentModified)
+            {
+                if (_simulation.Direction == ExperimentDirection.Forward) _forwardSample = sample;
+                else _reverseSample = sample;
+            }
+        }
+    }
+
+    private async Task ToggleRun()
+    {
+        if (_running)
+        {
+            await StopRunAsync();
+            return;
+        }
+
+        if (_runTask is { IsCompleted: false }) return;
+        _runCancellation?.Dispose();
+        _runCancellation = new CancellationTokenSource();
+        _running = true;
+        _runTask = RunLoopAsync(_runCancellation.Token);
+    }
+
+    private async Task StopRunAsync()
+    {
+        _running = false;
+        _runCancellation?.Cancel();
+        await Gpu.CancelPendingWaitsAsync();
+    }
+
+    private async Task RunLoopAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var visible = await Gpu.WaitForDisplayAsync();
+                if (cancellationToken.IsCancellationRequested) break;
+                if (!visible) continue;
+                await AdvanceAsync(cancellationToken, _ticksPerDisplay);
+                if (_errorMessage is not null) break;
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (Exception exception)
+        {
+            await StopRunAsync();
+            _errorMessage = exception.Message;
+        }
+        finally
+        {
+            if (_runCancellation?.Token == cancellationToken) _running = false;
+            if (!_disposed) await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    [JSInvokable]
+    public Task HandleGpuFailure(string message) =>
+        RunActionAsync(() => !_initialized || !_gpuSupported
+            ? Task.CompletedTask : throw new JSException(message));
+
+    [JSInvokable]
+    public async Task HandleLandscapeAction(string action, int x, int y, int[] cells)
+    {
+        if (_disposed || !_initialized) return;
+        await RunActionAsync(async () =>
+        {
+            _simulation.GetTerrainHeight(x, y);
+            _selectedIndex = y * _simulation.Width + x;
+            if (action == "pour")
+            {
+                _forwardSample = _reverseSample = null;
+                _experimentModified = _simulation.Direction != ExperimentDirection.None;
+                var delta = _simulation.AddWater(x, y, 1, PourDepthInches, _cpuEnabled);
+                if (_cpuEnabled) _summaryDirty = true;
+                _comparison = null;
+                if (_gpuSupported) await Gpu.ApplyEditsAsync(null, delta);
+            }
+            else if (action == "barrier")
+            {
+                _forwardSample = _reverseSample = null;
+                _experimentModified = _simulation.Direction != ExperimentDirection.None;
+                _simulation.AddBarrier(cells);
+                _terrainForCpu = _simulation.GetTerrainSnapshot();
+                _comparison = null;
+                if (_gpuSupported) await Gpu.ApplyEditsAsync(_terrainForCpu, null);
+            }
+            if (action is "pour" or "barrier") await RenderCpuAsync();
+        });
+        if (!_disposed) await InvokeAsync(StateHasChanged);
     }
 
     private async Task CompareAsync()
     {
         await RunActionAsync(async () =>
         {
+            if (!_cpuEnabled || !_gpuSupported) return;
             var gpuWater = await Gpu.GetSnapshotAsync();
-            _comparison = FluidComparison.Compare(_simulation.GetWaterSnapshot(), gpuWater);
+            _comparison = FluidComparison.Compare(_simulation.GetStateSnapshot(), gpuWater.ToState());
         });
+    }
+
+    private async Task ToggleCpuAsync()
+    {
+        await RunActionAsync(async () =>
+        {
+            if (!_gpuSupported) return;
+            _comparison = null;
+            if (_cpuEnabled)
+            {
+                _cpuEnabled = false;
+                await Gpu.SetCpuEnabledAsync(false);
+                _referenceStatus = "CPU reference off · GPU authoritative. Re-enabling starts a fresh GPU baseline.";
+            }
+            else
+            {
+                var baseline = await Gpu.GetSnapshotAsync(fresh: true);
+                _simulation.SynchronizeState(baseline.ToState());
+                _summaryDirty = true;
+                _gpuCycles = baseline.Cycles;
+                _cpuEnabled = true;
+                _terrainForCpu = _simulation.GetTerrainSnapshot();
+                await Gpu.SetCpuEnabledAsync(true);
+                await RenderCpuAsync();
+                _referenceStatus = $"CPU re-synchronized from GPU at tick {baseline.Cycles} · new independent comparison baseline.";
+            }
+        });
+    }
+
+    [JSInvokable]
+    public async Task HandlePresentationReadout(double cpuFps, double gpuFps, double cpuDrawMs, double gpuDrawMs, double? gpuDepth)
+    {
+        if (_disposed) return;
+        _cpuFps = cpuFps;
+        _gpuFps = gpuFps;
+        _cpuDrawMs = cpuDrawMs;
+        _gpuDrawMs = gpuDrawMs;
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        _ticksPerSecond = _metricTicks / System.Diagnostics.Stopwatch.GetElapsedTime(_metricStart, now).TotalSeconds;
+        _metricTicks = 0;
+        _metricStart = now;
+        if (_cpuEnabled && _summaryDirty)
+        {
+            _summary = _simulation.GetSummary();
+            _summaryDirty = false;
+        }
+        if (_selectedIndex is int index)
+        {
+            var x = index % _simulation.Width;
+            var y = index / _simulation.Width;
+            _selectionText = $"Cell ({x}, {y}) · terrain {_simulation.GetTerrainHeight(x, y)} in";
+            if (_cpuEnabled) _selectionText += $" · CPU water {_simulation.GetCell(x, y).WaterDepth:F3} in";
+            if (_gpuSupported && gpuDepth is double depth) _selectionText += $" · GPU water {depth:F3} in";
+        }
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task RunActionAsync(Func<Task> action)
     {
-        _busy = true;
+        await _actionGate.WaitAsync();
+        if (_disposed)
+        {
+            _actionGate.Release();
+            return;
+        }
         _errorMessage = null;
         try
         {
@@ -216,26 +696,68 @@
         {
             if (exception is JSException)
             {
+                await StopRunAsync();
+                // The last displayed GPU field is recoverable even after device loss.
+                // Never resume a reference that was frozen while GPU-only ticks ran.
+                try
+                {
+                    var baseline = await Gpu.GetSnapshotAsync();
+                    _simulation.SynchronizeState(baseline.ToState());
+                    _referenceStatus = $"CPU fallback recovered the last displayed GPU baseline at tick {baseline.Cycles}.";
+                }
+                catch
+                {
+                    _simulation.Reset();
+                    _experiment = new(0, 0);
+                    _forwardSample = _reverseSample = null;
+                    _referenceStatus = "GPU recovery unavailable · CPU fallback explicitly reset to tick 0 (not stale reference state).";
+                }
+                _cpuEnabled = true;
+                _summaryDirty = true;
                 _gpuSupported = false;
-                _gpuMessage = "WebGPU stopped; the CPU reference remains available.";
+                _comparison = null;
+                _terrainForCpu = _simulation.GetTerrainSnapshot();
+                await Gpu.SetCpuEnabledAsync(true);
+                await Gpu.SetGpuEnabledAsync(false);
+                await RenderCpuAsync();
+                _gpuMessage = "WebGPU stopped; CPU fallback active. Last unconfirmed GPU work may be lost.";
             }
 
             _errorMessage = exception.Message;
         }
         finally
         {
-            _summary = _simulation.GetSummary();
-            _busy = false;
+            _actionGate.Release();
         }
     }
 
-    private Task RenderCpuAsync() =>
-        Gpu.RenderCpuAsync(
+    private async Task RenderCpuAsync()
+    {
+        if (!_cpuEnabled) return;
+        await Gpu.RenderCpuAsync(
             _cpuCanvas,
-            _simulation.GetTerrainSnapshot(),
+            _terrainForCpu,
             _simulation.GetWaterSnapshot(),
             _simulation.Width,
-            _simulation.Height).AsTask();
+            _simulation.Height);
+        _terrainForCpu = null;
+    }
 
-    public ValueTask DisposeAsync() => Gpu.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        await StopRunAsync();
+        if (_runTask is not null) await _runTask;
+        await _actionGate.WaitAsync();
+        try
+        {
+            await Gpu.DisposeAsync();
+            _callback?.Dispose();
+            _runCancellation?.Dispose();
+        }
+        finally
+        {
+            _actionGate.Release();
+        }
+    }
 }

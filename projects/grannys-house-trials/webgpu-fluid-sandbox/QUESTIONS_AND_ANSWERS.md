@@ -21,6 +21,84 @@ current confirmed scope is recorded below.
 
 ## Platform and project shape
 
+### Approved algorithm-selector follow-up
+
+Four real numeric models now run on both C# and WebGPU: Cellular, Pipe-flux
+shallow water, Terrain-head pipe flow, and staggered MAC shallow water. The
+terrain selector is independent of the algorithm; execution optimizations and
+historical scenario names are not presented as extra algorithms.
+
+Changing algorithm pauses and clears depths, face rates/velocities and ticks,
+but preserves the current edited terrain and camera. Reset instead restores the
+starting scene while retaining the chosen algorithm. Complete-state comparison,
+reference re-enable and GPU-failure recovery include all face state, not just
+water depths. Pipe-flux uses linearly damped volume rates, Terrain-head adds
+depth-dependent rough-bed friction, and MAC transports donor depth with genuine
+face velocity state. MAC velocity advection is now a real optional first-order
+upwind stage (default off); other historical/erosion branches remain deferred.
+See README for units, numerical safeguards,
+comparison tolerance and behavioral references.
+
+### Approved settings and terrain experiments follow-up
+
+C# owns validated immutable settings for each model: cellular max flow/settle,
+pipe area/retention, terrain-head area/roughness, MAC damping/advection. Only
+relevant controls appear. Changes pause and reset complete fluid state without
+discarding terrain edits or camera; restore defaults affects the current model.
+Synchronization/comparison includes settings identity.
+
+The scene picker provides slope, enclosed basin, water slide, and a flat-bottom
+single-stage Tesla channel with a separate, well-resolved bypass and solid
+island. Reset restores the selected terrain. Forward/reverse experiment controls
+restore identical initial wetting and swap fixed 18/12-in reservoir heads.
+C# generates those constraints; GPU kernels and CPU implement the same forcing.
+CPU-off still skips CPU reference state work.
+
+Discharge and bypass throughput use signed actual face transfers. Momentum
+models divide by their 0.016-s tick and report ft³/s. Cellular has no physical
+tick duration and instead reports ft³/tick; no physical rate is implied.
+They are not circulation/vorticity or guaranteed steady flow.
+The depth-averaged scene is an experimental passive-geometry test, not a promise
+of check-valve closure or directional resistance. README records measured
+equal-time forward/reverse results, including essentially symmetric pipe-flux flow.
+
+### Approved interactive follow-up
+
+The user subsequently approved Run/Pause alongside the existing controls,
+an interesting downhill landscape with a channel and collecting area, and
+barriers for pooling, diversion, and overflow. Other solvers can reuse this scene;
+realistic waves are not required from the current solver.
+
+Both views share camera, selection, hover, and edit previews. Left click selects,
+left drag orbits about the initially hovered terrain point, the wheel zooms about
+the hovered point, right click pours, and right drag previews then commits a
+barrier. Identical edits apply to each implementation's independent water state.
+Two-axis landscape navigation is linked (horizontal below, depth-axis slider on
+the physical right), while vertical page scrolling and
+responsive layout keep the workbench usable on small screens.
+
+The current renderer uses Canvas2D-projected columns rather than the original
+flat cell map; WebGPU remains the compute backend, not a distinct renderer.
+
+### Approved performance follow-up
+
+The CPU reference can now be disabled completely without abandoning C# domain
+ownership. Its solver, water snapshots, statistics, and drawing stop; comparisons
+are disabled. Re-enabling explicitly imports a fresh GPU baseline and tick,
+announces that boundary, then returns to independent stepping and additive edits.
+GPU failure restores the last completed GPU display baseline into CPU fallback
+(or explicitly resets if recovery fails), rather than resuming stale CPU water.
+
+Run uses display-paced configurable tick batches instead of a fixed delay.
+Readouts distinguish actual dirty-draw FPS, ticks/sec, CPU/draw costs, and the
+GPU dispatch/readback wall-clock roundtrip; the latter is not actual GPU time.
+Cached display water serves selection without extra GPU reads.
+
+Workers remain an assessed option, not a requirement. Message-passing workers do
+not themselves require COOP/COEP, but shared-memory WebAssembly threads do, and
+this Pages deployment must not assume cross-origin isolation. A C# worker would
+also require a separate runtime/entry and explicit state ownership. See README.
+
 ### What kind of WebGPU application is intended?
 
 **Answer:** A browser application built with Blazor WebAssembly. The user's
@@ -126,11 +204,8 @@ pane, rather than floating controls.
 **Implementation:** The current UI presents two field views, basic controls,
 simulation readouts, and explicit comparison feedback.
 
-## Questions remaining after the first implementation
+## Questions remaining after the interactive follow-up
 
-1. After reviewing the first visual iteration, what should count as a useful
-   next improvement?
-2. Does the regular cell map communicate enough about flow before any 3D or
-   raycast renderer work is considered?
-3. Should a future version add continuous stepping, additional controls, or
-   more fluid models?
+1. Which fluid solver should be evaluated next against the same landscape?
+2. Is GPU-resident rendering warranted after assessing the projected-column views?
+3. Which additional browser or touch/stylus interactions should be supported?
