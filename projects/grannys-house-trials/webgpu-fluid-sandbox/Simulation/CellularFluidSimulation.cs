@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace WebGpuFluidSandbox.Simulation;
 
 public sealed class CellularFluidSimulation
@@ -23,6 +25,7 @@ public sealed class CellularFluidSimulation
         [(58, 32), (60, 32), (61, 31), (63, 30), (66, 28), (69, 26.5), (72, 26.5), (74, 28), (76, 29.5), (74.5, 31), (72.5, 30), (69, 28.5), (67, 28), (66, 30), (69, 32)],
         [(69, 32), (71, 32), (72, 33), (74, 34), (77, 36), (80, 37.5), (83, 37.5), (85, 36), (87, 34.5), (85.5, 33), (83.5, 34), (80, 35.5), (78, 36), (77, 34), (80, 32)]
     ];
+    private static readonly Lazy<int[]> TeslaJunctionPlaygroundTerrain = new(LoadTeslaJunctionPlaygroundTerrain);
     private readonly int[] _terrainHeights;
     private readonly int[] _initialTerrain;
     private readonly float[] _waterDepths;
@@ -76,6 +79,7 @@ public sealed class CellularFluidSimulation
         TerrainScene.EnclosedBasin => (Width / 2, Height / 2),
         TerrainScene.WaterSlide => ((int)Math.Round(48 + 18 * Math.Sin(12 / 11.0)), 12),
         TerrainScene.Tesla => (12, 32),
+        TerrainScene.TeslaJunctionPlayground => (9, 29),
         _ => (Width / 2, 12)
     };
 
@@ -585,10 +589,12 @@ public sealed class CellularFluidSimulation
         if (Width != 96 || Height != 64) throw new InvalidOperationException("Scenes require the standard 96 × 64 field.");
         ClearSprings();
         var slope = scene == TerrainScene.Slope ? CreateDefault().GetTerrainSnapshot() : null;
+        var teslaJunction = scene == TerrainScene.TeslaJunctionPlayground ? TeslaJunctionPlaygroundTerrain.Value : null;
         for (var y = 0; y < Height; y++)
         for (var x = 0; x < Width; x++)
         {
-            var z = slope?[y * Width + x] ?? 48;
+            var index = y * Width + x;
+            var z = teslaJunction?[index] ?? slope?[index] ?? 48;
             if (scene == TerrainScene.EnclosedBasin)
                 z = x is >= 8 and <= 87 && y is >= 8 and <= 55 ? 0 : 36;
             if (scene == TerrainScene.WaterSlide)
@@ -614,6 +620,25 @@ public sealed class CellularFluidSimulation
         }
         Scene = scene;
         Reset();
+    }
+
+    private static int[] LoadTeslaJunctionPlaygroundTerrain()
+    {
+        using var stream = typeof(CellularFluidSimulation).Assembly
+            .GetManifestResourceStream("TeslaJunctionPlaygroundTerrain.json")
+            ?? throw new InvalidOperationException("The Tesla junction terrain asset is missing from the application.");
+        using var document = JsonDocument.Parse(stream);
+        var map = document.RootElement;
+        if (map.GetProperty("Version").GetInt32() != 1 ||
+            map.GetProperty("Width").GetInt32() != 96 ||
+            map.GetProperty("Height").GetInt32() != 64)
+            throw new InvalidDataException("The Tesla junction terrain asset must be version 1 and 96 × 64 cells.");
+
+        var elevations = map.GetProperty("ElevationInches").EnumerateArray()
+            .Select(cell => cell.GetInt32()).ToArray();
+        if (elevations.Length != 96 * 64 || elevations.Any(height => height is < 0 or > 4096))
+            throw new InvalidDataException("The Tesla junction terrain asset has invalid elevations.");
+        return elevations;
     }
 
     private static double DistanceSquaredToPolyline(double x, double y, (double X, double Y)[] points)

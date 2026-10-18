@@ -11,6 +11,8 @@
     <Compile Include="../../Simulation/CellularFluidSimulation.cs" Link="CellularFluidSimulation.cs" />
     <Compile Include="../../Simulation/FluidComparison.cs" Link="FluidComparison.cs" />
     <Compile Include="../../Simulation/FluidSettings.cs" Link="FluidSettings.cs" />
+    <EmbeddedResource Include="../../artifacts/tesla-junction-playground/terrain.json"
+                      Link="terrain.json" LogicalName="TeslaJunctionPlaygroundTerrain.json" />
   </ItemGroup>
 
 </Project>

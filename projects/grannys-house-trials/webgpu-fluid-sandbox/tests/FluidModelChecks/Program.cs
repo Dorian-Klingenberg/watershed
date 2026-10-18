@@ -285,6 +285,17 @@ configurable.SelectScene(TerrainScene.InclineFlat);
 Assert(configurable.GetTerrainHeight(0, 32) == 24 && configurable.GetTerrainHeight(35, 32) == 0 &&
     configurable.GetTerrainHeight(70, 32) == 0, "workbench slopes into a level downstream plain");
 
+configurable.SelectScene(TerrainScene.TeslaJunctionPlayground);
+var junctionMap = configurable.GetTerrainSnapshot();
+Assert(configurable.Scene == TerrainScene.TeslaJunctionPlayground && junctionMap.Length == 96 * 64 &&
+    junctionMap.All(height => height is 0 or 48), "Tesla junction preset loads the saved flat-floor terrain asset");
+Assert(configurable.GetTerrainHeight(9, 29) == 0 && configurable.GetTerrainHeight(18, 39) == 0 &&
+    configurable.GetTerrainHeight(23, 23) == 0 && configurable.GetTerrainHeight(9, 20) == 48,
+    "Tesla junction preset preserves the entrance, return, merge, and raised banks");
+Assert(configurable.PourLocation == (9, 29), "Tesla junction preset pours at the channel entrance");
+configurable.AddWater(configurable.PourLocation.X, configurable.PourLocation.Y, 0, 12);
+AssertNear(12, configurable.GetSummary().TotalWater, 0.0001, "Tesla junction entrance pour starts as a small isolated drop");
+
 var advectionOff = new CellularFluidSimulation(9, 9, new int[81]);
 advectionOff.SelectAlgorithm(FluidAlgorithm.Mac);
 var advectionOn = new CellularFluidSimulation(9, 9, new int[81]);

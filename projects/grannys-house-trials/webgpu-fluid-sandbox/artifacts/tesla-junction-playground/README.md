@@ -2,7 +2,7 @@
 
 [Open the map and measured velocity inset](map.png) · [Downloadable terrain data](terrain.json)
 
-This is a playable geometry proposal, not an installed application preset or a validated Tesla valve. It adapts the asymmetric split/return mechanism into a coarse, open-channel terrain map. The app and its algorithms are unchanged.
+This is a playable geometry proposal, now available in the application as the **Tesla junction playground · two hooked returns** terrain preset. It adapts the asymmetric split/return mechanism into a coarse, open-channel terrain map. It is a research playground, not a validated Tesla valve.
 
 ## Geometry
 
@@ -36,7 +36,7 @@ Earlier three-stage candidates with shorter outlet separation gave 0.5–0.7% di
 
 ## Use as a playground
 
-Download `terrain.json` using GitHub's raw-file download and load it through the sandbox's existing terrain-map importer. No application deployment is needed for the data file. Use the MAC option with advection enabled when comparing with these trials. The built-in Tesla experiment controls have forcing/probes at fixed coordinates for the old preset, so their automatic measurements do not apply to this custom map.
+The in-app preset loads this exact `terrain.json` asset. The `Pour 12 in` button places a single-cell drop at (9, 29), rather than distributing water over the surrounding raised bank. Right-click to create or increase a spring. Use the MAC option with advection enabled when comparing with these trials. The built-in Tesla experiment controls have forcing/probes at fixed coordinates for the old preset, so their automatic measurements do not apply to this custom map.
 
 Useful small-pour locations, given as zero-based (column, row), are (9, 29) just before the first split, (18, 39) in the first curved return, and (23, 23) at the first meeting region. They reveal splitting, return travel, and local mixing respectively. Small isolated drops on a dry map will behave differently from the prewetted, continuously driven trials above.
 

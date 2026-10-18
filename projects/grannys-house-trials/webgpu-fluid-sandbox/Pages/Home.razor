@@ -40,6 +40,7 @@
                     <option value="2">Water slide</option>
                     <option value="3">Tesla valve · six hooked returns</option>
                     <option value="4">Incline → flat workbench</option>
+                    <option value="5">Tesla junction playground · two hooked returns</option>
                 </select>
             </label>
             <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ToggleRun" Disabled="@(!_initialized)">@(_running ? "Pause" : "Run")</FluentButton>
@@ -81,6 +82,13 @@
         </div>
         <p>@_mapStatus Right-drag draws a 12 in raise stroke or lowers the bed by 12 in per stroke, down to 0 in. Save stores terrain and springs in this browser and downloads a JSON file you can send for review.</p>
     </section>
+
+    @if (_simulation.Scene == TerrainScene.TeslaJunctionPlayground)
+    {
+        <section class="control-panel" aria-label="Tesla junction playground guidance">
+            <p>Two-stage junction layout from the saved 96 × 64 map. Pour starts at the channel entrance (9, 29). For small, placed sources, right-click the first return (18, 39) or merge (23, 23); repeated clicks at one cell increase that spring's flow. Choose Staggered MAC with upwind velocity advection to compare with the recorded CPU trial. The automatic forward/reverse experiment controls apply to the older Tesla preset.</p>
+        </section>
+    }
 
     <section class="control-panel" aria-label="Algorithm settings">
         <div class="actions">
@@ -596,7 +604,8 @@
             _forwardSample = _reverseSample = null;
             _experimentModified = _simulation.Direction != ExperimentDirection.None;
             var point = _simulation.PourLocation;
-            var delta = _simulation.AddWater(point.X, point.Y, PourRadius, PourDepthInches, _cpuEnabled);
+            var radius = _simulation.Scene == TerrainScene.TeslaJunctionPlayground ? 0 : PourRadius;
+            var delta = _simulation.AddWater(point.X, point.Y, radius, PourDepthInches, _cpuEnabled);
             if (_cpuEnabled) _summaryDirty = true;
             _comparison = null;
             await RenderCpuAsync();
