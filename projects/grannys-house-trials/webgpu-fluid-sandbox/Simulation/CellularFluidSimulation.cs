@@ -192,6 +192,41 @@ public sealed class CellularFluidSimulation
         }
     }
 
+    public void CarveChannel(int[] cells)
+    {
+        ValidateTerrainCells(cells);
+        foreach (var index in cells.Distinct())
+        {
+            _terrainHeights[index] = Math.Max(0, _terrainHeights[index] - 12);
+            ClearAdjacentMomentum(index);
+        }
+    }
+
+    public void LoadTerrainSnapshot(int[] terrain)
+    {
+        ArgumentNullException.ThrowIfNull(terrain);
+        if (terrain.Length != _terrainHeights.Length || terrain.Any(height => height is < 0 or > 4096))
+            throw new ArgumentOutOfRangeException(nameof(terrain), "Map elevations must contain one 0–4096 in value per cell.");
+        terrain.CopyTo(_initialTerrain, 0);
+        terrain.CopyTo(_terrainHeights, 0);
+        Scene = TerrainScene.InclineFlat;
+        ClearFluid();
+    }
+
+    private void ValidateTerrainCells(int[] cells)
+    {
+        ArgumentNullException.ThrowIfNull(cells);
+        if (cells.Length > _terrainHeights.Length || cells.Any(index => (uint)index >= _terrainHeights.Length))
+            throw new ArgumentOutOfRangeException(nameof(cells));
+    }
+
+    private void ClearAdjacentMomentum(int index)
+    {
+        _momentum[2 * index] = _momentum[2 * index + 1] = 0;
+        if (index % Width > 0) _momentum[2 * (index - 1)] = 0;
+        if (index >= Width) _momentum[2 * (index - Width) + 1] = 0;
+    }
+
     public FluidCell GetCell(int x, int y)
     {
         var terrainHeight = GetTerrainHeight(x, y);
@@ -514,6 +549,8 @@ public sealed class CellularFluidSimulation
                 }
                 z = reservoir || main || inReturn ? 0 : 48;
             }
+            if (scene == TerrainScene.InclineFlat)
+                z = x < 36 ? (int)Math.Round(24.0 * (35 - x) / 35) : 0;
             _initialTerrain[y * Width + x] = z;
         }
         Scene = scene;

@@ -198,7 +198,7 @@ for (let algorithm = 0; algorithm < 4; algorithm++) {
     const camera = await evaluate(`JSON.stringify([...document.querySelectorAll('input[type="range"]')].map(s=>s.value))`);
     await evaluate(`(() => { const s=document.querySelector('[aria-label="Fluid algorithm"]');
         s.value='${(algorithm+1)%4}';s.dispatchEvent(new Event('change',{bubbles:true})); })()`);
-    await sleep(500);
+    await wait(`document.querySelectorAll('.navigation-panel p[role="status"]')[1].textContent.includes('selected · paused')`);
     const switched = await evaluate(`import('./js/fluid-gpu.js').then(m=>m.snapshot())`);
     assert(switched.cycles === 0 && switched.water.every(v=>v===0) && switched.momentum.every(v=>v===0), "switch clears complete GPU state");
     assert.equal(await evaluate(`JSON.stringify([...document.querySelectorAll('input[type="range"]')].map(s=>s.value))`),camera,"switch preserves camera");
@@ -207,7 +207,7 @@ for (let algorithm = 0; algorithm < 4; algorithm++) {
     await wait(`Number(document.querySelector('.navigation-panel p[role="status"]').textContent.match(/terrain (\\d+)/)[1]) === ${initialTerrain}`);
 }
 // Terrain is independent of solver and settings; every scene is resettable on each backend.
-for(let scene=0;scene<4;scene++) for(let algorithm=0;algorithm<4;algorithm++){
+for(let scene=0;scene<5;scene++) for(let algorithm=0;algorithm<4;algorithm++){
     await select("Terrain scene",scene);
     await select("Fluid algorithm",algorithm);
     await click("Restore algorithm defaults");await sleep(300);
@@ -331,5 +331,5 @@ for(let scene=0;scene<4;scene++) for(let algorithm=0;algorithm<4;algorithm++){
     await wait(`Number(document.querySelector('.readout .metric strong').textContent)===1`);
     assert(await evaluate(`[...document.querySelectorAll('fluent-button,button')].find(b=>b.textContent.trim()==='CPU reference: on').disabled`),"fallback cannot disable CPU");
 }
-console.log("All actual WebGPU/C# comparisons, nondefault settings, advection, four terrains, controlled Tesla forcing, edits, full-state resume, switch/reset, responsive layout and fallback checks passed.");
+console.log("All actual WebGPU/C# comparisons, nondefault settings, advection, five terrains, controlled Tesla forcing, edits, full-state resume, switch/reset, responsive layout and fallback checks passed.");
 ws.close();

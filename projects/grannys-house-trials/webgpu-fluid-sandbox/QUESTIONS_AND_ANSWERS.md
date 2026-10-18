@@ -54,6 +54,12 @@ restore identical initial wetting and swap fixed 18/12-in reservoir heads.
 C# generates those constraints; GPU kernels and CPU implement the same forcing.
 CPU-off still skips CPU reference state work.
 
+The Incline → flat workbench starts at 24 in, descends to 0 in over 35 cells,
+then stays level for carving experiments. Right-drag can raise terrain by 12 in
+or carve it down by 12 in per pass, with a 0 in floor. Save/export downloads a
+versioned JSON terrain file and stores a browser-local copy; restore and import
+load a map as the new reset baseline. The JSON file can be shared for review.
+
 Discharge and bypass throughput use signed actual face transfers. Momentum
 models divide by their 0.016-s tick and report ft³/s. Cellular has no physical
 tick duration and instead reports ft³/tick; no physical rate is implied.

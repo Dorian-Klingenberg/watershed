@@ -27,7 +27,9 @@ The first implementation focuses on platform feasibility and the cellular-fluid 
 - Run/pause the GPU with an optional CPU reference, or manually advance one tick.
 - Explore a downhill channel, lower collecting area, and a barrier with a lower spillway.
 - Pour water uphill with the toolbar, or at a hovered cell with a right click.
-- Draw additional barriers with right-drag; reset restores the starting terrain and clears water.
+- Choose **Raise terrain** or **Carve channel** and right-drag; carving lowers the bed by 12 in per pass to a 0 in floor.
+- Use the **Incline → flat workbench** preset to start with a 24 in descent into a broad level plain.
+- Save/export terrain as a JSON map, restore the browser-local save, or import a map file to continue editing and share it for review.
 - Run the same synchronous cellular-flow rule in C# and WGSL.
 - Let water leaving the grid drain from the four field boundaries.
 - Compare CPU and GPU water snapshots on request using an absolute per-cell tolerance.
@@ -37,8 +39,8 @@ The first implementation focuses on platform feasibility and the cellular-fluid 
 ## Algorithms, scenario, and execution
 
 The **Algorithm** selector changes the numeric model in both implementations.
-The terrain selector offers slope/spillway, enclosed basin, water slide, and
-six-return Tesla valve; CPU/WebGPU are execution backends,
+The terrain selector offers slope/spillway, enclosed basin, water slide,
+six-return Tesla valve, and an incline-to-flat workbench; CPU/WebGPU are execution backends,
 not different algorithms. Changing algorithm pauses Run and clears water, all
 face state, and ticks while preserving **current edited terrain and camera**.
 Reset instead restores starting terrain and clears fluid while retaining the

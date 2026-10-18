@@ -1,5 +1,6 @@
 @page "/"
 @inject WebGpuFluidBackend Gpu
+@inject IJSRuntime JS
 @implements IAsyncDisposable
 
 <PageTitle>Fluid Algorithm Lab</PageTitle>
@@ -38,6 +39,7 @@
                     <option value="1">Enclosed basin</option>
                     <option value="2">Water slide</option>
                     <option value="3">Tesla valve · six hooked returns</option>
+                    <option value="4">Incline → flat workbench</option>
                 </select>
             </label>
             <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ToggleRun" Disabled="@(!_initialized)">@(_running ? "Pause" : "Run")</FluentButton>
@@ -52,6 +54,23 @@
                 </select>
             </label>
         </div>
+    </section>
+
+    <section class="control-panel" aria-label="Terrain editing and maps">
+        <div class="actions">
+            <label class="batch-control">Right-drag tool
+                <select value="@_terrainEditMode" @onchange="ChangeTerrainTool" disabled="@(!_initialized)" aria-label="Terrain editing tool">
+                    <option value="raise">Raise terrain</option>
+                    <option value="carve">Carve channel</option>
+                </select>
+            </label>
+            <FluentButton OnClick="SaveTerrainMapAsync" Disabled="@(!_initialized)">Save / export map</FluentButton>
+            <FluentButton OnClick="RestoreSavedTerrainAsync" Disabled="@(!_initialized)">Restore saved map</FluentButton>
+            <label class="batch-control">Import map JSON
+                <InputFile OnChange="ImportTerrainMapAsync" accept=".json,application/json" disabled="@(!_initialized)" />
+            </label>
+        </div>
+        <p>@_mapStatus Right-drag draws a 12 in raise stroke or lowers the bed by 12 in per stroke, down to 0 in. Save stores this terrain in this browser and downloads a JSON file you can send for review.</p>
     </section>
 
     <section class="control-panel" aria-label="Algorithm settings">
@@ -161,7 +180,7 @@
     <section class="navigation-panel" aria-label="Linked landscape navigation">
         <label for="landscape-scroll">Horizontal landscape position · both views</label>
         <input @ref="_landscapeScroll" id="landscape-scroll" type="range" min="0" max="95" value="48" step="0.1" />
-        <p>Left click: select · Left drag: orbit · Wheel over land: zoom · Right click: pour · Right drag: draw barrier.</p>
+        <p>Left click: select · Left drag: orbit · Wheel over land: zoom · Right click: pour · Right drag: use the selected terrain tool.</p>
         <p>Scroll the page using the margin or vertical scrollbar. Touch-drag over a view orbits; swipe outside it to scroll.</p>
         <p role="status">@_selectionText</p>
         <p role="status">@_referenceStatus</p>
@@ -219,7 +238,7 @@
     }
 
     <footer>
-        <span>Barrier strokes raise terrain by 12 in from its starting height. Reset restores the scene.</span>
+        <span>Right-drag raises terrain 12 in or carves 12 in per pass to a 0 in floor. Reset restores the selected map.</span>
         <span>Depth tolerance: @DepthTolerance in. Face tolerance: @CellularFluidSimulation.StateTolerance @FaceStateUnit. One cell = 1 ft². @(_simulation.Algorithm == FluidAlgorithm.Cellular ? "Cellular ticks have no physical duration." : "Fixed tick = 0.016 s.")</span>
     </footer>
 </div>
@@ -244,6 +263,10 @@
     };
 
     private readonly CellularFluidSimulation _simulation = CellularFluidSimulation.CreateDefault();
+    private IJSObjectReference? _mapModule;
+    private string _terrainEditMode = "raise";
+    private string _mapStatus = "Raise terrain is selected.";
+    private sealed record TerrainMapFile(int Version, string Name, int Width, int Height, int[] ElevationInches);
     private ElementReference _cpuCanvas;
     private ElementReference _gpuCanvas;
     private ElementReference _landscapeScroll;
@@ -309,6 +332,76 @@
 
     private Task ChangeAdvectionAsync(ChangeEventArgs args) =>
         ApplySettingsAsync(_simulation.Settings with { MacAdvection = args.Value is true });
+
+    private void ChangeTerrainTool(ChangeEventArgs args)
+    {
+        _terrainEditMode = args.Value?.ToString() == "carve" ? "carve" : "raise";
+        _mapStatus = _terrainEditMode == "carve" ? "Carve channel is selected." : "Raise terrain is selected.";
+    }
+
+    private async Task SaveTerrainMapAsync()
+    {
+        try
+        {
+            _mapModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/terrain-map.js");
+            var map = new TerrainMapFile(1, "incline-flat-workbench", _simulation.Width, _simulation.Height,
+                _simulation.GetTerrainSnapshot());
+            var json = System.Text.Json.JsonSerializer.Serialize(map);
+            await _mapModule.InvokeVoidAsync("saveMap", json);
+            _mapStatus = "Map saved in this browser and exported as JSON.";
+        }
+        catch (Exception exception)
+        {
+            _errorMessage = $"Map save failed: {exception.Message}";
+        }
+    }
+
+    private async Task RestoreSavedTerrainAsync()
+    {
+        try
+        {
+            _mapModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/terrain-map.js");
+            var json = await _mapModule.InvokeAsync<string?>("loadMap");
+            if (json is null) { _mapStatus = "This browser has no saved map yet."; return; }
+            await ApplyTerrainMapJsonAsync(json);
+        }
+        catch (Exception exception)
+        {
+            _errorMessage = $"Saved map could not be restored: {exception.Message}";
+        }
+    }
+
+    private async Task ImportTerrainMapAsync(InputFileChangeEventArgs args)
+    {
+        try
+        {
+            await using var stream = args.File.OpenReadStream(1_048_576);
+            using var reader = new StreamReader(stream);
+            await ApplyTerrainMapJsonAsync(await reader.ReadToEndAsync());
+        }
+        catch (Exception exception)
+        {
+            _errorMessage = $"Map import failed: {exception.Message}";
+        }
+    }
+
+    private async Task ApplyTerrainMapJsonAsync(string json)
+    {
+        var map = System.Text.Json.JsonSerializer.Deserialize<TerrainMapFile>(json)
+            ?? throw new InvalidDataException("The file is not a terrain map.");
+        if (map.Version != 1 || map.Width != _simulation.Width || map.Height != _simulation.Height || map.ElevationInches is null)
+            throw new InvalidDataException("Map version or dimensions are not supported.");
+        await StopRunAsync();
+        await RunActionAsync(async () =>
+        {
+            _simulation.LoadTerrainSnapshot(map.ElevationInches);
+            _terrainForCpu = _simulation.GetTerrainSnapshot();
+            _forwardSample = _reverseSample = null;
+            await ResetBackendAsync();
+            _mapStatus = $"Loaded {map.Name} · {_simulation.Width} × {_simulation.Height} terrain cells.";
+            _referenceStatus = "Saved terrain loaded · fluid cleared · camera preserved.";
+        });
+    }
 
     private Task RestoreDefaultsAsync()
     {
@@ -601,16 +694,18 @@
                 _comparison = null;
                 if (_gpuSupported) await Gpu.ApplyEditsAsync(null, delta);
             }
-            else if (action == "barrier")
+            else if (action is "barrier" or "carve")
             {
                 _forwardSample = _reverseSample = null;
                 _experimentModified = _simulation.Direction != ExperimentDirection.None;
-                _simulation.AddBarrier(cells);
+                if (_terrainEditMode == "carve") _simulation.CarveChannel(cells);
+                else _simulation.AddBarrier(cells);
                 _terrainForCpu = _simulation.GetTerrainSnapshot();
                 _comparison = null;
                 if (_gpuSupported) await Gpu.ApplyEditsAsync(_terrainForCpu, null);
+                _mapStatus = _terrainEditMode == "carve" ? "Carved 12 in into the terrain." : "Raised terrain by 12 in.";
             }
-            if (action is "pour" or "barrier") await RenderCpuAsync();
+            if (action is "pour" or "barrier" or "carve") await RenderCpuAsync();
         });
         if (!_disposed) await InvokeAsync(StateHasChanged);
     }
@@ -755,6 +850,10 @@
             await Gpu.DisposeAsync();
             _callback?.Dispose();
             _runCancellation?.Dispose();
+            if (_mapModule is not null)
+            {
+                try { await _mapModule.DisposeAsync(); } catch (JSDisconnectedException) { }
+            }
         }
         finally
         {

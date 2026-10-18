@@ -91,6 +91,21 @@ edited.Reset();
 Assert(edited.GetTerrainSnapshot().SequenceEqual(originalTerrain), "reset restores initial landscape");
 Assert(edited.CycleCount == 0 && edited.GetSummary().TotalWater == 0, "reset clears water and ticks");
 
+var carved = new CellularFluidSimulation(5, 5, Enumerable.Repeat(20, 25).ToArray());
+carved.CarveChannel([12, 12]);
+Assert(carved.GetTerrainHeight(2, 2) == 8, "carving lowers terrain by 12 inches per stroke");
+carved.CarveChannel([12]);
+Assert(carved.GetTerrainHeight(2, 2) == 0, "carving stops at the zero-inch floor");
+carved.Reset();
+Assert(carved.GetTerrainHeight(2, 2) == 20, "reset restores the original carved map");
+var loadedMap = Enumerable.Range(0, 96 * 64).Select(i => i / 96 < 12 ? 24 : 0).ToArray();
+var mapWorkbench = CellularFluidSimulation.CreateDefault();
+mapWorkbench.LoadTerrainSnapshot(loadedMap);
+Assert(mapWorkbench.Scene == TerrainScene.InclineFlat && mapWorkbench.GetTerrainSnapshot().SequenceEqual(loadedMap),
+    "imported terrain becomes the resettable incline-flat workbench map");
+loadedMap[0] = -1;
+ExpectThrows<ArgumentOutOfRangeException>(() => mapWorkbench.LoadTerrainSnapshot(loadedMap), "invalid imported elevations are rejected");
+
 var channelTerrain = Enumerable.Repeat(100, 25).ToArray();
 channelTerrain[11] = channelTerrain[12] = channelTerrain[13] = 0;
 var blockedChannel = new CellularFluidSimulation(5, 5, channelTerrain);
@@ -257,6 +272,7 @@ foreach (var scene in Enum.GetValues<TerrainScene>())
     configurable.Reset();
     Assert(configurable.Scene == scene && bed.SequenceEqual(configurable.GetTerrainSnapshot()), $"{scene} reset restores selected terrain");
 }
+configurable.SelectScene(TerrainScene.Tesla);
 Assert(Enumerable.Range(3, 90).All(x => configurable.GetTerrainHeight(x, 32) == 0),
     "Tesla main passage remains continuous through both reservoirs");
 Assert(new[] { (25, 27), (36, 38), (47, 27), (58, 38), (69, 27), (80, 38) }
@@ -265,6 +281,9 @@ Assert(new[] { (25, 27), (36, 38), (47, 27), (58, 38), (69, 27), (80, 38) }
 Assert(configurable.GetTerrainHeight(48, 20) == 48 && configurable.GetTerrainHeight(48, 44) == 48 &&
     configurable.GetTerrainHeight(52, 14) == 48, "Tesla banks remain solid outside the return passages");
 Assert(configurable.GetTerrainHeight(8, 32) == configurable.GetTerrainHeight(88, 32), "comparable flat reservoir bottoms");
+configurable.SelectScene(TerrainScene.InclineFlat);
+Assert(configurable.GetTerrainHeight(0, 32) == 24 && configurable.GetTerrainHeight(35, 32) == 0 &&
+    configurable.GetTerrainHeight(70, 32) == 0, "workbench slopes into a level downstream plain");
 
 var advectionOff = new CellularFluidSimulation(9, 9, new int[81]);
 advectionOff.SelectAlgorithm(FluidAlgorithm.Mac);
