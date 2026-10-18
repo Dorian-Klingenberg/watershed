@@ -15,8 +15,8 @@
 
   <ItemGroup>
     <Compile Remove="tests/**/*.cs" />
-    <EmbeddedResource Include="artifacts/tesla-junction-playground/terrain.json"
-                      LogicalName="TeslaPatentTerrain.json" />
+    <EmbeddedResource Include="artifacts/tesla-valve-map.json"
+                      LogicalName="TeslaTerrain.json" />
   </ItemGroup>
 
 </Project>

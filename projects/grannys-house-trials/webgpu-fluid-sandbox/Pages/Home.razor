@@ -11,7 +11,7 @@
             <p class="eyebrow">WEBGPU FLUID SANDBOX · FOUR MODELS · ONE LANDSCAPE</p>
             <h1>Fluid Algorithm Lab</h1>
             <p class="intro">A GPU water field with an optional independent C# reference.</p>
-            <p class="intro"><a href="tesla-valve-study.html">Tesla-valve geometry study and pulse trials →</a></p>
+            <p class="intro"><a href="tesla-valve-study.html">Tesla-valve map and flow study →</a></p>
         </div>
         <div class="engine-status @(_gpuSupported ? "ready" : "waiting")" role="status">
             <span class="status-dot"></span>
@@ -38,9 +38,8 @@
                     <option value="0">Slope and spillway</option>
                     <option value="1">Enclosed basin</option>
                     <option value="2">Water slide</option>
-                    <option value="3">Tesla valve · patent Fig. 1 trace</option>
+                    <option value="3">Tesla valve · stamped blue-route map</option>
                     <option value="4">Incline → flat workbench</option>
-                    <option value="5">Tesla valve · patent map playground</option>
                 </select>
             </label>
             <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ToggleRun" Disabled="@(!_initialized)">@(_running ? "Pause" : "Run")</FluentButton>
@@ -83,10 +82,10 @@
         <p>@_mapStatus Right-drag draws a 12 in raise stroke or lowers the bed by 12 in per stroke, down to 0 in. Save stores terrain and springs in this browser and downloads a JSON file you can send for review.</p>
     </section>
 
-    @if (_simulation.Scene == TerrainScene.TeslaJunctionPlayground)
+    @if (_simulation.Scene == TerrainScene.Tesla)
     {
-        <section class="control-panel" aria-label="Tesla junction playground guidance">
-            <p>Patent Fig. 1 plan stamped into a 192 × 128 terrain at 1 ft per cell. Both Tesla presets use this same map; the Tesla preset adds equal-head forward/reverse trials. The pour starts in the left port at (8, 64). To place small sources near the first upper and lower return channels, right-click (55, 60) or (67, 67); repeated clicks at one cell increase that spring's flow. Try Staggered MAC with upwind velocity advection and compare the same positions in both directions.</p>
+        <section class="control-panel" aria-label="Tesla valve map guidance">
+            <p>Single Tesla terrain map: the stamped blue cells are the low channel (0 in); gray cells are raised terrain (48 in). The purple arrows and black drawing marks are annotations, not terrain. The map is 192 × 128 cells at 1 ft per cell. The left port is near (8, 64). Right-click any channel cell to add a spring; repeated clicks there increase its flow. Use Staggered MAC to explore the route.</p>
         </section>
     }
 
@@ -120,7 +119,7 @@
                 <FluentButton OnClick="StepExperimentAsync" Disabled="@(!_initialized || _simulation.Direction == ExperimentDirection.None)">Advance 128 experiment ticks</FluentButton>
             </div>
             <div>
-                <p>Each experiment restores the patent-traced terrain, pauses at tick 0, and fixes clear cells in the two ports to 18 / 12 in (Δhead 6 in), swapped in reverse. Run or Step to advance. Other open channel cells start uniformly at 15 in.</p>
+                <p>Each experiment restores this stamped map, pauses at tick 0, and fixes clear cells in the two ports to 18 / 12 in (Δhead 6 in), swapped in reverse. Run or Step to advance. Other open channel cells start uniformly at 15 in.</p>
                 <p>Experimental depth-averaged model: no guaranteed resistance difference, check-valve closure, or resolved turbulence.</p>
                 <p role="status" class="experiment-readout">Direction: @_simulation.Direction · main-channel section signed discharge @(_experiment.Discharge.ToString("F5")) @ExperimentFlowUnit · bypass section signed flow @(_experiment.BypassFlow.ToString("F5")) @ExperimentFlowUnit.</p>
                 @if (_experimentModified)
@@ -604,7 +603,7 @@
             _forwardSample = _reverseSample = null;
             _experimentModified = _simulation.Direction != ExperimentDirection.None;
             var point = _simulation.PourLocation;
-            var radius = _simulation.Scene == TerrainScene.TeslaJunctionPlayground ? 0 : PourRadius;
+            var radius = _simulation.Scene == TerrainScene.Tesla ? 0 : PourRadius;
             var delta = _simulation.AddWater(point.X, point.Y, radius, PourDepthInches, _cpuEnabled);
             if (_cpuEnabled) _summaryDirty = true;
             _comparison = null;

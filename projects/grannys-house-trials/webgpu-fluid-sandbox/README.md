@@ -41,7 +41,7 @@ The first implementation focuses on platform feasibility and the cellular-fluid 
 
 The **Algorithm** selector changes the numeric model in both implementations.
 The terrain selector offers slope/spillway, enclosed basin, water slide,
-patent-traced Tesla valve, and an incline-to-flat workbench; CPU/WebGPU are execution backends,
+the single stamped Tesla valve map, and an incline-to-flat workbench; CPU/WebGPU are execution backends,
 not different algorithms. Changing algorithm pauses Run and clears water, all
 face state, and ticks while preserving **current edited terrain and camera**.
 Reset instead restores starting terrain and clears fluid while retaining the
@@ -128,92 +128,20 @@ physics, not extra algorithm choices. Original heightfield SWE, virtual-pipe,
 O'Brien volume-only, slosh scenario presets, hydraulic erosion/rain and other
 historical branches remain **deferred**. The column-raycast renderer is also still deferred.
 
-### Controlled Tesla experiment
+### Tesla valve map
 
-Both Tesla terrain presets now load the same source-stamped plan of US1329559A
-Fig. 1. The 192×128 field gives the patent body a uniform 16-cell cross-section
-and about 172 cells of length; each cell remains 1 ft. Patent port 5 is mirrored
-to the app's left side so patent's preferred port-5-to-port-4 direction reads
-left-to-right. The floor is level at 0 in and baffles/banks are 48 in high. A
-two-cell direct trunk at rows 63–64 remains open; the actual slanted partitions
-and hooked clearances are retained around it. Source arrows, labels, mounting
-holes, and the housing outline are excluded from terrain. A one-foot raster
-closed some source throats, so the generator reopens the minimum grid paths to
-keep all fluid space connected. This is a patent-plan trace at grid scale, not
-a dimensional reproduction of the original closed conduit.
+The terrain selector has one Tesla map: the approved blue-route stamp at
+`wwwroot/tesla-valve-layout.png`, encoded for the solver in
+`artifacts/tesla-valve-map.json`. The 192×128 grid is 1 ft per cell. Blue cells
+become the low channel at 0 in; all other cells become raised terrain at 48 in.
+Purple arrows and black drawing marks are annotations and are not stamped into
+the terrain. The app starts a pour at the left port, and right-click springs
+remain available for placing water elsewhere along the channel.
 
-**Forward experiment** and **Reverse experiment** each restore that terrain and
-pause at tick 0. All unforced channel/reservoir cells begin at 15 in; interior
-reservoir patches maintain 18/12 in in forward, 12/18 in in reverse (same 6-in
-imposed head difference). No terrain gradient favors either direction.
-C# generates initial conditions and per-cell prescribed-depth operations;
-WGSL imposes those numeric constraints after each tick. The same policy runs
-on the CPU. Reservoirs inject/remove water, so forced runs do not conserve
-closed-system mass. CPU-off builds domain reset/forcing operations but does not
-step, populate, snapshot, or measure the frozen CPU reference.
-
-Run, Step, or **Advance 128 experiment ticks** after starting a direction. The
-bounded 128-tick action stays paused and serializes all 16 eight-tick batches
-against edits/reset, making equal-time trials possible without pause timing.
-The readout sums **actual positivity-limited
-face transfers** across x=160, y=63–64, divided by 12 to convert depth to
-volume for 1-ft² cells. Momentum models additionally divide by their 0.016-s
-tick, yielding signed ft³/s. Cellular reports ft³/tick: its algorithmic tick
-has no physical duration. The off-axis probe sums rows 57–62 and 65–70 at
-x=160. Positive is left-to-right. The main-channel section is downstream in
-forward and upstream in reverse.
-Equal transient times can still have different internal storage, so these
-samples do not establish a steady-state resistance ratio.
-The bypass metric measures branch throughput, not vorticity or recirculation.
-Readouts are the **last completed tick**, not time averages or steady-state
-estimates. The UI retains forward/reverse samples and reports a magnitude
-difference only at matching ticks; setting/scene changes and edits clear them.
-Reset turns forcing off and clears fluid; restart a direction to reproduce a trial.
-
-At tick 1600 with equal 6-in imposed head and MAC advection enabled, the stamped
-map produced 3.0691 ft³/s forward and −2.9196 ft³/s reverse at the main probe;
-off-axis signed flow was 3.5134 and −4.0813 ft³/s respectively. This is one
-finite-time measurement, not a steady-state resistance ratio. The larger reverse
-off-axis magnitude is consistent with greater diversion in this sample, but the
-model does not measure vortex loss or diodicity. Both directions pass water.
-
-Historical single-loop geometry baseline (superseded by the patent trace):
-deterministic C# observations at tick 1600 (25.6 simulated seconds for
-momentum models only), default
-parameters except MAC velocity advection enabled:
-
-| Model | Unit | Forward discharge | Reverse discharge | Forward bypass | Reverse bypass |
-| --- | --- | ---: | ---: | ---: | ---: |
-| Cellular | ft³/tick | 0.020777 | -0.020712 | 0.003471 | -0.003307 |
-| Pipe-flux | ft³/s | 0.281122 | -0.281122 | 0.000023 | -0.000023 |
-| Terrain-head | ft³/s | 5.333757 | -5.494946 | 2.637643 | -2.846550 |
-| MAC + advection | ft³/s | 29.372301 | -26.516822 | 5.061925 | -4.909123 |
-
-These are repeatable **transient measurements**, not
-steady flow, a ranking of solvers, or calibrated resistance. Pipe-flux shows
-essentially no directional distinction here; the others need not favor the
-nominal forward direction. Cellular cannot be compared to physical volume rates.
-This depth-averaged model does not resolve 3D turbulence or guarantee rectification,
-flow closure, or real Tesla-valve performance.
-
-Headless Chromium/SwiftShader regression checks covered at least 448 ticks per
-algorithm, including a real barrier stroke, another pour, GPU-only stepping and
-reference re-enable. Observed maximum depth error was below 0.000005 in; pipe
-rate errors were below 0.0000011 ft³/s and MAC velocity error below 0.000004 ft/s.
-Water-total error stayed below 0.0001 cell-inches. These are sampled results,
-not bitwise-equality claims or guarantees against floating-point drift over
-arbitrarily long runs or other adapters. The declared complete-state tolerance
-remains 0.0001 in for cellular depth, 0.002 in for momentum-model depth,
-0.002 ft³/s for pipe rates and 0.002 ft/s for MAC.
-
-The expanded published-Release Chromium/SwiftShader suite also passes with
-nondefault settings, MAC velocity advection on/off and complete-state resume,
-all four scenes on each model, exact 128-tick forward/reverse forced trials
-(including advective MAC), GPU-only forcing, selected-scene resets, responsive
-layout, actual device failure during a terrain upload, recovered fallback, and
-all four models/scenes without WebGPU. Every explicit full-state comparison
-passes the declared tolerances. Deterministic model checks separately repeat
-the 1600-tick measurements above.
+Forward/reverse controls remain available for exploration. Historical Tesla
+trial measurements in earlier map versions have been removed because they do
+not describe this stamped route. The depth-averaged model still does not resolve
+the three-dimensional separation and turbulence that produce real-valve losses.
 
 ## Navigation and controls
 

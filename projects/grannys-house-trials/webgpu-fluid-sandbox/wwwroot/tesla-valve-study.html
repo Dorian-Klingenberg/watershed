@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>Tesla Valve Terrain · Fluid Algorithm Lab</title>
+  <title>Tesla Valve Map · Fluid Algorithm Lab</title>
   <style>
     :root { color-scheme:light; --ink:#17312f; --muted:#526966; --line:#c8d9d4; --paper:#f5faf8; --water:#147c78; --panel:#fff; }
     * { box-sizing:border-box; }
@@ -18,43 +18,35 @@
     .panel { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:clamp(16px,3vw,26px); margin:20px 0; }
     figure { margin:0; overflow-x:auto; } figure img { display:block; width:100%; height:auto; min-width:650px; }
     figcaption,.note { color:var(--muted); font-size:.91rem; }
-    .callout { border-left:4px solid var(--water); padding:12px 16px; background:#e8f4f1; border-radius:0 8px 8px 0; }
-    .warning { border-left-color:#bd6b39; background:#fff2e8; }
     footer { margin-top:3rem; border-top:1px solid var(--line); padding-top:1rem; color:var(--muted); }
   </style>
 </head>
 <body>
 <main>
   <a class="back" href="./">← Back to Fluid Algorithm Lab</a>
-  <p class="eyebrow">Patent plan trace · staggered MAC playground</p>
-  <h1>Stamp the patent geometry into terrain</h1>
-  <p class="lede">Both Tesla presets now load one terrain traced from the plan view in Fig. 1 of Tesla's US1329559A patent. This replaces the earlier hand-drawn D/U-shaped loops. The stamped map keeps the alternating slanted partitions and hooked side clearances that make the real device asymmetric, while leaving the app's direct central route open.</p>
+  <p class="eyebrow">One stamped terrain · 192 × 128 cells</p>
+  <h1>Tesla valve map</h1>
+  <p class="lede">The terrain selector contains one Tesla map: the user-approved blue-route stamp. It preserves the drawn route cell for cell without inventing extra branches.</p>
 
   <section class="panel">
-    <h2 style="margin-top:0">Current top-down cell map</h2>
+    <h2 style="margin-top:0">Top-down map</h2>
     <figure>
-      <img src="tesla-valve-layout.png" alt="Top-down 192 by 128 cell terrain raster of the Tesla patent plan. A dark, low central passage runs through a repeated pattern of light, raised slanted partitions and side hooks.">
-      <figcaption>One cell is 1 ft. Dark is the 0 in floor; light is 48 in raised bank or partition. Port 5 is mirrored to the left, matching the patent's preferred port-5-to-port-4 direction with left-to-right app flow. Source arrows, text, screw holes and the housing outline were removed before stamping. See the <a href="tesla-patent-plan-view.png">patent plan crop</a> and the <a href="https://github.com/Dorian-Klingenberg/watershed/blob/main/projects/grannys-house-trials/webgpu-fluid-sandbox/artifacts/tesla-junction-playground/geometry-checks.json">raster checks</a>.</figcaption>
+      <img src="tesla-valve-layout.png" alt="192 by 128 terrain grid with the channel cells marked blue and the surrounding raised terrain gray; purple arrows show the intended flow direction.">
+      <figcaption>Each cell is 1 ft. Blue cells are channel floor at 0 in; other cells are raised terrain at 48 in. Purple arrows and black marks are drawing annotations, not part of the terrain. The JSON terrain used by the app is <a href="https://github.com/Dorian-Klingenberg/watershed/blob/main/projects/grannys-house-trials/webgpu-fluid-sandbox/artifacts/tesla-valve-map.json">here</a>.</figcaption>
     </figure>
   </section>
 
-  <div class="callout"><strong>Why the grid is larger:</strong> the patent body has a long, shallow planform. A uniform stamp at 96 × 64 collapsed most angled partitions into horizontal strips. The 192 × 128 terrain preserves those angles with a 16-cell body width and about 172 cells of length. At the app's 1-ft cells this is 16 ft across; retaining a 4-ft physical width would require quarter-foot cells and corresponding cell-area changes throughout the solvers. Some one-foot raster gaps still close, so the map generator records and reopens the smallest connecting throats.</div>
+  <h2>Use the map</h2>
+  <p>Open the app, choose <strong>Terrain → Tesla valve · stamped blue-route map</strong>, then run or step the simulation. The initial pour starts at the left port near (8, 64). Right-click a channel cell to place a spring; repeated clicks there increase its flow. Forward and reverse reservoir controls remain available for comparing routes.</p>
 
-  <h2>What the patent geometry is meant to do</h2>
-  <p>The patent describes a fixed passage that carries flow in both directions. In its preferred direction, the main stream proceeds nearly straight with small deflections. With the pressure reversed, the buckets and partitions redirect the stream repeatedly, increasing turns and collisions with returning flow. Those extra losses create a directional pressure-drop difference; they do not make a perfect check valve. A flow arrow in the drawing is not a wall or a guaranteed streamline.</p>
-  <p>The app's first preset runs a repeatable forward/reverse head comparison. The second uses the same map for small pours and right-click springs. Try Staggered MAC with velocity advection enabled and place sources at (55, 60) and (67, 67) to explore an upper and lower side passage. The left-port pour begins at (8, 64).</p>
-
-  <h2>First controlled result</h2>
-  <p>With the channel initially wetted, equal 18/12 in reservoir levels, Staggered MAC and upwind velocity advection, the tick-1600 main-section reading was 3.0691 ft³/s left-to-right and −2.9196 ft³/s right-to-left. The off-axis section read 3.5134 and −4.0813 ft³/s. Both directions carried water; the reverse trial had greater off-axis movement in that sample.</p>
-  <p class="note">These are last-tick transient transfers, not a settled equal-flow pressure-drop comparison. They do not establish a diodicity ratio. The solver is depth-averaged and does not resolve 3D boundary layers, separated jets or turbulent mixing. The result is useful for exploring this raster, not a claim of physical validation.</p>
-
-  <h2>Sources</h2>
+  <h2>Physical context</h2>
+  <p>A Tesla valve is a fixed conduit, not a check valve. Its repeated return passages redirect reverse flow and increase losses, while the preferred direction follows a more direct path. This depth-averaged shallow-water playground can show route interactions, but it does not resolve three-dimensional boundary layers, separated jets, or turbulent mixing that drive much of the real device's directional resistance.</p>
   <ul>
     <li>Nikola Tesla, <a href="https://patents.google.com/patent/US1329559A/en">US Patent 1,329,559, “Valvular Conduit” (1920)</a>.</li>
-    <li>Nguyen et al., <a href="https://www.nature.com/articles/s41467-021-23009-y">“Early turbulence and pulsatile flows enhance diodicity of Tesla's macrofluidic valve”</a>, Nature Communications 12, 2884 (2021), DOI 10.1038/s41467-021-23009-y. The source figure is reproduced under CC BY 4.0.</li>
-    <li><a href="https://github.com/Dorian-Klingenberg/watershed/blob/main/projects/grannys-house-trials/webgpu-fluid-sandbox/artifacts/tesla-valve-review.md">Detailed geometry and solver review</a>.</li>
+    <li>Nguyen et al., <a href="https://www.nature.com/articles/s41467-021-23009-y">“Early turbulence and pulsatile flows enhance diodicity of Tesla's macrofluidic valve”</a>, <em>Nature Communications</em> 12, 2884 (2021), DOI 10.1038/s41467-021-23009-y.</li>
+    <li><a href="https://github.com/Dorian-Klingenberg/watershed/blob/main/projects/grannys-house-trials/webgpu-fluid-sandbox/artifacts/tesla-valve-review.md">Map implementation notes</a>.</li>
   </ul>
-  <footer>Geometry generated from the patent plan image by the repository's <code>generate_geometry.py</code> script. Both Tesla terrain selectors load the same JSON asset.</footer>
+  <footer>The blue channel is stamped as the single selectable Tesla terrain in the app.</footer>
 </main>
 </body>
 </html>

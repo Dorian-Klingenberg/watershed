@@ -274,26 +274,16 @@ foreach (var scene in Enum.GetValues<TerrainScene>())
     Assert(configurable.Scene == scene && bed.SequenceEqual(configurable.GetTerrainSnapshot()), $"{scene} reset restores selected terrain");
 }
 configurable.SelectScene(TerrainScene.Tesla);
-var patentMap = configurable.GetTerrainSnapshot();
-Assert(Enumerable.Range(10, 172).All(x => configurable.GetTerrainHeight(x, 63) == 0 &&
-    configurable.GetTerrainHeight(x, 64) == 0), "patent map preserves its two-cell straight trunk through both ports");
-Assert(configurable.GetTerrainHeight(55, 60) == 0 && configurable.GetTerrainHeight(67, 67) == 0 &&
-    configurable.GetTerrainHeight(46, 58) == 48, "patent trace includes side passages and raised baffles");
-Assert(configurable.GetTerrainHeight(8, 64) == configurable.GetTerrainHeight(184, 64), "matching flat patent-map ports");
-Assert(AllOpenCellsReachPort(patentMap, configurable.Width, configurable.Height, 64 * configurable.Width),
-    "rasterized patent passages and repaired throats form one connected fluid domain");
+var stampedMap = configurable.GetTerrainSnapshot();
+Assert(stampedMap.Length == CellularFluidSimulation.StandardWidth * CellularFluidSimulation.StandardHeight &&
+    stampedMap.All(height => height is 0 or 48), "single stamped Tesla map loads on the standard grid");
+Assert(configurable.GetTerrainHeight(8, 64) == 0, "Tesla pour point lies in the stamped channel");
+Assert(configurable.PourLocation == (8, 64), "Tesla map pours at the left port");
+configurable.AddWater(configurable.PourLocation.X, configurable.PourLocation.Y, 0, 12);
+AssertNear(12, configurable.GetSummary().TotalWater, 0.0001, "Tesla port pour starts as a small isolated drop");
 configurable.SelectScene(TerrainScene.InclineFlat);
 Assert(configurable.GetTerrainHeight(0, 64) == 24 && configurable.GetTerrainHeight(71, 64) == 0 &&
     configurable.GetTerrainHeight(140, 64) == 0, "workbench slopes into a level downstream plain");
-
-configurable.SelectScene(TerrainScene.TeslaJunctionPlayground);
-var junctionMap = configurable.GetTerrainSnapshot();
-Assert(configurable.Scene == TerrainScene.TeslaJunctionPlayground && junctionMap.Length == CellularFluidSimulation.StandardWidth * CellularFluidSimulation.StandardHeight &&
-    junctionMap.SequenceEqual(patentMap) && junctionMap.All(height => height is 0 or 48),
-    "both Tesla presets load the same flat-floor patent terrain asset");
-Assert(configurable.PourLocation == (8, 64), "Tesla patent map pours at the left port");
-configurable.AddWater(configurable.PourLocation.X, configurable.PourLocation.Y, 0, 12);
-AssertNear(12, configurable.GetSummary().TotalWater, 0.0001, "Tesla patent port pour starts as a small isolated drop");
 
 var advectionOff = new CellularFluidSimulation(9, 9, new int[81]);
 advectionOff.SelectAlgorithm(FluidAlgorithm.Mac);

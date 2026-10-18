@@ -17,7 +17,7 @@ public sealed class CellularFluidSimulation
     private const int MaximumCellCount = 262_144;
     public const int StandardWidth = 192;
     public const int StandardHeight = 128;
-    private static readonly Lazy<int[]> TeslaPatentTerrain = new(LoadTeslaPatentTerrain);
+    private static readonly Lazy<int[]> TeslaTerrain = new(LoadTeslaTerrain);
     private readonly int[] _terrainHeights;
     private readonly int[] _initialTerrain;
     private readonly float[] _waterDepths;
@@ -71,7 +71,6 @@ public sealed class CellularFluidSimulation
         TerrainScene.EnclosedBasin => (Width / 2, Height / 2),
         TerrainScene.WaterSlide => ((int)Math.Round(48 + 18 * Math.Sin(12 / 11.0)), 12),
         TerrainScene.Tesla => (8, 64),
-        TerrainScene.TeslaJunctionPlayground => (8, 64),
         _ => (Width / 2, 24)
     };
 
@@ -582,7 +581,7 @@ public sealed class CellularFluidSimulation
             throw new InvalidOperationException($"Scenes require the standard {StandardWidth} × {StandardHeight} field.");
         ClearSprings();
         var slope = scene == TerrainScene.Slope ? CreateDefault().GetTerrainSnapshot() : null;
-        var tesla = scene is TerrainScene.Tesla or TerrainScene.TeslaJunctionPlayground ? TeslaPatentTerrain.Value : null;
+        var tesla = scene == TerrainScene.Tesla ? TeslaTerrain.Value : null;
         for (var y = 0; y < Height; y++)
         for (var x = 0; x < Width; x++)
         {
@@ -600,11 +599,11 @@ public sealed class CellularFluidSimulation
         Reset();
     }
 
-    private static int[] LoadTeslaPatentTerrain()
+    private static int[] LoadTeslaTerrain()
     {
         using var stream = typeof(CellularFluidSimulation).Assembly
-            .GetManifestResourceStream("TeslaPatentTerrain.json")
-            ?? throw new InvalidOperationException("The patent Tesla terrain asset is missing from the application.");
+            .GetManifestResourceStream("TeslaTerrain.json")
+            ?? throw new InvalidOperationException("The stamped Tesla terrain asset is missing from the application.");
         using var document = JsonDocument.Parse(stream);
         var map = document.RootElement;
         if (map.GetProperty("Version").GetInt32() != 1 ||
@@ -615,7 +614,7 @@ public sealed class CellularFluidSimulation
         var elevations = map.GetProperty("ElevationInches").EnumerateArray()
             .Select(cell => cell.GetInt32()).ToArray();
         if (elevations.Length != StandardWidth * StandardHeight || elevations.Any(height => height is < 0 or > 4096))
-            throw new InvalidDataException("The Tesla patent terrain asset has invalid elevations.");
+            throw new InvalidDataException("The stamped Tesla terrain asset has invalid elevations.");
         return elevations;
     }
 

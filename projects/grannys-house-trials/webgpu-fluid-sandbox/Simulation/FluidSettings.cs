@@ -26,7 +26,7 @@ public sealed record FluidSettings(
 
 public sealed record SpringSource(int X, int Y, float FlowCubicFeetPerSecond);
 
-public enum TerrainScene { Slope, EnclosedBasin, WaterSlide, Tesla, InclineFlat, TeslaJunctionPlayground }
+public enum TerrainScene { Slope, EnclosedBasin, WaterSlide, Tesla, InclineFlat }
 public enum ExperimentDirection { None, Forward, Reverse }
 public sealed record FlowProbe(int[] Faces, float[] Weights);
 public sealed record ReservoirForcing(float[] Depths, ExperimentDirection Direction);
