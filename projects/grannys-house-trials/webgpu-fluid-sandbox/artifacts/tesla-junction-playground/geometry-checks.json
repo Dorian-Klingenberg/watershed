@@ -1,0 +1,22 @@
+{
+  "fluid_components": 1,
+  "islands": [
+    {
+      "cells": 159,
+      "centroid": [
+        66.00314465408805,
+        17.751572327044027
+      ]
+    },
+    {
+      "cells": 159,
+      "centroid": [
+        22.00314465408805,
+        32.24842767295597
+      ]
+    }
+  ],
+  "max_cell_centre_clearance_diameter": 6.0,
+  "fluid_cells": 925,
+  "ideal_arrival_angle_degrees": 146.30993247402023
+}

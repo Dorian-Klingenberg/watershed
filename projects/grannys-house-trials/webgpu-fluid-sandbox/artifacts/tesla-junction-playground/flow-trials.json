@@ -1,0 +1,243 @@
+{
+  "terrainSHA256": "78893bbf17296fcbbd1e501f7f6389657926dd99caad4de798c91f146dd1061d",
+  "simulationSourceCommit": "49c1549",
+  "algorithm": "CPU MAC, advection enabled, damping 0.02 per second",
+  "timestepSeconds": 0.016,
+  "durationSeconds": 240,
+  "averagingIntervalSeconds": [
+    200,
+    240
+  ],
+  "experiments": [
+    {
+      "source": "separated-return-18-12-True-trials.json",
+      "runs": [
+        {
+          "direction": "A-to-B",
+          "headInches": 6,
+          "meanLast40SecondsDischargeCfs": 3.962313992019482,
+          "records": [
+            {
+              "seconds": 40,
+              "qleft": 4.02853060116406,
+              "qmid": 3.98606081753668,
+              "qright": 3.906582448201779,
+              "volume": 1176.2690699100494,
+              "wallWater": 0
+            },
+            {
+              "seconds": 80,
+              "qleft": 3.95962949504777,
+              "qmid": 3.962333667729875,
+              "qright": 3.9622044467237703,
+              "volume": 1176.5794444084167,
+              "wallWater": 0
+            },
+            {
+              "seconds": 120,
+              "qleft": 3.962455670986089,
+              "qmid": 3.9623282738200105,
+              "qright": 3.9622548157525763,
+              "volume": 1176.5976835886638,
+              "wallWater": 0
+            },
+            {
+              "seconds": 160,
+              "qleft": 3.9623553985897604,
+              "qmid": 3.9623174860002814,
+              "qright": 3.962271346728132,
+              "volume": 1176.5980727672577,
+              "wallWater": 0
+            },
+            {
+              "seconds": 200,
+              "qleft": 3.9623569895991446,
+              "qmid": 3.962315196498972,
+              "qright": 3.9622791077495196,
+              "volume": 1176.5982217788696,
+              "wallWater": 0
+            },
+            {
+              "seconds": 240,
+              "qleft": 3.9623569895991446,
+              "qmid": 3.9623098801993217,
+              "qright": 3.9622854717870575,
+              "volume": 1176.598338206609,
+              "wallWater": 0
+            }
+          ]
+        },
+        {
+          "direction": "B-to-A",
+          "headInches": 6,
+          "meanLast40SecondsDischargeCfs": -3.9880017125159313,
+          "records": [
+            {
+              "seconds": 40,
+              "qleft": -3.8649735170667188,
+              "qmid": -4.060714780756578,
+              "qright": -3.9980538462768287,
+              "volume": 1177.1735684076946,
+              "wallWater": 0
+            },
+            {
+              "seconds": 80,
+              "qleft": -3.980361045819363,
+              "qmid": -3.9908941876313846,
+              "qright": -3.999312140674411,
+              "volume": 1179.1941847801208,
+              "wallWater": 0
+            },
+            {
+              "seconds": 120,
+              "qleft": -3.987585314967859,
+              "qmid": -3.988072551890577,
+              "qright": -3.9883317700049252,
+              "volume": 1179.3737565676372,
+              "wallWater": 0
+            },
+            {
+              "seconds": 160,
+              "qleft": -3.9878407301817274,
+              "qmid": -3.988006117547499,
+              "qright": -3.9881108137260184,
+              "volume": 1179.3798302014668,
+              "wallWater": 0
+            },
+            {
+              "seconds": 200,
+              "qleft": -3.9878632371437517,
+              "qmid": -3.988006466793461,
+              "qright": -3.98809063507041,
+              "volume": 1179.3807912667592,
+              "wallWater": 0
+            },
+            {
+              "seconds": 240,
+              "qleft": -3.9878835322146804,
+              "qmid": -3.98800394446151,
+              "qright": -3.98806339388534,
+              "volume": 1179.3814562161763,
+              "wallWater": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": "separated-return-24-6-True-trials.json",
+      "runs": [
+        {
+          "direction": "A-to-B",
+          "headInches": 18,
+          "meanLast40SecondsDischargeCfs": 7.286794477878095,
+          "records": [
+            {
+              "seconds": 40,
+              "qleft": 8.038064550277527,
+              "qmid": 7.3641775467132,
+              "qright": 6.308951825943263,
+              "volume": 1336.0049214363098,
+              "wallWater": 0
+            },
+            {
+              "seconds": 80,
+              "qleft": 7.4424198957819,
+              "qmid": 7.338010331782112,
+              "qright": 7.0043463271975215,
+              "volume": 1372.7373670339584,
+              "wallWater": 0
+            },
+            {
+              "seconds": 120,
+              "qleft": 7.3294311435197566,
+              "qmid": 7.300589713449121,
+              "qright": 7.2100806044159285,
+              "volume": 1382.5599461396534,
+              "wallWater": 0
+            },
+            {
+              "seconds": 160,
+              "qleft": 7.298058533933746,
+              "qmid": 7.290146405459661,
+              "qright": 7.2657698133831365,
+              "volume": 1385.2145624160767,
+              "wallWater": 0
+            },
+            {
+              "seconds": 200,
+              "qleft": 7.289553929086927,
+              "qmid": 7.287311925228457,
+              "qright": 7.2807442384893575,
+              "volume": 1385.928131222725,
+              "wallWater": 0
+            },
+            {
+              "seconds": 240,
+              "qleft": 7.287614837893218,
+              "qmid": 7.286413198951766,
+              "qright": 7.2847076368916115,
+              "volume": 1386.1107382774353,
+              "wallWater": 0
+            }
+          ]
+        },
+        {
+          "direction": "B-to-A",
+          "headInches": 18,
+          "meanLast40SecondsDischargeCfs": -7.359631865077444,
+          "records": [
+            {
+              "seconds": 40,
+              "qleft": -6.283518803635449,
+              "qmid": -7.513715975488211,
+              "qright": -8.47195547160545,
+              "volume": 1338.587405403455,
+              "wallWater": 0
+            },
+            {
+              "seconds": 80,
+              "qleft": -7.058616200573353,
+              "qmid": -7.431963782107151,
+              "qright": -7.525146563008396,
+              "volume": 1381.3737723429997,
+              "wallWater": 0
+            },
+            {
+              "seconds": 120,
+              "qleft": -7.2843481463809345,
+              "qmid": -7.377892202827775,
+              "qright": -7.400660866493203,
+              "volume": 1391.4874127308528,
+              "wallWater": 0
+            },
+            {
+              "seconds": 160,
+              "qleft": -7.340605617334148,
+              "qmid": -7.363807889264505,
+              "qright": -7.369420271880997,
+              "volume": 1393.9945314327877,
+              "wallWater": 0
+            },
+            {
+              "seconds": 200,
+              "qleft": -7.354485272763425,
+              "qmid": -7.360166650860053,
+              "qright": -7.361821145399476,
+              "volume": 1394.610809167226,
+              "wallWater": 0
+            },
+            {
+              "seconds": 240,
+              "qleft": -7.357828953607874,
+              "qmid": -7.3593336604345145,
+              "qright": -7.360256833928577,
+              "volume": 1394.7533634901047,
+              "wallWater": 0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

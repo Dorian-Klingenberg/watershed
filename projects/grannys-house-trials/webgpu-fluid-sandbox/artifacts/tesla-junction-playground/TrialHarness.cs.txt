@@ -1,0 +1,30 @@
+using System.Reflection;
+using System.Text.Json;
+using WebGpuFluidSandbox.Simulation;
+var dir=Path.GetFullPath(args.Length>0?args[0]:"."); var mapName="terrain"; float high=args.Length>1?float.Parse(args[1]):18; float low=args.Length>2?float.Parse(args[2]):12; bool adv=true; var runName=$"{mapName}-{high}-{low}-{adv}";
+using var doc=JsonDocument.Parse(File.ReadAllText(dir+"/"+mapName+".json"));
+var terrain=doc.RootElement.GetProperty("ElevationInches").EnumerateArray().Select(x=>x.GetInt32()).ToArray();
+var cases=new List<object>();
+foreach(var reverse in new[]{false,true}) {
+ var sim=new CellularFluidSimulation(96,64,terrain);
+ sim.SelectAlgorithm(FluidAlgorithm.Mac);
+ sim.Configure(new FluidSettings(MacAdvection:adv,MacDamping:0.02f));
+ var flags=BindingFlags.NonPublic|BindingFlags.Instance;
+ var water=(float[])typeof(CellularFluidSimulation).GetField("_waterDepths",flags)!.GetValue(sim)!;
+ var flux=(float[])typeof(CellularFluidSimulation).GetField("_transfers",flags)!.GetValue(sim)!;
+ var lhs=Enumerable.Range(0,terrain.Length).Where(i=>terrain[i]==0&&i%96<=3).ToArray();
+ var rhs=Enumerable.Range(0,terrain.Length).Where(i=>terrain[i]==0&&i%96>=92).ToArray();
+ foreach(var i in Enumerable.Range(0,terrain.Length))if(terrain[i]==0)water[i]=(high+low)/2;
+ void Force(){foreach(var i in lhs)water[i]=reverse?low:high;foreach(var i in rhs)water[i]=reverse?high:low;}
+ double Probe(int x)=>Enumerable.Range(0,64).Sum(y=>(double)flux[2*(y*96+x)])/(12*CellularFluidSimulation.TimeStepSeconds);
+ var records=new List<object>();double qsum=0;int count=0;
+ for(int tick=0;tick<15000;tick++) {
+  Force();sim.Step();Force();
+  if(water.Any(v=>!float.IsFinite(v)))throw new Exception("Nonfinite water");
+  if(tick>=12500){qsum+=Probe(46);count++;}
+  if((tick+1)%2500==0){var row=new{seconds=(tick+1)*.016,qleft=Probe(4),qmid=Probe(46),qright=Probe(90),volume=water.Sum(v=>(double)v)/12,wallWater=water.Where((v,i)=>terrain[i]>0).Sum(v=>(double)v)};records.Add(row);Console.WriteLine(JsonSerializer.Serialize(new{reverse,row}));}
+ }
+ File.WriteAllText(dir+$"/{runName}-state-{(reverse?"B-to-A":"A-to-B")}.json",JsonSerializer.Serialize(sim.GetStateSnapshot()));
+ cases.Add(new{direction=reverse?"B-to-A":"A-to-B",headInches=high-low,meanLast40SecondsDischargeCfs=qsum/count,records});
+}
+File.WriteAllText(dir+"/"+runName+"-trials.json",JsonSerializer.Serialize(cases,new JsonSerializerOptions{WriteIndented=true}));
