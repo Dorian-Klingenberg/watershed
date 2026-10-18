@@ -1,18 +1,21 @@
 # Tesla valve map
 
-The app now has one selectable Tesla terrain: the blue route stamped into the
-user-approved 192 × 128 grid. The top-down PNG is
+The app has one selectable Tesla terrain, based on the reviewed black-and-white
+96 × 64 bitmap and uniformly doubled to the 192 × 128 application grid. The
+bitmap is
+[`wwwroot/artifacts/tesla-blue-box-stamp-96x64.png`](../wwwroot/artifacts/tesla-blue-box-stamp-96x64.png).
+The top-down terrain PNG is
 [`wwwroot/tesla-valve-layout.png`](../wwwroot/tesla-valve-layout.png); its
 cell-by-cell elevations are in [`tesla-valve-map.json`](tesla-valve-map.json).
 
-Each cell is 1 ft. The blue-cell channel mask follows the stamp without adding
-branches or smoothing the user's geometry. The bed eases from 24 in at the left
-port to 0 in at the right port. Its elevations are harmonically relaxed over
-the channel graph, which gives every merge a shared bed height and distributes
-the remaining fall over each branch's actual length. Adjacent channel cells
-vary by no more than 1 in. Every cell outside the channel remains raised to 48
-in. The purple flow arrows and black mounting marks in the drawing are
-annotations, not open water cells or terrain features.
+Each app cell is 1 ft. Short raster gaps at the joins between passage sections
+and return-branch ends are closed to keep the stamped water path connected;
+gaps between neighboring legs remain open. The bed falls from 24 in at the
+left port to 0 in at the right port. A discrete-Laplace solve across the full
+channel graph gives each merge one shared height and distributes the fall over
+the routes according to their lengths. Adjacent channel cells vary by no more
+than 1 in. Cells outside the channel remain raised to 48 in. The grayscale PNG
+shows the grade: darker channel cells are lower.
 
 The preferred app starting point is the left port at (8, 64). The terrain can
 also be explored with right-click springs and the existing forward/reverse

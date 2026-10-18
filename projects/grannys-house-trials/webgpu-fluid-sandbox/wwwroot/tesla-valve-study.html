@@ -26,18 +26,18 @@
   <a class="back" href="./">← Back to Fluid Algorithm Lab</a>
   <p class="eyebrow">One stamped terrain · 192 × 128 cells</p>
   <h1>Tesla valve map</h1>
-  <p class="lede">The terrain selector contains one Tesla map: the user-approved blue-route stamp. It preserves the drawn route cell for cell without inventing extra branches.</p>
+  <p class="lede">The terrain selector contains one Tesla map, stamped from the reviewed black-and-white bitmap. The app uses the same 96 × 64 cell pattern, uniformly doubled to its 192 × 128 simulation grid.</p>
 
   <section class="panel">
     <h2 style="margin-top:0">Top-down map</h2>
     <figure>
-      <img src="tesla-valve-layout.png" alt="192 by 128 terrain grid with the channel cells marked blue and the surrounding raised terrain gray; purple arrows show the intended flow direction.">
-      <figcaption>Each cell is 1 ft. The blue route is the channel mask; its bed falls smoothly from 24 in at the inlet to 0 in at the outlet, while the banks remain at 48 in. Purple arrows and black marks are drawing annotations, not part of the terrain. The JSON terrain used by the app is <a href="https://github.com/Dorian-Klingenberg/watershed/blob/main/projects/grannys-house-trials/webgpu-fluid-sandbox/artifacts/tesla-valve-map.json">here</a>.</figcaption>
+      <img src="tesla-valve-layout.png" alt="192 by 128 grayscale terrain grid. Darker cells have a lower channel bed, grading from the left inlet to the right outlet.">
+      <figcaption>Each cell is 1 ft. Darker channel cells have a lower bed: 24 in at the left inlet, smoothly graded to 0 in at the right outlet. Shared branch and merge elevations let longer routes descend more gently; the banks remain at 48 in. The <a href="artifacts/tesla-blue-box-stamp-96x64.png">reviewed 96 × 64 bitmap</a> and <a href="https://github.com/Dorian-Klingenberg/watershed/blob/main/projects/grannys-house-trials/webgpu-fluid-sandbox/artifacts/tesla-valve-map.json">terrain data</a> are available.</figcaption>
     </figure>
   </section>
 
   <h2>Use the map</h2>
-  <p>Open the app, choose <strong>Terrain → Tesla valve · stamped blue-route map</strong>, then run or step the simulation. The initial pour starts at the left port near (8, 64). Right-click a channel cell to place a spring; repeated clicks there increase its flow. Forward and reverse reservoir controls remain available for comparing routes.</p>
+  <p>Open the app, choose <strong>Terrain → Tesla valve · stamped bitmap map</strong>, then run or step the simulation. The initial pour starts at the left port near (8, 64). Right-click a channel cell to place a spring; repeated clicks there increase its flow. Forward and reverse reservoir controls remain available for comparing routes.</p>
 
   <h2>Physical context</h2>
   <p>A Tesla valve is a fixed conduit, not a check valve. Its repeated return passages redirect reverse flow and increase losses, while the preferred direction follows a more direct path. This depth-averaged shallow-water playground can show route interactions, but it does not resolve three-dimensional boundary layers, separated jets, or turbulent mixing that drive much of the real device's directional resistance.</p>
@@ -46,7 +46,7 @@
     <li>Nguyen et al., <a href="https://www.nature.com/articles/s41467-021-23009-y">“Early turbulence and pulsatile flows enhance diodicity of Tesla's macrofluidic valve”</a>, <em>Nature Communications</em> 12, 2884 (2021), DOI 10.1038/s41467-021-23009-y.</li>
     <li><a href="https://github.com/Dorian-Klingenberg/watershed/blob/main/projects/grannys-house-trials/webgpu-fluid-sandbox/artifacts/tesla-valve-review.md">Map implementation notes</a>.</li>
   </ul>
-  <footer>The blue channel is stamped as the single selectable Tesla terrain in the app.</footer>
+  <footer>The black-and-white bitmap is stamped as the single selectable Tesla terrain in the app; grayscale shows the downhill bed.</footer>
 </main>
 </body>
 </html>

@@ -38,7 +38,7 @@
                     <option value="0">Slope and spillway</option>
                     <option value="1">Enclosed basin</option>
                     <option value="2">Water slide</option>
-                    <option value="3">Tesla valve · stamped blue-route map</option>
+                    <option value="3">Tesla valve · stamped bitmap map</option>
                     <option value="4">Incline → flat workbench</option>
                 </select>
             </label>
@@ -85,7 +85,7 @@
     @if (_simulation.Scene == TerrainScene.Tesla)
     {
         <section class="control-panel" aria-label="Tesla valve map guidance">
-            <p>Single Tesla terrain map: the stamped blue cells are the channel and gray cells are raised banks. The floor eases from 24 in at the left port to 0 in at the outlet. Elevations are solved across the full channel network, so longer routes have a gentler grade between their merge points. Purple arrows and black drawing marks are annotations, not terrain. Right-click a channel cell to add a spring.</p>
+            <p>Single Tesla terrain map: the stamped channel follows the reviewed black-and-white bitmap. Its bed falls smoothly from 24 in at the left inlet to 0 in at the right outlet; each branch and merge shares one grade, so longer routes descend more gently. Darker cells are lower. Right-click a channel cell to add a spring.</p>
         </section>
     }
 
