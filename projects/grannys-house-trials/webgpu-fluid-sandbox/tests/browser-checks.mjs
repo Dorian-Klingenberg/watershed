@@ -86,6 +86,10 @@ await send("Page.addScriptToEvaluateOnNewDocument", {source:`(() => {
 await send("Page.navigate", { url: baseUrl });
 await send("Emulation.setDeviceMetricsOverride", {width:1368,height:912,deviceScaleFactor:1,mobile:false});
 await wait(`document.body?.innerText.includes('WebGPU compute ready')`);
+assert.equal(await evaluate(`document.querySelector('[aria-label="Fluid algorithm"]').value`),"3","Staggered MAC is the default algorithm");
+assert(await evaluate(`document.body.innerText.includes('CPU reference: off')`),"CPU reference is off by default");
+await click("CPU reference: off");
+await wait(`document.body.innerText.includes('CPU re-synchronized')`);
 // A reused browser tab may retain edited terrain from an interrupted earlier run.
 await select("Terrain scene",0);
 await select("Fluid algorithm",0);
@@ -144,9 +148,7 @@ for (let algorithm = 0; algorithm < 4; algorithm++) {
         [["Terrain-head area (ft²)",0.31],["Manning roughness",0.055]],
         [["MAC damping (1/s)",0.08]]
     ][algorithm];
-    assert.equal(await evaluate(`document.querySelectorAll('[aria-label="Algorithm settings"] input[type="number"]').length`),knobs.length,"only algorithm-relevant knobs visible");
-    assert(await evaluate(`document.querySelector('.algorithm-help').textContent.includes(${JSON.stringify(["settle rate","retention","roughness","advection"][algorithm])})`),
-        "per-algorithm help explains knob effects");
+    assert.equal(await evaluate(`document.querySelectorAll('[aria-label="Flow controls"] input[type="number"]').length`),knobs.length,"only algorithm-relevant knobs visible");
     for(const [label,value] of knobs) await select(label,value);
     await click("Pour 12 in");
     await evaluate(`(() => {
@@ -224,10 +226,10 @@ for (let algorithm = 0; algorithm < 4; algorithm++) {
 for(let scene=0;scene<5;scene++) for(let algorithm=0;algorithm<4;algorithm++){
     await select("Terrain scene",scene);
     await select("Fluid algorithm",algorithm);
-    await click("Restore algorithm defaults");await sleep(300);
+    await click("Defaults");await sleep(300);
     if(scene===3) {
         for(const direction of ["Forward","Reverse"]){
-            await click(`${direction} experiment`);
+          await click(direction);
             await wait(`import('./js/fluid-gpu.js').then(m=>m.snapshot()).then(s=>s.cycles===0&&s.direction===${direction==="Forward"?1:2}).catch(()=>false)`);
             await click("Advance 128 experiment ticks");
             await wait(`Number(document.querySelector('.readout .metric strong').textContent)===128`,180000);
@@ -242,7 +244,7 @@ for(let scene=0;scene<5;scene++) for(let algorithm=0;algorithm<4;algorithm++){
         }
         assert(await evaluate(`document.body.innerText.includes('Measured |forward| − |reverse|:')`),"equal-tick trial reports measured directional difference");
         await click("CPU reference: on");await sleep(300);
-        await click("Forward experiment");
+        await click("Forward");
         await wait(`import('./js/fluid-gpu.js').then(m=>m.snapshot()).then(s=>s.cycles===0&&s.direction===1).catch(()=>false)`);
         await advance(64);
         await click("CPU reference: off");
@@ -276,7 +278,7 @@ await advance(64);
 await compare("advective MAC complete-state resume");
 await select("Terrain scene",3);
 for(const direction of ["Forward","Reverse"]){
-    await click(`${direction} experiment`);
+    await click(direction);
     await wait(`import('./js/fluid-gpu.js').then(m=>m.snapshot()).then(s=>s.cycles===0&&s.direction===${direction==="Forward"?1:2}).catch(()=>false)`);
     await click("Advance 128 experiment ticks");
     await wait(`Number(document.querySelector('.readout .metric strong').textContent)===128`,180000);
@@ -289,7 +291,7 @@ await wait(`import('./js/fluid-gpu.js').then(m=>m.snapshot()).then(s=>s.cycles==
 const changed=await evaluate(`import('./js/fluid-gpu.js').then(m=>m.snapshot())`);
 assert(changed.cycles===0&&changed.water.every(v=>v===0)&&changed.momentum.every(v=>v===0),"settings reset all fluid");
 assert.equal(await evaluate(`JSON.stringify([...document.querySelectorAll('input[type="range"]')].map(s=>s.value))`),savedCamera,"settings preserve camera");
-await click("Restore algorithm defaults");await sleep(300);
+await click("Defaults");await sleep(300);
 assert(!await evaluate(`document.querySelector('[aria-label="MAC velocity advection"]').checked`),"restore defaults disables actual advection");
 await select("Terrain scene",0);
 await click("Reset");await sleep(300);
@@ -314,6 +316,9 @@ assert.equal(await evaluate(`Number(document.querySelector('.readout .metric str
 // An unconfirmed edit must force explicit reset, never a mixed recovery baseline.
 await send("Page.reload");
 await wait(`document.body?.innerText.includes('WebGPU compute ready')`);
+assert(await evaluate(`document.body.innerText.includes('CPU reference: off')`),"CPU reference resets to off by default");
+await click("CPU reference: off");
+await wait(`document.body.innerText.includes('CPU re-synchronized')`);
 await evaluate(`(() => { const s=document.querySelector('[aria-label="Fluid algorithm"]');
     s.value='3';s.dispatchEvent(new Event('change',{bubbles:true})); })()`);
 await sleep(300);

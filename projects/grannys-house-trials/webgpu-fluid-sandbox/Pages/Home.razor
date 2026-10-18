@@ -8,9 +8,8 @@
 <div class="workspace">
     <header class="masthead">
         <div>
-            <p class="eyebrow">WEBGPU FLUID SANDBOX · FOUR MODELS · ONE LANDSCAPE</p>
+            <p class="eyebrow">WEBGPU FLUID SANDBOX</p>
             <h1>Fluid Algorithm Lab</h1>
-            <p class="intro">A GPU water field with an optional independent C# reference.</p>
             <p class="intro"><a href="tesla-valve-study.html">Tesla-valve map and flow study →</a></p>
         </div>
         <div class="engine-status @(_gpuSupported ? "ready" : "waiting")" role="status">
@@ -19,35 +18,22 @@
         </div>
     </header>
 
-    <section class="control-panel" aria-label="Simulation controls">
-        <div class="control-copy">
-            <span class="eyebrow">ONE FIELD · TWO IMPLEMENTATIONS</span>
-            <p>Explore terrain, solver parameters, and controlled reservoir experiments.</p>
-        </div>
+    <section class="control-panel simulation-controls" aria-label="Simulation controls">
+        <label class="algorithm-control">Algorithm
+            <select value="@((int)_simulation.Algorithm)" @onchange="ChangeAlgorithmAsync" disabled="@(!_initialized)" aria-label="Fluid algorithm">
+                <option value="0">Cellular</option>
+                <option value="1">Pipe-flux shallow water</option>
+                <option value="2">Terrain-head pipe flow</option>
+                <option value="3">Staggered MAC shallow water</option>
+            </select>
+        </label>
         <div class="actions">
-            <label class="batch-control">Algorithm
-                <select value="@((int)_simulation.Algorithm)" @onchange="ChangeAlgorithmAsync" disabled="@(!_initialized)" aria-label="Fluid algorithm">
-                    <option value="0">Cellular</option>
-                    <option value="1">Pipe-flux shallow water</option>
-                    <option value="2">Terrain-head pipe flow</option>
-                    <option value="3">Staggered MAC shallow water</option>
-                </select>
-            </label>
-            <label class="batch-control">Terrain
-                <select value="@((int)_simulation.Scene)" @onchange="ChangeSceneAsync" disabled="@(!_initialized)" aria-label="Terrain scene">
-                    <option value="0">Slope and spillway</option>
-                    <option value="1">Enclosed basin</option>
-                    <option value="2">Water slide</option>
-                    <option value="3">Tesla valve · stamped blue-route map</option>
-                    <option value="4">Incline → flat workbench</option>
-                </select>
-            </label>
             <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ToggleRun" Disabled="@(!_initialized)">@(_running ? "Pause" : "Run")</FluentButton>
             <FluentButton Appearance="ButtonAppearance.Primary" OnClick="PourAsync" Disabled="@(!_initialized)">Pour 12 in</FluentButton>
             <FluentButton OnClick="StepAsync" Disabled="@(!_initialized)">Step @(_gpuSupported ? (_cpuEnabled ? "both" : "GPU") : "CPU")</FluentButton>
+            <FluentButton OnClick="ResetAsync" Disabled="@(!_initialized)">Reset</FluentButton>
             <FluentButton OnClick="ToggleCpuAsync" Disabled="@(!_initialized || !_gpuSupported)">CPU reference: @(_cpuEnabled ? "on" : "off")</FluentButton>
             <FluentButton OnClick="CompareAsync" Disabled="@(!_initialized || !_gpuSupported || !_cpuEnabled)">Compare states</FluentButton>
-            <FluentButton OnClick="ResetAsync" Disabled="@(!_initialized)">Reset</FluentButton>
             <label class="batch-control">Ticks / display
                 <select @bind="_ticksPerDisplay" aria-label="Ticks per display">
                     <option value="1">1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option>
@@ -55,96 +41,6 @@
             </label>
         </div>
     </section>
-
-    <section class="control-panel" aria-label="Springs">
-        <div class="actions">
-            <span role="status" class="spring-readout">Springs: @_simulation.GetSpringSnapshot().Length · total @_simulation.GetSpringSnapshot().Sum(s => s.FlowCubicFeetPerSecond).ToString("F2") ft³/s</span>
-            <FluentButton OnClick="RemoveSelectedSpringAsync" Disabled="@(!_initialized || SelectedSpringRate <= 0)">Remove selected spring</FluentButton>
-            <FluentButton OnClick="ClearSpringsAsync" Disabled="@(!_initialized || _simulation.GetSpringSnapshot().Length == 0)">Clear springs</FluentButton>
-        </div>
-        <p>Right-click creates a spring at that cell. Each repeated click adds 0.25 ft³/s. Green markers show springs; select one to see its rate. Run or Step releases water; Pause stops it. Reset keeps springs; changing terrain presets clears them. Pour 12 in remains a one-time pour.</p>
-    </section>
-
-    <section class="control-panel" aria-label="Terrain editing and maps">
-        <div class="actions">
-            <label class="batch-control">Right-drag tool
-                <select value="@_terrainEditMode" @onchange="ChangeTerrainTool" disabled="@(!_initialized)" aria-label="Terrain editing tool">
-                    <option value="raise">Raise terrain</option>
-                    <option value="carve">Carve channel</option>
-                </select>
-            </label>
-            <FluentButton id="save-terrain-map" OnClick="SaveTerrainMapAsync" Disabled="@(!_initialized)">Save / export map</FluentButton>
-            <FluentButton OnClick="RestoreSavedTerrainAsync" Disabled="@(!_initialized)">Restore saved map</FluentButton>
-            <label class="batch-control">Import map JSON
-                <InputFile OnChange="ImportTerrainMapAsync" accept=".json,application/json" disabled="@(!_initialized)" />
-            </label>
-        </div>
-        <p>@_mapStatus Right-drag draws a 12 in raise stroke or lowers the bed by 12 in per stroke, down to 0 in. Save stores terrain and springs in this browser and downloads a JSON file you can send for review.</p>
-    </section>
-
-    @if (_simulation.Scene == TerrainScene.Tesla)
-    {
-        <section class="control-panel" aria-label="Tesla valve map guidance">
-            <p>Single Tesla terrain map: the stamped blue cells are the channel and gray cells are raised banks. The floor eases from 24 in at the left port to 0 in at the outlet. Elevations are solved across the full channel network, so longer routes have a gentler grade between their merge points. Purple arrows and black drawing marks are annotations, not terrain. Right-click a channel cell to add a spring.</p>
-        </section>
-    }
-
-    <section class="control-panel" aria-label="Algorithm settings">
-        <div class="actions">
-            @foreach (var knob in RelevantKnobs)
-            {
-                <label class="batch-control">@knob.Label
-                    <input type="number" aria-label="@knob.Label" min="@knob.Min" max="@knob.Max" step="@knob.Step"
-                        value="@knob.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)"
-                        @onchange="e => ChangeSettingAsync(knob.Key, e)" disabled="@(!_initialized)" />
-                </label>
-            }
-            @if (_simulation.Algorithm == FluidAlgorithm.Mac)
-            {
-                <label><input type="checkbox" aria-label="MAC velocity advection" checked="@_simulation.Settings.MacAdvection"
-                    @onchange="ChangeAdvectionAsync" disabled="@(!_initialized)" /> First-order upwind velocity advection</label>
-            }
-            <FluentButton OnClick="RestoreDefaultsAsync" Disabled="@(!_initialized)">Restore algorithm defaults</FluentButton>
-        </div>
-        <p>Changes pause and clear water, face state and ticks; terrain, springs and camera stay unchanged. Springs use 0.016 seconds per tick in every mode; Cellular flow itself has no physical time calibration.</p>
-        <p class="algorithm-help">@AlgorithmHelp</p>
-    </section>
-
-    @if (_simulation.Scene == TerrainScene.Tesla)
-    {
-        <section class="control-panel" aria-label="Tesla experiment">
-            <div class="actions">
-                <FluentButton OnClick="() => StartExperimentAsync(ExperimentDirection.Forward)" Disabled="@(!_initialized)">Forward experiment</FluentButton>
-                <FluentButton OnClick="() => StartExperimentAsync(ExperimentDirection.Reverse)" Disabled="@(!_initialized)">Reverse experiment</FluentButton>
-                <FluentButton OnClick="StepExperimentAsync" Disabled="@(!_initialized || _simulation.Direction == ExperimentDirection.None)">Advance 128 experiment ticks</FluentButton>
-            </div>
-            <div>
-                <p>Each experiment restores this stamped map and sets port water-surface elevations to 42 / 36 in (Δhead 6 in), swapped in reverse. Water depths adjust for the local bed elevation; other channel cells start at a 36 in water surface.</p>
-                <p>Experimental depth-averaged model: no guaranteed resistance difference, check-valve closure, or resolved turbulence.</p>
-                <p role="status" class="experiment-readout">Direction: @_simulation.Direction · lower route signed discharge @(_experiment.Discharge.ToString("F5")) @ExperimentFlowUnit · upper return route signed flow @(_experiment.BypassFlow.ToString("F5")) @ExperimentFlowUnit.</p>
-                @if (_experimentModified)
-                {
-                    <p>Manual edits invalidate the controlled comparison. Restart a direction to restore the repeatable experiment.</p>
-                }
-                <p>Last completed tick only (not a steady-state estimate). Positive = left-to-right. Lower-route section x=160, y=66–74; upper-return section x=160, y=58–61. @ExperimentMeasurementHelp The upper probe measures branch throughput, not vorticity or closed-loop circulation.</p>
-                <p>Record forward/reverse at identical ticks and settings. Different transient or steady results are measurements, not a claim of physical rectification.</p>
-                @if (_forwardSample is { } forward && _reverseSample is { } reverse)
-                {
-                    <p>Latest forward: @forward.Reading.Discharge.ToString("F5") @ExperimentFlowUnit at tick @forward.Tick;
-                        reverse: @reverse.Reading.Discharge.ToString("F5") @ExperimentFlowUnit at tick @reverse.Tick.</p>
-                    @if (forward.Tick == reverse.Tick)
-                    {
-                        <p>Measured |forward| − |reverse|: @((Math.Abs(forward.Reading.Discharge) - Math.Abs(reverse.Reading.Discharge)).ToString("F5")) @ExperimentFlowUnit
-                            at equal tick @forward.Tick (transient sample, not guaranteed resistance).</p>
-                    }
-                    else
-                    {
-                        <p>Unequal sample times: no directional difference reported. Step the shorter trial to the same tick.</p>
-                    }
-                }
-            </div>
-        </section>
-    }
 
     @if (_errorMessage is not null)
     {
@@ -196,8 +92,6 @@
     <section class="navigation-panel" aria-label="Linked landscape navigation">
         <label for="landscape-scroll">Horizontal landscape position · both views</label>
         <input @ref="_landscapeScroll" id="landscape-scroll" type="range" min="0" max="@(_simulation.Width - 1)" value="@(_simulation.Width / 2)" step="0.1" />
-        <p>Left click: select · Left drag: orbit · Wheel over land: zoom · Right click: create / increase spring · Right drag: use the selected terrain tool.</p>
-        <p>Scroll the page using the margin or vertical scrollbar. Touch-drag over a view orbits; swipe outside it to scroll.</p>
         <p role="status">@_selectionText</p>
         <p role="status">@_referenceStatus</p>
     </section>
@@ -224,16 +118,96 @@
         }
         else
         {
-            <p>GPU authoritative · CPU snapshots and statistics suspended.</p>
+            <span class="engine-tag">GPU only</span>
         }
     </section>
 
     <section class="readout performance" aria-label="Performance readout">
-        <div class="metric"><span class="eyebrow">CPU / GPU DRAW FPS</span><strong>@_cpuFps.ToString("F1") / @_gpuFps.ToString("F1")</strong></div>
+        <div class="metric"><span class="eyebrow">DRAW FPS</span><strong>@_cpuFps.ToString("F1") / @_gpuFps.ToString("F1")</strong></div>
         <div class="metric"><span class="eyebrow">TICKS / SEC</span><strong>@_ticksPerSecond.ToString("F1")</strong></div>
-        <div class="metric"><span class="eyebrow">CPU / GPU DRAW MS</span><strong>@_cpuDrawMs.ToString("F2") / @_gpuDrawMs.ToString("F2")</strong></div>
+        <div class="metric"><span class="eyebrow">DRAW MS</span><strong>@_cpuDrawMs.ToString("F2") / @_gpuDrawMs.ToString("F2")</strong></div>
         <div class="metric"><span class="eyebrow">CPU STEP MS / TICK</span><strong>@(_cpuEnabled ? _cpuStepMs.ToString("F2") : "off")</strong></div>
-        <div class="metric"><span class="eyebrow">GPU DISPATCH + READBACK MS / BATCH</span><strong>@(_gpuSupported ? _gpuRoundtripMs.ToString("F2") : "unavailable")</strong><small>Wall-clock roundtrip, not GPU execution time</small></div>
+        <div class="metric"><span class="eyebrow">GPU ROUNDTRIP MS / BATCH</span><strong>@(_gpuSupported ? _gpuRoundtripMs.ToString("F2") : "unavailable")</strong></div>
+    </section>
+
+    <section class="control-panel parameter-controls" aria-label="Simulation setup">
+        <div class="control-group" aria-label="Springs">
+            <h2>Springs</h2>
+            <div class="actions">
+                <span role="status" class="spring-readout">Springs: @_simulation.GetSpringSnapshot().Length · @_simulation.GetSpringSnapshot().Sum(s => s.FlowCubicFeetPerSecond).ToString("F2") ft³/s</span>
+                <FluentButton OnClick="RemoveSelectedSpringAsync" Disabled="@(!_initialized || SelectedSpringRate <= 0)">Remove selected</FluentButton>
+                <FluentButton OnClick="ClearSpringsAsync" Disabled="@(!_initialized || _simulation.GetSpringSnapshot().Length == 0)">Clear</FluentButton>
+            </div>
+        </div>
+        <div class="control-group" aria-label="Terrain controls">
+            <h2>Terrain</h2>
+            <div class="actions">
+                <label class="batch-control">Scene
+                    <select value="@((int)_simulation.Scene)" @onchange="ChangeSceneAsync" disabled="@(!_initialized)" aria-label="Terrain scene">
+                        <option value="0">Slope and spillway</option>
+                        <option value="1">Enclosed basin</option>
+                        <option value="2">Water slide</option>
+                        <option value="3">Tesla valve</option>
+                        <option value="4">Incline → flat workbench</option>
+                    </select>
+                </label>
+                <label class="batch-control">Edit
+                    <select value="@_terrainEditMode" @onchange="ChangeTerrainTool" disabled="@(!_initialized)" aria-label="Terrain editing tool">
+                        <option value="raise">Raise</option>
+                        <option value="carve">Carve</option>
+                    </select>
+                </label>
+                <FluentButton id="save-terrain-map" OnClick="SaveTerrainMapAsync" Disabled="@(!_initialized)">Save / export</FluentButton>
+                <FluentButton OnClick="RestoreSavedTerrainAsync" Disabled="@(!_initialized)">Restore</FluentButton>
+                <label class="batch-control">Import
+                    <InputFile OnChange="ImportTerrainMapAsync" accept=".json,application/json" disabled="@(!_initialized)" />
+                </label>
+            </div>
+            <p class="control-status" role="status">@_mapStatus</p>
+        </div>
+        <div class="control-group" aria-label="Flow controls">
+            <h2>Flow</h2>
+            <div class="actions">
+                @foreach (var knob in RelevantKnobs)
+                {
+                    <label class="batch-control">@knob.Label
+                        <input type="number" aria-label="@knob.Label" min="@knob.Min" max="@knob.Max" step="@knob.Step"
+                            value="@knob.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                            @onchange="e => ChangeSettingAsync(knob.Key, e)" disabled="@(!_initialized)" />
+                    </label>
+                }
+                @if (_simulation.Algorithm == FluidAlgorithm.Mac)
+                {
+                    <label class="advection-control"><input type="checkbox" aria-label="MAC velocity advection" checked="@_simulation.Settings.MacAdvection"
+                        @onchange="ChangeAdvectionAsync" disabled="@(!_initialized)" /> Upwind advection</label>
+                }
+                <FluentButton OnClick="RestoreDefaultsAsync" Disabled="@(!_initialized)">Defaults</FluentButton>
+            </div>
+        </div>
+        @if (_simulation.Scene == TerrainScene.Tesla)
+        {
+            <div class="control-group experiment-controls" aria-label="Tesla flow experiment">
+                <h2>Flow experiment</h2>
+                <div class="actions">
+                    <FluentButton OnClick="() => StartExperimentAsync(ExperimentDirection.Forward)" Disabled="@(!_initialized)">Forward</FluentButton>
+                    <FluentButton OnClick="() => StartExperimentAsync(ExperimentDirection.Reverse)" Disabled="@(!_initialized)">Reverse</FluentButton>
+                    <FluentButton OnClick="StepExperimentAsync" Disabled="@(!_initialized || _simulation.Direction == ExperimentDirection.None)">Advance 128 ticks</FluentButton>
+                    <span role="status" class="experiment-readout">@_simulation.Direction · @_experiment.Discharge.ToString("F5") @ExperimentFlowUnit · @_experiment.BypassFlow.ToString("F5") @ExperimentFlowUnit</span>
+                </div>
+                @if (_forwardSample is { } forward && _reverseSample is { } reverse)
+                {
+                    <p class="control-status">Forward @forward.Reading.Discharge.ToString("F5") at @forward.Tick · reverse @reverse.Reading.Discharge.ToString("F5") at @reverse.Tick</p>
+                    @if (forward.Tick == reverse.Tick)
+                    {
+                        <p class="control-status">Measured |forward| − |reverse|: @((Math.Abs(forward.Reading.Discharge) - Math.Abs(reverse.Reading.Discharge)).ToString("F5")) @ExperimentFlowUnit</p>
+                    }
+                }
+                @if (_experimentModified)
+                {
+                    <p class="control-status">Manual edits applied · restart an experiment to reset.</p>
+                }
+            </div>
+        }
     </section>
 
     @if (_comparison is not null)
@@ -253,10 +227,6 @@
         </section>
     }
 
-    <footer>
-        <span>Right-drag raises terrain 12 in or carves 12 in per pass to a 0 in floor. Reset restores the selected map.</span>
-        <span>Depth tolerance: @DepthTolerance in. Face tolerance: @CellularFluidSimulation.StateTolerance @FaceStateUnit. One cell = 1 ft². @(_simulation.Algorithm == FluidAlgorithm.Cellular ? "Cellular ticks have no physical duration." : "Fixed tick = 0.016 s.")</span>
-    </footer>
 </div>
 
 @code {
@@ -267,16 +237,6 @@
     private string FaceStateUnit => _simulation.Algorithm == FluidAlgorithm.Mac ? "ft/s"
         : _simulation.Algorithm == FluidAlgorithm.Cellular ? "(unused, zero state)" : "ft³/s";
     private string ExperimentFlowUnit => _simulation.Algorithm == FluidAlgorithm.Cellular ? "ft³/tick" : "ft³/s";
-    private string ExperimentMeasurementHelp => _simulation.Algorithm == FluidAlgorithm.Cellular
-        ? "Cellular reports actual transferred volume per algorithmic tick in ft³/tick; it has no physical seconds per tick."
-        : "Flow sums actual limited face transfers across 1-ft² cells, converted to ft³ and divided by the 0.016-s tick.";
-    private string AlgorithmHelp => _simulation.Algorithm switch
-    {
-        FluidAlgorithm.Cellular => "Maximum flow caps each cell's outgoing depth per tick. Higher settle rate redistributes more of the free-surface imbalance each tick. Neither creates inertia or physical time.",
-        FluidAlgorithm.PipeFlux => "Larger pipe area strengthens pressure-driven volume flow. Higher retention preserves more face-flow inertia each tick; lower retention damps it faster.",
-        FluidAlgorithm.TerrainHead => "Larger area strengthens pressure-driven pipe flow. Higher Manning roughness increases bed-friction losses, especially in shallow water.",
-        _ => "Higher damping removes face velocity faster. Optional upwind advection transports velocity with the flow before pressure and drag; first-order transport also introduces numerical diffusion."
-    };
 
     private readonly CellularFluidSimulation _simulation = CellularFluidSimulation.CreateDefault();
     private IJSObjectReference? _mapModule;
@@ -303,11 +263,11 @@
     private bool _initialized;
     private string _gpuMessage = "Checking WebGPU support…";
     private string? _errorMessage;
-    private bool _cpuEnabled = true;
+    private bool _cpuEnabled;
     private int _gpuCycles;
     private int _ticksPerDisplay = 2;
     private int[]? _terrainForCpu;
-    private string _referenceStatus = "Independent CPU reference enabled · initial baseline at tick 0.";
+    private string _referenceStatus = "CPU reference off · GPU authoritative.";
     private double _cpuFps, _gpuFps, _cpuDrawMs, _gpuDrawMs, _cpuStepMs, _gpuRoundtripMs, _ticksPerSecond;
     private long _metricStart = System.Diagnostics.Stopwatch.GetTimestamp();
     private int _metricTicks;
@@ -493,6 +453,7 @@
 
     protected override void OnInitialized()
     {
+        _simulation.SelectAlgorithm(FluidAlgorithm.Mac);
         _summary = _simulation.GetSummary();
     }
 
@@ -525,8 +486,12 @@
                 var result = await Gpu.InitializeAsync(_gpuCanvas, _simulation);
                 _gpuSupported = result.Supported;
                 _gpuMessage = result.Message;
+                if (!_gpuSupported)
+                {
+                    _cpuEnabled = true;
+                    _referenceStatus = "CPU fallback active.";
+                }
                 await Gpu.SetGpuEnabledAsync(_gpuSupported);
-                if (!_gpuSupported) _referenceStatus = "CPU fallback active · WebGPU unavailable.";
             }
             catch (Exception exception)
             {
