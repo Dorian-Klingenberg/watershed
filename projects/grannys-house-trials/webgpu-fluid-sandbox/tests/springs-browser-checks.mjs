@@ -145,7 +145,7 @@ const legacyPath=process.env.FLUID_LEGACY_MAP_PATH??fileURLToPath(new URL('../ar
 const {root}=await send('DOM.getDocument');
 const {nodeId}=await send('DOM.querySelector',{nodeId:root.nodeId,selector:'input[type="file"]'});
 await send('DOM.setFileInputFiles',{nodeId,files:[legacyPath]});
-await wait(`document.body.innerText.includes('Loaded tesla-junction-playground-proposal')`);
+await wait(`document.body.innerText.includes('Loaded tesla-patent-planform')`);
 assert(await evaluate(`document.querySelector('.spring-readout').textContent.includes('Springs: 0')`),'legacy version-one terrain import clears sources');
 await compare('legacy map import');
 console.log('legacy terrain JSON import with no springs passed');

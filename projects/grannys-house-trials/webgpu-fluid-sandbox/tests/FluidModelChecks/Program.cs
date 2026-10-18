@@ -72,9 +72,9 @@ ExpectThrows<ArgumentException>(
 
 var edited = CellularFluidSimulation.CreateDefault();
 var originalTerrain = edited.GetTerrainSnapshot();
-Assert(edited.GetCell(48, 8).TerrainHeight > edited.GetCell(48, 48).TerrainHeight, "landscape slopes downhill");
-Assert(edited.GetCell(40, 37).TerrainHeight > edited.GetCell(40, 36).TerrainHeight, "default barrier obstructs flow");
-Assert(edited.GetCell(46, 37).TerrainHeight < edited.GetCell(44, 37).TerrainHeight, "barrier has a lower spillway");
+Assert(edited.GetCell(96, 16).TerrainHeight > edited.GetCell(96, 96).TerrainHeight, "landscape slopes downhill");
+Assert(edited.GetCell(80, 74).TerrainHeight > edited.GetCell(80, 73).TerrainHeight, "default barrier obstructs flow");
+Assert(edited.GetCell(92, 74).TerrainHeight < edited.GetCell(88, 74).TerrainHeight, "barrier has a lower spillway");
 var delta = edited.AddWater(12, 15, 0, 3.0f);
 AssertNear(3, edited.GetCell(12, 15).WaterDepth, 0, "point pour reaches selected cell");
 AssertNear(3, delta.Sum(), 0, "point pour returns additive edit, not a reference snapshot");
@@ -98,7 +98,8 @@ carved.CarveChannel([12]);
 Assert(carved.GetTerrainHeight(2, 2) == 0, "carving stops at the zero-inch floor");
 carved.Reset();
 Assert(carved.GetTerrainHeight(2, 2) == 20, "reset restores the original carved map");
-var loadedMap = Enumerable.Range(0, 96 * 64).Select(i => i / 96 < 12 ? 24 : 0).ToArray();
+var loadedMap = Enumerable.Range(0, CellularFluidSimulation.StandardWidth * CellularFluidSimulation.StandardHeight)
+    .Select(i => i / CellularFluidSimulation.StandardWidth < 24 ? 24 : 0).ToArray();
 var mapWorkbench = CellularFluidSimulation.CreateDefault();
 mapWorkbench.LoadTerrainSnapshot(loadedMap);
 Assert(mapWorkbench.Scene == TerrainScene.InclineFlat && mapWorkbench.GetTerrainSnapshot().SequenceEqual(loadedMap),
@@ -273,28 +274,26 @@ foreach (var scene in Enum.GetValues<TerrainScene>())
     Assert(configurable.Scene == scene && bed.SequenceEqual(configurable.GetTerrainSnapshot()), $"{scene} reset restores selected terrain");
 }
 configurable.SelectScene(TerrainScene.Tesla);
-Assert(Enumerable.Range(3, 90).All(x => configurable.GetTerrainHeight(x, 32) == 0),
-    "Tesla main passage remains continuous through both reservoirs");
-Assert(new[] { (25, 27), (36, 38), (47, 27), (58, 38), (69, 27), (80, 38) }
-    .All(cell => configurable.GetTerrainHeight(cell.Item1, cell.Item2) == 0),
-    "Tesla has six alternating upper/lower hooked return passages");
-Assert(configurable.GetTerrainHeight(48, 20) == 48 && configurable.GetTerrainHeight(48, 44) == 48 &&
-    configurable.GetTerrainHeight(52, 14) == 48, "Tesla banks remain solid outside the return passages");
-Assert(configurable.GetTerrainHeight(8, 32) == configurable.GetTerrainHeight(88, 32), "comparable flat reservoir bottoms");
+var patentMap = configurable.GetTerrainSnapshot();
+Assert(Enumerable.Range(10, 172).All(x => configurable.GetTerrainHeight(x, 63) == 0 &&
+    configurable.GetTerrainHeight(x, 64) == 0), "patent map preserves its two-cell straight trunk through both ports");
+Assert(configurable.GetTerrainHeight(55, 60) == 0 && configurable.GetTerrainHeight(67, 67) == 0 &&
+    configurable.GetTerrainHeight(46, 58) == 48, "patent trace includes side passages and raised baffles");
+Assert(configurable.GetTerrainHeight(8, 64) == configurable.GetTerrainHeight(184, 64), "matching flat patent-map ports");
+Assert(AllOpenCellsReachPort(patentMap, configurable.Width, configurable.Height, 64 * configurable.Width),
+    "rasterized patent passages and repaired throats form one connected fluid domain");
 configurable.SelectScene(TerrainScene.InclineFlat);
-Assert(configurable.GetTerrainHeight(0, 32) == 24 && configurable.GetTerrainHeight(35, 32) == 0 &&
-    configurable.GetTerrainHeight(70, 32) == 0, "workbench slopes into a level downstream plain");
+Assert(configurable.GetTerrainHeight(0, 64) == 24 && configurable.GetTerrainHeight(71, 64) == 0 &&
+    configurable.GetTerrainHeight(140, 64) == 0, "workbench slopes into a level downstream plain");
 
 configurable.SelectScene(TerrainScene.TeslaJunctionPlayground);
 var junctionMap = configurable.GetTerrainSnapshot();
-Assert(configurable.Scene == TerrainScene.TeslaJunctionPlayground && junctionMap.Length == 96 * 64 &&
-    junctionMap.All(height => height is 0 or 48), "Tesla junction preset loads the saved flat-floor terrain asset");
-Assert(configurable.GetTerrainHeight(9, 29) == 0 && configurable.GetTerrainHeight(18, 39) == 0 &&
-    configurable.GetTerrainHeight(23, 23) == 0 && configurable.GetTerrainHeight(9, 20) == 48,
-    "Tesla junction preset preserves the entrance, return, merge, and raised banks");
-Assert(configurable.PourLocation == (9, 29), "Tesla junction preset pours at the channel entrance");
+Assert(configurable.Scene == TerrainScene.TeslaJunctionPlayground && junctionMap.Length == CellularFluidSimulation.StandardWidth * CellularFluidSimulation.StandardHeight &&
+    junctionMap.SequenceEqual(patentMap) && junctionMap.All(height => height is 0 or 48),
+    "both Tesla presets load the same flat-floor patent terrain asset");
+Assert(configurable.PourLocation == (8, 64), "Tesla patent map pours at the left port");
 configurable.AddWater(configurable.PourLocation.X, configurable.PourLocation.Y, 0, 12);
-AssertNear(12, configurable.GetSummary().TotalWater, 0.0001, "Tesla junction entrance pour starts as a small isolated drop");
+AssertNear(12, configurable.GetSummary().TotalWater, 0.0001, "Tesla patent port pour starts as a small isolated drop");
 
 var advectionOff = new CellularFluidSimulation(9, 9, new int[81]);
 advectionOff.SelectAlgorithm(FluidAlgorithm.Mac);
@@ -319,8 +318,10 @@ foreach (var algorithm in Enum.GetValues<FluidAlgorithm>())
     foreach (var direction in new[] { ExperimentDirection.Forward, ExperimentDirection.Reverse })
     {
         var forcing = experiment.StartExperiment(direction, true);
-        Assert(forcing.Depths[32 * 96 + 8] == (direction == ExperimentDirection.Forward ? 18 : 12) &&
-            forcing.Depths[32 * 96 + 88] == (direction == ExperimentDirection.Forward ? 12 : 18), "heads swap, equal imposed difference");
+        var inlet = 64 * experiment.Width + 8;
+        var outlet = 64 * experiment.Width + 184;
+        Assert(forcing.Depths[inlet] == (direction == ExperimentDirection.Forward ? 18 : 12) &&
+            forcing.Depths[outlet] == (direction == ExperimentDirection.Forward ? 12 : 18), "heads swap, equal imposed difference");
         for (var tick = 0; tick < 1600; tick++) experiment.Step();
         var measured = experiment.MeasureExperiment();
         var flowUnit = algorithm == FluidAlgorithm.Cellular ? "ft3/tick" : "ft3/s";
@@ -328,7 +329,7 @@ foreach (var algorithm in Enum.GetValues<FluidAlgorithm>())
         AssertNear(algorithm == FluidAlgorithm.Cellular ? 1f / 12 : 1f / (12 * 0.016f),
             experiment.DischargeProbe.Weights[0], 0.000001, "probe units distinguish algorithmic ticks from physical seconds");
         Assert(experiment.GetWaterSnapshot().All(v => v >= 0 && float.IsFinite(v)), "forced experiment remains finite");
-        AssertNear(forcing.Depths[32 * 96 + 8], experiment.GetCell(8, 32).WaterDepth, 0, "fixed reservoir head is maintained");
+        AssertNear(forcing.Depths[inlet], experiment.GetCell(8, 64).WaterDepth, 0, "fixed reservoir head is maintained");
         var copy = experiment.GetStateSnapshot();
         experiment.StartExperiment(direction, true);
         for (var tick = 0; tick < 1600; tick++) experiment.Step();
@@ -350,7 +351,7 @@ foreach (var algorithm in Enum.GetValues<FluidAlgorithm>())
         Assert(FluidComparison.Compare(copy, experiment.GetStateSnapshot()).Matches,
             "re-establishing matching forcing permits exact complete-state resume after Reset");
         experiment.Step();
-        AssertNear(forcing.Depths[32 * 96 + 8], experiment.GetCell(8, 32).WaterDepth, 0,
+        AssertNear(forcing.Depths[64 * experiment.Width + 8], experiment.GetCell(8, 64).WaterDepth, 0,
             "same-direction synchronization retains prescribed reservoir forcing");
     }
     experiment.StartExperiment(ExperimentDirection.Forward, false);
@@ -432,4 +433,26 @@ static void ExpectThrows<TException>(Action action, string description)
     }
 
     throw new InvalidOperationException($"Check failed: {description}");
+}
+
+static bool AllOpenCellsReachPort(int[] terrain, int width, int height, int port)
+{
+    var reachable = new bool[terrain.Length];
+    var pending = new Queue<int>();
+    if (terrain[port] != 0) return false;
+    reachable[port] = true;
+    pending.Enqueue(port);
+    while (pending.TryDequeue(out var cell))
+    {
+        var x = cell % width;
+        var y = cell / width;
+        foreach (var next in new[] { x > 0 ? cell - 1 : -1, x + 1 < width ? cell + 1 : -1,
+                     y > 0 ? cell - width : -1, y + 1 < height ? cell + width : -1 })
+        {
+            if (next < 0 || reachable[next] || terrain[next] != 0) continue;
+            reachable[next] = true;
+            pending.Enqueue(next);
+        }
+    }
+    return Enumerable.Range(0, terrain.Length).All(i => terrain[i] != 0 || reachable[i]);
 }

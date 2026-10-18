@@ -38,9 +38,9 @@
                     <option value="0">Slope and spillway</option>
                     <option value="1">Enclosed basin</option>
                     <option value="2">Water slide</option>
-                    <option value="3">Tesla valve · six hooked returns</option>
+                    <option value="3">Tesla valve · patent Fig. 1 trace</option>
                     <option value="4">Incline → flat workbench</option>
-                    <option value="5">Tesla junction playground · two hooked returns</option>
+                    <option value="5">Tesla valve · patent map playground</option>
                 </select>
             </label>
             <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ToggleRun" Disabled="@(!_initialized)">@(_running ? "Pause" : "Run")</FluentButton>
@@ -86,7 +86,7 @@
     @if (_simulation.Scene == TerrainScene.TeslaJunctionPlayground)
     {
         <section class="control-panel" aria-label="Tesla junction playground guidance">
-            <p>Two-stage junction layout from the saved 96 × 64 map. Pour starts at the channel entrance (9, 29). For small, placed sources, right-click the first return (18, 39) or merge (23, 23); repeated clicks at one cell increase that spring's flow. Choose Staggered MAC with upwind velocity advection to compare with the recorded CPU trial. The automatic forward/reverse experiment controls apply to the older Tesla preset.</p>
+            <p>Patent Fig. 1 plan stamped into a 192 × 128 terrain at 1 ft per cell. Both Tesla presets use this same map; the Tesla preset adds equal-head forward/reverse trials. The pour starts in the left port at (8, 64). To place small sources near the first upper and lower return channels, right-click (55, 60) or (67, 67); repeated clicks at one cell increase that spring's flow. Try Staggered MAC with upwind velocity advection and compare the same positions in both directions.</p>
         </section>
     }
 
@@ -120,14 +120,14 @@
                 <FluentButton OnClick="StepExperimentAsync" Disabled="@(!_initialized || _simulation.Direction == ExperimentDirection.None)">Advance 128 experiment ticks</FluentButton>
             </div>
             <div>
-                <p>Each experiment restores the same flat-bottom channel, pauses at tick 0, and fixes reservoir depths to 18 / 12 in (Δhead 6 in), swapped in reverse. Run or Step to advance. Unforced channel starts uniformly at 15 in.</p>
+                <p>Each experiment restores the patent-traced terrain, pauses at tick 0, and fixes clear cells in the two ports to 18 / 12 in (Δhead 6 in), swapped in reverse. Run or Step to advance. Other open channel cells start uniformly at 15 in.</p>
                 <p>Experimental depth-averaged model: no guaranteed resistance difference, check-valve closure, or resolved turbulence.</p>
                 <p role="status" class="experiment-readout">Direction: @_simulation.Direction · main-channel section signed discharge @(_experiment.Discharge.ToString("F5")) @ExperimentFlowUnit · bypass section signed flow @(_experiment.BypassFlow.ToString("F5")) @ExperimentFlowUnit.</p>
                 @if (_experimentModified)
                 {
                     <p>Manual edits invalidate the controlled comparison. Restart a direction to restore the repeatable experiment.</p>
                 }
-                <p>Last completed tick only (not a steady-state estimate). Positive = left-to-right. Main-channel section x=75, y=30–33; lower-return section x=76, y=34–38. @ExperimentMeasurementHelp The return probe measures branch throughput, not vorticity or closed-loop circulation.</p>
+                <p>Last completed tick only (not a steady-state estimate). Positive = left-to-right. Main-trunk section x=160, y=63–64; off-axis section x=160, y=57–62 and 65–70. @ExperimentMeasurementHelp The off-axis probe measures branch throughput, not vorticity or closed-loop circulation.</p>
                 <p>Record forward/reverse at identical ticks and settings. Different transient or steady results are measurements, not a claim of physical rectification.</p>
                 @if (_forwardSample is { } forward && _reverseSample is { } reverse)
                 {
@@ -180,7 +180,7 @@
     </section>
     <div class="vertical-navigation">
         <label for="landscape-vertical">Depth position · both views</label>
-        <input @ref="_landscapeVertical" id="landscape-vertical" aria-label="Vertical landscape position · both views" type="range" min="0" max="64" value="32" step="0.1" />
+        <input @ref="_landscapeVertical" id="landscape-vertical" aria-label="Vertical landscape position · both views" type="range" min="0" max="@_simulation.Height" value="@(_simulation.Height / 2)" step="0.1" />
     </div>
     </div>
 
@@ -196,7 +196,7 @@
 
     <section class="navigation-panel" aria-label="Linked landscape navigation">
         <label for="landscape-scroll">Horizontal landscape position · both views</label>
-        <input @ref="_landscapeScroll" id="landscape-scroll" type="range" min="0" max="95" value="48" step="0.1" />
+        <input @ref="_landscapeScroll" id="landscape-scroll" type="range" min="0" max="@(_simulation.Width - 1)" value="@(_simulation.Width / 2)" step="0.1" />
         <p>Left click: select · Left drag: orbit · Wheel over land: zoom · Right click: create / increase spring · Right drag: use the selected terrain tool.</p>
         <p>Scroll the page using the margin or vertical scrollbar. Touch-drag over a view orbits; swipe outside it to scroll.</p>
         <p role="status">@_selectionText</p>

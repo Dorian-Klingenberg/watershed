@@ -1,22 +1,601 @@
 {
-  "fluid_components": 1,
-  "islands": [
-    {
-      "cells": 159,
-      "centroid": [
-        66.00314465408805,
-        17.751572327044027
+  "map": {
+    "width_cells": 192,
+    "height_cells": 128,
+    "cell_size_ft": 1
+  },
+  "source": {
+    "image": "tesla-source-figure.png",
+    "figure": "US1329559A Fig. 1 plan view, reproduced as panel a in Nguyen et al. (2021)",
+    "citation": "https://www.nature.com/articles/s41467-021-23009-y",
+    "patent": "https://patents.google.com/patent/US1329559A/en",
+    "source_crop_xyxy": [
+      52,
+      7,
+      1272,
+      120
+    ],
+    "source_crop_pixels": [
+      1220,
+      113
+    ],
+    "uniform_scale_cells_per_source_pixel": 0.1415929203539823,
+    "body_x_cells_unflipped": [
+      9.628318584070797,
+      182.3716814159292
+    ],
+    "body_y_cells": [
+      56,
+      72
+    ],
+    "mirrored_horizontally_for_app_forward": true,
+    "crop_pixels": [
+      1220,
+      113
+    ],
+    "kept_baffle_components": [
+      {
+        "pixels": 1003,
+        "bounds_source_px": [
+          5,
+          15,
+          358,
+          53
+        ]
+      },
+      {
+        "pixels": 512,
+        "bounds_source_px": [
+          352,
+          17,
+          550,
+          53
+        ]
+      },
+      {
+        "pixels": 433,
+        "bounds_source_px": [
+          547,
+          18,
+          740,
+          53
+        ]
+      },
+      {
+        "pixels": 435,
+        "bounds_source_px": [
+          741,
+          18,
+          928,
+          53
+        ]
+      },
+      {
+        "pixels": 755,
+        "bounds_source_px": [
+          936,
+          20,
+          1214,
+          53
+        ]
+      },
+      {
+        "pixels": 333,
+        "bounds_source_px": [
+          174,
+          27,
+          256,
+          49
+        ]
+      },
+      {
+        "pixels": 358,
+        "bounds_source_px": [
+          366,
+          29,
+          449,
+          51
+        ]
+      },
+      {
+        "pixels": 322,
+        "bounds_source_px": [
+          560,
+          30,
+          643,
+          52
+        ]
+      },
+      {
+        "pixels": 338,
+        "bounds_source_px": [
+          753,
+          30,
+          838,
+          53
+        ]
+      },
+      {
+        "pixels": 331,
+        "bounds_source_px": [
+          948,
+          32,
+          1034,
+          53
+        ]
+      },
+      {
+        "pixels": 3162,
+        "bounds_source_px": [
+          27,
+          60,
+          1214,
+          101
+        ]
+      },
+      {
+        "pixels": 359,
+        "bounds_source_px": [
+          75,
+          61,
+          165,
+          83
+        ]
+      },
+      {
+        "pixels": 310,
+        "bounds_source_px": [
+          267,
+          63,
+          344,
+          84
+        ]
+      },
+      {
+        "pixels": 300,
+        "bounds_source_px": [
+          464,
+          64,
+          542,
+          85
+        ]
+      },
+      {
+        "pixels": 299,
+        "bounds_source_px": [
+          659,
+          65,
+          738,
+          87
+        ]
+      },
+      {
+        "pixels": 275,
+        "bounds_source_px": [
+          850,
+          66,
+          929,
+          87
+        ]
+      },
+      {
+        "pixels": 323,
+        "bounds_source_px": [
+          1041,
+          66,
+          1125,
+          89
+        ]
+      }
+    ],
+    "threshold_gray_below": 145,
+    "minimum_component_pixels": 250,
+    "removed_center_annotation_band_source_y": [
+      54,
+      59
+    ]
+  },
+  "terrain": {
+    "channel_floor_inches": 0,
+    "banks_and_imprinted_baffles_inches": 48,
+    "direct_trunk_rows": [
+      63,
+      64
+    ],
+    "nominal_direct_trunk_width_cells": 2,
+    "raster_throats_reopened_xy": [
+      [
+        74,
+        58
+      ],
+      [
+        101,
+        58
+      ],
+      [
+        128,
+        58
+      ],
+      [
+        153,
+        58
+      ],
+      [
+        42,
+        59
+      ],
+      [
+        48,
+        61
+      ],
+      [
+        69,
+        59
+      ],
+      [
+        96,
+        59
+      ],
+      [
+        123,
+        59
+      ],
+      [
+        149,
+        59
+      ],
+      [
+        159,
+        60
+      ],
+      [
+        37,
+        60
+      ],
+      [
+        46,
+        62
+      ],
+      [
+        64,
+        60
+      ],
+      [
+        73,
+        62
+      ],
+      [
+        76,
+        62
+      ],
+      [
+        92,
+        60
+      ],
+      [
+        100,
+        62
+      ],
+      [
+        117,
+        61
+      ],
+      [
+        119,
+        60
+      ],
+      [
+        127,
+        62
+      ],
+      [
+        152,
+        62
+      ],
+      [
+        27,
+        65
+      ],
+      [
+        37,
+        65
+      ],
+      [
+        48,
+        67
+      ],
+      [
+        54,
+        65
+      ],
+      [
+        64,
+        65
+      ],
+      [
+        76,
+        67
+      ],
+      [
+        82,
+        65
+      ],
+      [
+        111,
+        65
+      ],
+      [
+        140,
+        65
+      ],
+      [
+        159,
+        65
+      ],
+      [
+        168,
+        65
+      ],
+      [
+        23,
+        66
+      ],
+      [
+        32,
+        66
+      ],
+      [
+        36,
+        67
+      ],
+      [
+        51,
+        66
+      ],
+      [
+        60,
+        66
+      ],
+      [
+        87,
+        66
+      ],
+      [
+        107,
+        68
+      ],
+      [
+        135,
+        68
+      ],
+      [
+        137,
+        68
+      ],
+      [
+        164,
+        68
+      ],
+      [
+        83,
+        67
+      ],
+      [
+        112,
+        69
+      ],
+      [
+        141,
+        69
+      ],
+      [
+        169,
+        69
+      ],
+      [
+        171,
+        69
       ]
-    },
-    {
-      "cells": 159,
-      "centroid": [
-        22.00314465408805,
-        32.24842767295597
-      ]
-    }
-  ],
-  "max_cell_centre_clearance_diameter": 6.0,
-  "fluid_cells": 925,
-  "ideal_arrival_angle_degrees": 146.30993247402023
+    ],
+    "cell_widths_open_by_column": [
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      10,
+      10,
+      10,
+      10,
+      10,
+      11,
+      10,
+      11,
+      12,
+      12,
+      12,
+      11,
+      10,
+      12,
+      9,
+      9,
+      8,
+      10,
+      9,
+      8,
+      7,
+      8,
+      10,
+      7,
+      6,
+      6,
+      7,
+      13,
+      11,
+      9,
+      8,
+      10,
+      12,
+      10,
+      8,
+      7,
+      10,
+      8,
+      12,
+      8,
+      11,
+      13,
+      10,
+      9,
+      10,
+      9,
+      8,
+      7,
+      8,
+      7,
+      10,
+      7,
+      6,
+      6,
+      13,
+      11,
+      9,
+      8,
+      9,
+      12,
+      9,
+      8,
+      7,
+      9,
+      10,
+      8,
+      11,
+      7,
+      11,
+      10,
+      9,
+      8,
+      10,
+      11,
+      8,
+      7,
+      7,
+      10,
+      7,
+      6,
+      7,
+      10,
+      12,
+      10,
+      9,
+      8,
+      11,
+      10,
+      9,
+      8,
+      9,
+      9,
+      8,
+      8,
+      9,
+      10,
+      9,
+      11,
+      9,
+      9,
+      8,
+      9,
+      10,
+      8,
+      8,
+      9,
+      7,
+      8,
+      8,
+      12,
+      10,
+      9,
+      9,
+      10,
+      9,
+      7,
+      8,
+      10,
+      9,
+      8,
+      8,
+      8,
+      9,
+      10,
+      9,
+      11,
+      10,
+      11,
+      7,
+      7,
+      10,
+      10,
+      7,
+      7,
+      7,
+      6,
+      8,
+      9,
+      9,
+      11,
+      9,
+      8,
+      9,
+      10,
+      9,
+      8,
+      9,
+      7,
+      7,
+      10,
+      10,
+      9,
+      9,
+      9,
+      11,
+      10,
+      8,
+      8,
+      10,
+      10,
+      8,
+      9,
+      9,
+      10,
+      12,
+      11,
+      11,
+      11,
+      10,
+      11,
+      11,
+      11,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14,
+      14
+    ],
+    "mean_open_cells_per_column_within_body": 9.666666666666666,
+    "maximum_open_cells_in_a_column": 14,
+    "baffle_cells": 832,
+    "open_cells": 1856,
+    "open_components_4_neighbor": 1,
+    "port5_to_port4_connected": true
+  }
 }

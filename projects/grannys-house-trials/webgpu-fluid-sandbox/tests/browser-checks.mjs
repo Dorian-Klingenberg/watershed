@@ -38,6 +38,11 @@ const click = async text => evaluate(`(() => {
     if (!b) throw Error('Missing button ' + ${JSON.stringify(text)});
     b.click();
 })()`);
+const saveMap = async () => {
+    await click("Save / export map");
+    await wait(`!!localStorage.getItem('webgpu-fluid-sandbox.saved-terrain.v1')`);
+    return JSON.parse(await evaluate(`localStorage.getItem('webgpu-fluid-sandbox.saved-terrain.v1')`));
+};
 const select = async (label, value) => {
     await evaluate(`(() => {const s=document.querySelector('[aria-label=${JSON.stringify(label)}]');
         s.value=${JSON.stringify(String(value))};s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
@@ -157,18 +162,19 @@ for (let algorithm = 0; algorithm < 4; algorithm++) {
     assert(await evaluate(`document.querySelector('.comparison').classList.contains('match')`),
         await evaluate(`document.querySelector('.comparison').innerText`));
     console.log("model", algorithm, await evaluate(`document.querySelector('.comparison').innerText`));
+    const terrainBefore = await saveMap();
     await evaluate(`document.querySelector('canvas').scrollIntoView({block:'center'})`);
     const point = await evaluate(`(() => { const r=document.querySelector('canvas').getBoundingClientRect();
         return {x:r.x+r.width*.5,y:r.y+r.height*.5}; })()`);
-    await send("Input.dispatchMouseEvent", {type:"mousePressed", ...point, button:"left",clickCount:1});
-    await send("Input.dispatchMouseEvent", {type:"mouseReleased", ...point, button:"left",clickCount:1});
-    await wait(`document.querySelector('.navigation-panel p[role="status"]').textContent.includes('terrain')`);
-    await sleep(250); // Let the periodic selection readout catch up after the awaited click callback.
-    const initialTerrain = await evaluate(`Number(document.querySelector('.navigation-panel p[role="status"]').textContent.match(/terrain (\\d+)/)[1])`);
-    await send("Input.dispatchMouseEvent", {type:"mousePressed", ...point, button:"right",buttons:2,clickCount:1});
-    await send("Input.dispatchMouseEvent", {type:"mouseMoved", x:point.x+35,y:point.y,button:"right",buttons:2});
-    await send("Input.dispatchMouseEvent", {type:"mouseReleased", x:point.x+35,y:point.y,button:"right",buttons:0,clickCount:1});
-    await wait(`Number(document.querySelector('.navigation-panel p[role="status"]').textContent.match(/terrain (\\d+)/)[1]) === ${initialTerrain + 12}`);
+    const strokeStart={x:point.x+40,y:point.y},strokeEnd={x:point.x+60,y:point.y};
+    await send("Input.dispatchMouseEvent", {type:"mousePressed", ...strokeStart, button:"right",buttons:2,clickCount:1});
+    await send("Input.dispatchMouseEvent", {type:"mouseMoved", ...strokeEnd, button:"right",buttons:2});
+    await send("Input.dispatchMouseEvent", {type:"mouseReleased", ...strokeEnd, button:"right",buttons:0,clickCount:1});
+    await wait(`document.body.innerText.includes('Raised terrain by 12 in.')`);
+    const terrainAfter = await saveMap();
+    const terrainChanges = terrainAfter.ElevationInches.map((height,index) => height-terrainBefore.ElevationInches[index]);
+    assert(terrainChanges.some(change=>change===12),"right-drag raises at least one saved terrain cell by 12 in");
+    assert(terrainChanges.every(change=>change===0||change===12),"right-drag only raises cells in one 12 in brush pass");
     await click("Pour 12 in");
     const editTick = await evaluate(`Number(document.querySelector('.readout .metric strong').textContent)`);
     await click("Run");
@@ -209,9 +215,10 @@ for (let algorithm = 0; algorithm < 4; algorithm++) {
     const switched = await evaluate(`import('./js/fluid-gpu.js').then(m=>m.snapshot())`);
     assert(switched.cycles === 0 && switched.water.every(v=>v===0) && switched.momentum.every(v=>v===0), "switch clears complete GPU state");
     assert.equal(await evaluate(`JSON.stringify([...document.querySelectorAll('input[type="range"]')].map(s=>s.value))`),camera,"switch preserves camera");
-    assert.equal(await evaluate(`Number(document.querySelector('.navigation-panel p[role="status"]').textContent.match(/terrain (\\d+)/)[1])`), initialTerrain+12,"switch preserves edited terrain");
+    assert.deepEqual((await saveMap()).ElevationInches,terrainAfter.ElevationInches,"switch preserves edited terrain");
     await click("Reset");
-    await wait(`Number(document.querySelector('.navigation-panel p[role="status"]').textContent.match(/terrain (\\d+)/)[1]) === ${initialTerrain}`);
+    await wait(`document.querySelectorAll('.navigation-panel p[role="status"]')[1].textContent.includes('reset baseline at tick 0')`);
+    assert.deepEqual((await saveMap()).ElevationInches,terrainBefore.ElevationInches,"reset restores selected terrain map");
 }
 // Terrain is independent of solver and settings; every scene is resettable on each backend.
 for(let scene=0;scene<5;scene++) for(let algorithm=0;algorithm<4;algorithm++){
@@ -226,8 +233,8 @@ for(let scene=0;scene<5;scene++) for(let algorithm=0;algorithm<4;algorithm++){
             await wait(`Number(document.querySelector('.readout .metric strong').textContent)===128`,180000);
             await compare(`Tesla ${algorithm} ${direction}`);
             const baseline=await evaluate(`import('./js/fluid-gpu.js').then(m=>m.snapshot())`);
-            assert.equal(baseline.water[32*96+8],direction==="Forward"?18:12,"fixed left reservoir head");
-            assert.equal(baseline.water[32*96+88],direction==="Forward"?12:18,"fixed right reservoir head");
+            assert.equal(baseline.water[64*192+8],direction==="Forward"?18:12,"fixed left reservoir head");
+            assert.equal(baseline.water[64*192+184],direction==="Forward"?12:18,"fixed right reservoir head");
             console.log("Tesla measurement",algorithm,direction,"tick",baseline.cycles,
                 await evaluate(`document.querySelector('.experiment-readout').innerText`));
             assert(await evaluate(`document.querySelector('.experiment-readout').innerText.includes(${JSON.stringify(algorithm===0?"ft³/tick":"ft³/s")})`),

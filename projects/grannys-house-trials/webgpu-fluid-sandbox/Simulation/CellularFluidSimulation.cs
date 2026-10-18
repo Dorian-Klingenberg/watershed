@@ -15,17 +15,9 @@ public sealed class CellularFluidSimulation
 
     private const int MaximumDimension = 1024;
     private const int MaximumCellCount = 262_144;
-    private const double TeslaReturnHalfWidth = 1.3;
-    private static readonly (double X, double Y)[][] TeslaReturnPaths =
-    [
-        [(14, 32), (16, 32), (17, 31), (19, 30), (22, 28), (25, 26.5), (28, 26.5), (30, 28), (32, 29.5), (30.5, 31), (28.5, 30), (25, 28.5), (23, 28), (22, 30), (25, 32)],
-        [(25, 32), (27, 32), (28, 33), (30, 34), (33, 36), (36, 37.5), (39, 37.5), (41, 36), (43, 34.5), (41.5, 33), (39.5, 34), (36, 35.5), (34, 36), (33, 34), (36, 32)],
-        [(36, 32), (38, 32), (39, 31), (41, 30), (44, 28), (47, 26.5), (50, 26.5), (52, 28), (54, 29.5), (52.5, 31), (50.5, 30), (47, 28.5), (45, 28), (44, 30), (47, 32)],
-        [(47, 32), (49, 32), (50, 33), (52, 34), (55, 36), (58, 37.5), (61, 37.5), (63, 36), (65, 34.5), (63.5, 33), (61.5, 34), (58, 35.5), (56, 36), (55, 34), (58, 32)],
-        [(58, 32), (60, 32), (61, 31), (63, 30), (66, 28), (69, 26.5), (72, 26.5), (74, 28), (76, 29.5), (74.5, 31), (72.5, 30), (69, 28.5), (67, 28), (66, 30), (69, 32)],
-        [(69, 32), (71, 32), (72, 33), (74, 34), (77, 36), (80, 37.5), (83, 37.5), (85, 36), (87, 34.5), (85.5, 33), (83.5, 34), (80, 35.5), (78, 36), (77, 34), (80, 32)]
-    ];
-    private static readonly Lazy<int[]> TeslaJunctionPlaygroundTerrain = new(LoadTeslaJunctionPlaygroundTerrain);
+    public const int StandardWidth = 192;
+    public const int StandardHeight = 128;
+    private static readonly Lazy<int[]> TeslaPatentTerrain = new(LoadTeslaPatentTerrain);
     private readonly int[] _terrainHeights;
     private readonly int[] _initialTerrain;
     private readonly float[] _waterDepths;
@@ -78,9 +70,9 @@ public sealed class CellularFluidSimulation
     {
         TerrainScene.EnclosedBasin => (Width / 2, Height / 2),
         TerrainScene.WaterSlide => ((int)Math.Round(48 + 18 * Math.Sin(12 / 11.0)), 12),
-        TerrainScene.Tesla => (12, 32),
-        TerrainScene.TeslaJunctionPlayground => (9, 29),
-        _ => (Width / 2, 12)
+        TerrainScene.Tesla => (8, 64),
+        TerrainScene.TeslaJunctionPlayground => (8, 64),
+        _ => (Width / 2, 24)
     };
 
     public void Configure(FluidSettings settings)
@@ -110,19 +102,19 @@ public sealed class CellularFluidSimulation
 
     public static CellularFluidSimulation CreateDefault()
     {
-        const int width = 96;
-        const int height = 64;
+        const int width = StandardWidth;
+        const int height = StandardHeight;
         var terrain = new int[width * height];
         for (var y = 0; y < height; y++)
         {
             for (var x = 0; x < width; x++)
             {
-                var channelX = width / 2.0f + 8.0f * MathF.Sin(y / 12.0f);
-                var bank = MathF.Min(14.0f, MathF.Abs(x - channelX) * 0.65f);
-                var slope = MathF.Max(0, 44 - y) * 0.7f + MathF.Max(0, 20 - y) * 0.6f;
-                var basinRim = y > 48 ? (y - 48) * 0.65f : 0;
-                var barrier = y is >= 37 and <= 38 && x is >= 30 and <= 61
-                    ? (x is >= 45 and <= 48 ? 5 : 12)
+                var channelX = width / 2.0f + 16.0f * MathF.Sin(y / 24.0f);
+                var bank = MathF.Min(28.0f, MathF.Abs(x - channelX) * 0.65f);
+                var slope = MathF.Max(0, 88 - y) * 0.35f + MathF.Max(0, 40 - y) * 0.3f;
+                var basinRim = y > 96 ? (y - 96) * 0.325f : 0;
+                var barrier = y is >= 74 and <= 76 && x is >= 60 and <= 123
+                    ? (x is >= 90 and <= 96 ? 5 : 12)
                     : 0;
                 terrain[y * width + x] = (int)MathF.Round(slope + bank + basinRim + barrier);
             }
@@ -586,77 +578,45 @@ public sealed class CellularFluidSimulation
     public void SelectScene(TerrainScene scene)
     {
         if (!Enum.IsDefined(scene)) throw new ArgumentOutOfRangeException(nameof(scene));
-        if (Width != 96 || Height != 64) throw new InvalidOperationException("Scenes require the standard 96 × 64 field.");
+        if (Width != StandardWidth || Height != StandardHeight)
+            throw new InvalidOperationException($"Scenes require the standard {StandardWidth} × {StandardHeight} field.");
         ClearSprings();
         var slope = scene == TerrainScene.Slope ? CreateDefault().GetTerrainSnapshot() : null;
-        var teslaJunction = scene == TerrainScene.TeslaJunctionPlayground ? TeslaJunctionPlaygroundTerrain.Value : null;
+        var tesla = scene is TerrainScene.Tesla or TerrainScene.TeslaJunctionPlayground ? TeslaPatentTerrain.Value : null;
         for (var y = 0; y < Height; y++)
         for (var x = 0; x < Width; x++)
         {
             var index = y * Width + x;
-            var z = teslaJunction?[index] ?? slope?[index] ?? 48;
+            var z = tesla?[index] ?? slope?[index] ?? 48;
             if (scene == TerrainScene.EnclosedBasin)
-                z = x is >= 8 and <= 87 && y is >= 8 and <= 55 ? 0 : 36;
+                z = x is >= 16 and <= 175 && y is >= 16 and <= 111 ? 0 : 36;
             if (scene == TerrainScene.WaterSlide)
-                z = Math.Abs(x - (48 + 18 * Math.Sin(y / 11.0))) < 7 ? Math.Max(0, 48 - y) : 64;
-            if (scene == TerrainScene.Tesla)
-            {
-                var reservoir = (x is >= 3 and <= 14 || x is >= 81 and <= 92) && y is >= 28 and <= 35;
-                var main = x is >= 3 and <= 92 && y is >= 30 and <= 33;
-                var inReturn = false;
-                foreach (var path in TeslaReturnPaths)
-                {
-                    if (DistanceSquaredToPolyline(x, y, path) <= TeslaReturnHalfWidth * TeslaReturnHalfWidth)
-                    {
-                        inReturn = true;
-                        break;
-                    }
-                }
-                z = reservoir || main || inReturn ? 0 : 48;
-            }
+                z = Math.Abs(x - (96 + 36 * Math.Sin(y / 22.0))) < 14 ? Math.Max(0, 96 - y) : 64;
             if (scene == TerrainScene.InclineFlat)
-                z = x < 36 ? (int)Math.Round(24.0 * (35 - x) / 35) : 0;
+                z = x < 72 ? (int)Math.Round(24.0 * (71 - x) / 71) : 0;
             _initialTerrain[y * Width + x] = z;
         }
         Scene = scene;
         Reset();
     }
 
-    private static int[] LoadTeslaJunctionPlaygroundTerrain()
+    private static int[] LoadTeslaPatentTerrain()
     {
         using var stream = typeof(CellularFluidSimulation).Assembly
-            .GetManifestResourceStream("TeslaJunctionPlaygroundTerrain.json")
-            ?? throw new InvalidOperationException("The Tesla junction terrain asset is missing from the application.");
+            .GetManifestResourceStream("TeslaPatentTerrain.json")
+            ?? throw new InvalidOperationException("The patent Tesla terrain asset is missing from the application.");
         using var document = JsonDocument.Parse(stream);
         var map = document.RootElement;
         if (map.GetProperty("Version").GetInt32() != 1 ||
-            map.GetProperty("Width").GetInt32() != 96 ||
-            map.GetProperty("Height").GetInt32() != 64)
-            throw new InvalidDataException("The Tesla junction terrain asset must be version 1 and 96 × 64 cells.");
+            map.GetProperty("Width").GetInt32() != StandardWidth ||
+            map.GetProperty("Height").GetInt32() != StandardHeight)
+            throw new InvalidDataException($"The Tesla terrain asset must be version 1 and {StandardWidth} × {StandardHeight} cells.");
 
         var elevations = map.GetProperty("ElevationInches").EnumerateArray()
             .Select(cell => cell.GetInt32()).ToArray();
-        if (elevations.Length != 96 * 64 || elevations.Any(height => height is < 0 or > 4096))
-            throw new InvalidDataException("The Tesla junction terrain asset has invalid elevations.");
+        if (elevations.Length != StandardWidth * StandardHeight || elevations.Any(height => height is < 0 or > 4096))
+            throw new InvalidDataException("The Tesla patent terrain asset has invalid elevations.");
         return elevations;
-    }
-
-    private static double DistanceSquaredToPolyline(double x, double y, (double X, double Y)[] points)
-    {
-        var minimum = double.PositiveInfinity;
-        for (var i = 0; i < points.Length - 1; i++)
-        {
-            var (ax, ay) = points[i];
-            var (bx, by) = points[i + 1];
-            var dx = bx - ax;
-            var dy = by - ay;
-            var lengthSquared = dx * dx + dy * dy;
-            var t = lengthSquared == 0 ? 0 : Math.Clamp(((x - ax) * dx + (y - ay) * dy) / lengthSquared, 0, 1);
-            var differenceX = x - ax - t * dx;
-            var differenceY = y - ay - t * dy;
-            minimum = Math.Min(minimum, differenceX * differenceX + differenceY * differenceY);
-        }
-        return minimum;
     }
 
     public ReservoirForcing StartExperiment(ExperimentDirection direction, bool applyToReference)
@@ -666,10 +626,10 @@ public sealed class CellularFluidSimulation
         Reset();
         ClearSprings();
         Direction = direction;
-        for (var y = 28; y <= 35; y++)
-        for (var x = 5; x <= 90; x++)
-            if (x <= 11 || x >= 84)
-                _forcing[y * Width + x] = (x <= 11) == (direction == ExperimentDirection.Forward) ? 18 : 12;
+        for (var y = 57; y <= 70; y++)
+        for (var x = 3; x <= Width - 4; x++)
+            if ((x <= 9 || x >= Width - 10) && _terrainHeights[y * Width + x] == 0)
+                _forcing[y * Width + x] = (x <= 9) == (direction == ExperimentDirection.Forward) ? 18 : 12;
         if (applyToReference) GetExperimentInitialWater().CopyTo(_waterDepths, 0);
         return GetForcing();
     }
@@ -693,12 +653,18 @@ public sealed class CellularFluidSimulation
             if (_forcing[i] >= 0) _waterDepths[i] = _forcing[i];
     }
 
-    public FlowProbe DischargeProbe => Probe(75, 30, 33);
-    public FlowProbe BypassProbe => Probe(76, 34, 38);
+    public FlowProbe DischargeProbe => Probe(160, 63, 64);
+    public FlowProbe BypassProbe => Probe(160, 57, 62, 65, 70);
     private FlowProbe Probe(int x, int top, int bottom) =>
         new(Enumerable.Range(top, bottom - top + 1).Select(y => 2 * (y * Width + x)).ToArray(),
             Enumerable.Repeat(1f / (12 * (Algorithm == FluidAlgorithm.Cellular ? 1 : TimeStepSeconds)),
                 bottom - top + 1).ToArray());
+    private FlowProbe Probe(int x, int topA, int bottomA, int topB, int bottomB)
+    {
+        var rows = Enumerable.Range(topA, bottomA - topA + 1).Concat(Enumerable.Range(topB, bottomB - topB + 1)).ToArray();
+        return new(rows.Select(y => 2 * (y * Width + x)).ToArray(),
+            Enumerable.Repeat(1f / (12 * (Algorithm == FluidAlgorithm.Cellular ? 1 : TimeStepSeconds)), rows.Length).ToArray());
+    }
 
     public ExperimentReadout MeasureExperiment()
     {

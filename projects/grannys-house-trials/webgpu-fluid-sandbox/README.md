@@ -41,7 +41,7 @@ The first implementation focuses on platform feasibility and the cellular-fluid 
 
 The **Algorithm** selector changes the numeric model in both implementations.
 The terrain selector offers slope/spillway, enclosed basin, water slide,
-six-return Tesla valve, and an incline-to-flat workbench; CPU/WebGPU are execution backends,
+patent-traced Tesla valve, and an incline-to-flat workbench; CPU/WebGPU are execution backends,
 not different algorithms. Changing algorithm pauses Run and clears water, all
 face state, and ticks while preserving **current edited terrain and camera**.
 Reset instead restores starting terrain and clears fluid while retaining the
@@ -130,15 +130,17 @@ historical branches remain **deferred**. The column-raycast renderer is also sti
 
 ### Controlled Tesla experiment
 
-The Tesla scene is a flat-bottom 96×64-cell channel with equal-size end reservoirs,
-a 4-cell-wide straight main path, and six narrow hooked return passages that
-alternate above and below it. Their longitudinal footprints interleave to form
-the repeated passage sequence in the patent figure; each is rasterized about
-2–3 cells wide. The valve spans approximately x=14–87 and y=25–39. The reservoirs
-occupy x=3–14 and 81–92, y=28–35. This is a grid-scale interpretation, not a
-dimensionally exact reproduction of an industrial valve. Banks are 48 in high
-and remain overtoppable under arbitrary extra pours. The current app raster uses
-a nominal ~22° diagonal approach; angle and raster width remain trial variables.
+Both Tesla terrain presets now load the same source-stamped plan of US1329559A
+Fig. 1. The 192×128 field gives the patent body a uniform 16-cell cross-section
+and about 172 cells of length; each cell remains 1 ft. Patent port 5 is mirrored
+to the app's left side so patent's preferred port-5-to-port-4 direction reads
+left-to-right. The floor is level at 0 in and baffles/banks are 48 in high. A
+two-cell direct trunk at rows 63–64 remains open; the actual slanted partitions
+and hooked clearances are retained around it. Source arrows, labels, mounting
+holes, and the housing outline are excluded from terrain. A one-foot raster
+closed some source throats, so the generator reopens the minimum grid paths to
+keep all fluid space connected. This is a patent-plan trace at grid scale, not
+a dimensional reproduction of the original closed conduit.
 
 **Forward experiment** and **Reverse experiment** each restore that terrain and
 pause at tick 0. All unforced channel/reservoir cells begin at 15 in; interior
@@ -154,12 +156,12 @@ Run, Step, or **Advance 128 experiment ticks** after starting a direction. The
 bounded 128-tick action stays paused and serializes all 16 eight-tick batches
 against edits/reset, making equal-time trials possible without pause timing.
 The readout sums **actual positivity-limited
-face transfers** across x=75, y=30–33, divided by 12 to convert depth to volume
-for 1-ft² cells. Momentum models additionally divide by their 0.016-s tick,
-yielding signed ft³/s. Cellular reports ft³/tick: its algorithmic tick has no
-physical duration. The lower-return probe uses x=76, y=34–38. Positive is
-left-to-right. The main-channel section is downstream in forward and upstream
-in reverse.
+face transfers** across x=160, y=63–64, divided by 12 to convert depth to
+volume for 1-ft² cells. Momentum models additionally divide by their 0.016-s
+tick, yielding signed ft³/s. Cellular reports ft³/tick: its algorithmic tick
+has no physical duration. The off-axis probe sums rows 57–62 and 65–70 at
+x=160. Positive is left-to-right. The main-channel section is downstream in
+forward and upstream in reverse.
 Equal transient times can still have different internal storage, so these
 samples do not establish a steady-state resistance ratio.
 The bypass metric measures branch throughput, not vorticity or recirculation.
@@ -168,7 +170,14 @@ estimates. The UI retains forward/reverse samples and reports a magnitude
 difference only at matching ticks; setting/scene changes and edits clear them.
 Reset turns forcing off and clears fluid; restart a direction to reproduce a trial.
 
-Historical single-loop geometry baseline (superseded by the six-return map):
+At tick 1600 with equal 6-in imposed head and MAC advection enabled, the stamped
+map produced 3.0691 ft³/s forward and −2.9196 ft³/s reverse at the main probe;
+off-axis signed flow was 3.5134 and −4.0813 ft³/s respectively. This is one
+finite-time measurement, not a steady-state resistance ratio. The larger reverse
+off-axis magnitude is consistent with greater diversion in this sample, but the
+model does not measure vortex loss or diodicity. Both directions pass water.
+
+Historical single-loop geometry baseline (superseded by the patent trace):
 deterministic C# observations at tick 1600 (25.6 simulated seconds for
 momentum models only), default
 parameters except MAC velocity advection enabled:
@@ -285,7 +294,7 @@ Performance readouts are sampled every 500 ms rather than rerendering the Blazor
 The low-frequency readout timer is not an animation loop. While paused there is no continuous redraw loop, dispatch, or readback. Readouts are suppressed in hidden tabs.
 
 An exploratory headless Chromium/SwiftShader comparison used the same 1368×912
-viewport, 96×64 starting terrain, and 588 cell-inch uphill pour. Over roughly eight
+viewport, 192×128 starting terrain, and 588 cell-inch uphill pour. Over roughly eight
 seconds, the original revision completed about 12 ticks; the updated paired mode
 completed about 86 with its default two-tick batches, and GPU-only mode about 172.
 A one-tick updated run completed about 44 ticks, separating some of the benefit
