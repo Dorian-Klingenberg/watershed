@@ -48,8 +48,8 @@ discarding terrain edits or camera; restore defaults affects the current model.
 Synchronization/comparison includes settings identity.
 
 The scene picker provides slope, enclosed basin, water slide, and a flat-bottom
-single-stage Tesla channel with a separate, well-resolved bypass and solid
-island. Reset restores the selected terrain. Forward/reverse experiment controls
+Tesla channel with six alternating hooked returns on the 1-ft grid. Reset restores
+the selected terrain. Forward/reverse experiment controls
 restore identical initial wetting and swap fixed 18/12-in reservoir heads.
 C# generates those constraints; GPU kernels and CPU implement the same forcing.
 CPU-off still skips CPU reference state work.

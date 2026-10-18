@@ -42,12 +42,12 @@
   <p class="lede">The patent figure shows a long conduit filled with closely spaced, interleaved hooked passages. The curved returns alternate above and below the axis, and their narrow diagonal throats redirect flow through successive stages. My earlier sketch replaced this with three isolated U-shaped side pockets. That was the wrong topology.</p>
 
   <section class="panel">
-    <h2 style="margin-top:0">Proposed app layout · top-down and scaled</h2>
+    <h2 style="margin-top:0">Implemented app layout · top-down and scaled</h2>
     <figure class="schematic">
       <img src="tesla-valve-layout.png" alt="Top-down Tesla-valve layout on the sandbox 96 by 64 cell grid, with six alternating hooked return passages and a four-cell main channel.">
       <figcaption>Scale plan for the app field (1 ft per cell). Six narrow hooked returns alternate above/below and overlap in longitudinal pitch. The diagonal neck angle is a starting estimate from the supplied patent figure; test 15°, 22°, and 30° in the MAC grid. <a href="https://patents.google.com/patent/US1329559A/en">Compare with Tesla patent US1329559A, Fig. 1.</a></figcaption>
     </figure>
-    <div class="callout"><strong>Revised recommendation:</strong> first reproduce the patent’s repeated, interleaved hooked channels in the 96 × 64 grid, alternating the return passage above and below the main route. Preserve a direct narrow throat beside each returning branch. Sweep the shallow throat angle at 15°, 22°, and 30° while holding cell pitch, widths, and pulse protocol constant. No angle is recommended yet: the earlier angle comparison used a different, non-patent side-pocket topology.</div>
+    <div class="callout"><strong>Implemented:</strong> the app now rasterizes six interleaved hooked returns on the 96 × 64 terrain grid. Next, compare the shallow throat angles at 15°, 22°, and 30° while holding cell pitch, widths, and pulse protocol constant. No angle is recommended yet: the earlier angle comparison used a different, non-patent side-pocket topology.</div>
   </section>
 
   <h2>What the earlier trials do and do not show</h2>
@@ -59,7 +59,7 @@
     <table>
       <thead><tr><th>Layout</th><th>Merge</th><th>Easy crossing</th><th>Hard crossing</th><th>Easy / hard</th><th>Easy / hard bypass storage</th></tr></thead>
       <tbody>
-        <tr><td>Current single loop</td><td class="num">45°</td><td class="num">4.522</td><td class="num">8.038</td><td class="num">0.56</td><td class="num">7.000 / 2.338</td></tr>
+        <tr><td>Former app single loop</td><td class="num">45°</td><td class="num">4.522</td><td class="num">8.038</td><td class="num">0.56</td><td class="num">7.000 / 2.338</td></tr>
         <tr><td>Three compact loops</td><td class="num">30°</td><td class="num">3.669</td><td class="num">3.093</td><td class="num">1.19</td><td class="num">7.564 / 10.474</td></tr>
         <tr><td>Three compact loops</td><td class="num">45°</td><td class="num">3.799</td><td class="num">3.446</td><td class="num">1.10</td><td class="num">7.359 / 10.483</td></tr>
         <tr><td>Three compact loops</td><td class="num">60°</td><td class="num">3.979</td><td class="num">4.150</td><td class="num">0.96</td><td class="num">7.009 / 9.836</td></tr>
@@ -75,7 +75,7 @@
   <h2>Physics and limits</h2>
   <p>Real Tesla-valve action comes from direction-dependent losses in an asymmetric, fixed passage. In the favorable direction, most flow can continue down the main path, with limited diversion. In reverse, the branch entrances capture more of the stream; turns, contractions, separation, recirculation and collisions with returning flow dissipate more energy. The geometry permits both directions. Performance changes with Reynolds number and flow rate, so a small, slow drop experiment may show weak or inconsistent bias.</p>
   <p>A meaningful engineering measure is diodicity: pressure drop in the unfavorable direction divided by pressure drop in the favorable direction at matched flow rate. This sandbox instead reports finite-time water transfer and branch storage. Its two-dimensional, depth-averaged MAC scheme does not resolve three-dimensional boundary layers, detailed vortex structure, or turbulent losses; one grid cell is one foot. Treat these runs as a way to screen candidate shapes, then measure matched-flow pressure drop in a higher-fidelity fluid solver or physical model.</p>
-  <div class="callout warning"><strong>UI reproduction note:</strong> right-click in the live sandbox currently adds 12 inches per click. This study used one-inch increments. To reproduce the pulse protocol interactively, the pour depth control needs to expose a 1-inch setting or use a one-inch click increment. The published simulation itself is unchanged by this study.</div>
+  <div class="callout warning"><strong>UI reproduction note:</strong> right-click in the live sandbox currently adds 12 inches per click. This study used one-inch increments. To reproduce the pulse protocol interactively, the pour depth control needs to expose a 1-inch setting or use a one-inch click increment. The new six-return map has passed terrain and solver checks; its directional pulse response and best angle have not yet been measured.</div>
 
   <h2>Sources</h2>
   <ul>
@@ -83,7 +83,7 @@
     <li><a href="https://github.com/Karthik-Rajgopal/Tesla-Valve-CFD-Simulations">Tesla Valve CFD Simulations</a> — public CFD example documenting Navier–Stokes/PISO and large-eddy simulation. This is an illustrative project, not a peer-reviewed validation of the present layout.</li>
     <li><a href="https://github.com/Dorian-Klingenberg/watershed/blob/main/projects/grannys-house-trials/webgpu-fluid-sandbox/README.md">Sandbox model and baseline notes</a> — solver assumptions, existing single-stage geometry, repeatable fixed-head measurements, and CPU/GPU validation.</li>
   </ul>
-  <footer>Study artifact for the WebGPU Fluid Sandbox. Candidate pulse trials were run in the C# reference model; the compact candidates have not yet been added to the live GPU terrain selector.</footer>
+  <footer>Study artifact for the WebGPU Fluid Sandbox. The six-return candidate is now the live Tesla terrain. Pulse trials on the earlier single-loop and isolated side-pocket maps remain historical and do not predict this layout's directional response.</footer>
 </main>
 </body>
 </html>

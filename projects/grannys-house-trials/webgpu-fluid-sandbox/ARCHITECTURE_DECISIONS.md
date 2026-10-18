@@ -136,13 +136,13 @@ are references for behavior and lessons only.
   and local speed limits; default remains off. A separate GPU advection pass
   avoids pathological SwiftShader compilation from inlining a staggered stencil
   inside the dynamic momentum-axis loop, without extra persistent state.
-- **Scenes:** Slope, enclosed basin, water slide, and a single-stage Tesla channel.
+- **Scenes:** Slope, enclosed basin, water slide, and a six-return Tesla channel.
   Scene selection pauses/replaces terrain/clears fluid; Reset restores the selected
   scene. Camera remains presentation-owned and unchanged.
 - **Experiment:** C# generates uniform initial wetting and fixed-head numeric
   reservoir operations (18/12 in or 12/18 in), not JavaScript scene logic. The
-  channel bottom is flat and reservoirs comparable; a resolved solid island
-  separates main channel and bypass. Kernels clamp prescribed depths after every
+  channel bottom is flat and reservoirs comparable; six alternating hooked
+  returns connect to the main path. Kernels clamp prescribed depths after every
   tick; CPU-off does not execute or snapshot reference state.
 - **Measurements:** C# defines signed face probes; the backend reads actual
   limited transfers, applies probe weights, and returns only two scalar rates.

@@ -38,7 +38,7 @@ The first implementation focuses on platform feasibility and the cellular-fluid 
 
 The **Algorithm** selector changes the numeric model in both implementations.
 The terrain selector offers slope/spillway, enclosed basin, water slide, and
-single-stage Tesla channel; CPU/WebGPU are execution backends,
+six-return Tesla valve; CPU/WebGPU are execution backends,
 not different algorithms. Changing algorithm pauses Run and clears water, all
 face state, and ticks while preserving **current edited terrain and camera**.
 Reset instead restores starting terrain and clears fluid while retaining the
@@ -125,14 +125,17 @@ physics, not extra algorithm choices. Original heightfield SWE, virtual-pipe,
 O'Brien volume-only, slosh scenario presets, hydraulic erosion/rain and other
 historical branches remain **deferred**. The column-raycast renderer is also still deferred.
 
-### Controlled single-stage Tesla experiment
+### Controlled Tesla experiment
 
 The Tesla scene is a flat-bottom 96×64-cell channel with equal-size end reservoirs,
-an 8-cell-wide main path, and a roughly 6-cell-wide asymmetric bypass connected
-at two distinct mouths. A solid terrain island separates branch and main path:
-this is not an open D-shaped cavity. The geometry is experimental and not a
-dimensionally faithful reproduction of a patented/industrial valve. Walls are
-48 in high and remain overtoppable under arbitrary extra pours.
+a 4-cell-wide straight main path, and six narrow hooked return passages that
+alternate above and below it. Their longitudinal footprints interleave to form
+the repeated passage sequence in the patent figure; each is rasterized about
+2–3 cells wide. The valve spans approximately x=14–87 and y=25–39. The reservoirs
+occupy x=3–14 and 81–92, y=28–35. This is a grid-scale interpretation, not a
+dimensionally exact reproduction of an industrial valve. Banks are 48 in high
+and remain overtoppable under arbitrary extra pours. The current app raster uses
+a nominal ~22° diagonal approach; angle and raster width remain trial variables.
 
 **Forward experiment** and **Reverse experiment** each restore that terrain and
 pause at tick 0. All unforced channel/reservoir cells begin at 15 in; interior
@@ -148,11 +151,12 @@ Run, Step, or **Advance 128 experiment ticks** after starting a direction. The
 bounded 128-tick action stays paused and serializes all 16 eight-tick batches
 against edits/reset, making equal-time trials possible without pause timing.
 The readout sums **actual positivity-limited
-face transfers** across x=75, y=29–36, divided by 12 to convert depth to volume
+face transfers** across x=75, y=30–33, divided by 12 to convert depth to volume
 for 1-ft² cells. Momentum models additionally divide by their 0.016-s tick,
 yielding signed ft³/s. Cellular reports ft³/tick: its algorithmic tick has no
-physical duration. The bypass probe uses x=52, y=11–17. Positive is left-to-right.
-The main-channel section is downstream in forward and upstream in reverse.
+physical duration. The lower-return probe uses x=76, y=34–38. Positive is
+left-to-right. The main-channel section is downstream in forward and upstream
+in reverse.
 Equal transient times can still have different internal storage, so these
 samples do not establish a steady-state resistance ratio.
 The bypass metric measures branch throughput, not vorticity or recirculation.
@@ -161,7 +165,8 @@ estimates. The UI retains forward/reverse samples and reports a magnitude
 difference only at matching ticks; setting/scene changes and edits clear them.
 Reset turns forcing off and clears fluid; restart a direction to reproduce a trial.
 
-Example deterministic C# observations at tick 1600 (25.6 simulated seconds for
+Historical single-loop geometry baseline (superseded by the six-return map):
+deterministic C# observations at tick 1600 (25.6 simulated seconds for
 momentum models only), default
 parameters except MAC velocity advection enabled:
 

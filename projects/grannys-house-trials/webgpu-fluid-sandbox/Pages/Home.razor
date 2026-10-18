@@ -37,7 +37,7 @@
                     <option value="0">Slope and spillway</option>
                     <option value="1">Enclosed basin</option>
                     <option value="2">Water slide</option>
-                    <option value="3">Single-stage Tesla channel</option>
+                    <option value="3">Tesla valve · six hooked returns</option>
                 </select>
             </label>
             <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ToggleRun" Disabled="@(!_initialized)">@(_running ? "Pause" : "Run")</FluentButton>
@@ -91,7 +91,7 @@
                 {
                     <p>Manual edits invalidate the controlled comparison. Restart a direction to restore the repeatable experiment.</p>
                 }
-                <p>Last completed tick only (not a steady-state estimate). Positive = left-to-right. Main-channel section x=75, y=29–36; bypass section x=52, y=11–17. @ExperimentMeasurementHelp Bypass flow measures branch throughput, not vorticity or closed-loop circulation.</p>
+                <p>Last completed tick only (not a steady-state estimate). Positive = left-to-right. Main-channel section x=75, y=30–33; lower-return section x=76, y=34–38. @ExperimentMeasurementHelp The return probe measures branch throughput, not vorticity or closed-loop circulation.</p>
                 <p>Record forward/reverse at identical ticks and settings. Different transient or steady results are measurements, not a claim of physical rectification.</p>
                 @if (_forwardSample is { } forward && _reverseSample is { } reverse)
                 {

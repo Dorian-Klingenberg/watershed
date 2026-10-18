@@ -257,8 +257,13 @@ foreach (var scene in Enum.GetValues<TerrainScene>())
     configurable.Reset();
     Assert(configurable.Scene == scene && bed.SequenceEqual(configurable.GetTerrainSnapshot()), $"{scene} reset restores selected terrain");
 }
-Assert(configurable.GetTerrainHeight(52, 14) == 0 && configurable.GetTerrainHeight(52, 24) == 48 &&
-    configurable.GetTerrainHeight(52, 32) == 0, "Tesla bypass has a separated solid island, not open cavity");
+Assert(Enumerable.Range(3, 90).All(x => configurable.GetTerrainHeight(x, 32) == 0),
+    "Tesla main passage remains continuous through both reservoirs");
+Assert(new[] { (25, 27), (36, 38), (47, 27), (58, 38), (69, 27), (80, 38) }
+    .All(cell => configurable.GetTerrainHeight(cell.Item1, cell.Item2) == 0),
+    "Tesla has six alternating upper/lower hooked return passages");
+Assert(configurable.GetTerrainHeight(48, 20) == 48 && configurable.GetTerrainHeight(48, 44) == 48 &&
+    configurable.GetTerrainHeight(52, 14) == 48, "Tesla banks remain solid outside the return passages");
 Assert(configurable.GetTerrainHeight(8, 32) == configurable.GetTerrainHeight(88, 32), "comparable flat reservoir bottoms");
 
 var advectionOff = new CellularFluidSimulation(9, 9, new int[81]);

@@ -13,6 +13,16 @@ public sealed class CellularFluidSimulation
 
     private const int MaximumDimension = 1024;
     private const int MaximumCellCount = 262_144;
+    private const double TeslaReturnHalfWidth = 1.3;
+    private static readonly (double X, double Y)[][] TeslaReturnPaths =
+    [
+        [(14, 32), (16, 32), (17, 31), (19, 30), (22, 28), (25, 26.5), (28, 26.5), (30, 28), (32, 29.5), (30.5, 31), (28.5, 30), (25, 28.5), (23, 28), (22, 30), (25, 32)],
+        [(25, 32), (27, 32), (28, 33), (30, 34), (33, 36), (36, 37.5), (39, 37.5), (41, 36), (43, 34.5), (41.5, 33), (39.5, 34), (36, 35.5), (34, 36), (33, 34), (36, 32)],
+        [(36, 32), (38, 32), (39, 31), (41, 30), (44, 28), (47, 26.5), (50, 26.5), (52, 28), (54, 29.5), (52.5, 31), (50.5, 30), (47, 28.5), (45, 28), (44, 30), (47, 32)],
+        [(47, 32), (49, 32), (50, 33), (52, 34), (55, 36), (58, 37.5), (61, 37.5), (63, 36), (65, 34.5), (63.5, 33), (61.5, 34), (58, 35.5), (56, 36), (55, 34), (58, 32)],
+        [(58, 32), (60, 32), (61, 31), (63, 30), (66, 28), (69, 26.5), (72, 26.5), (74, 28), (76, 29.5), (74.5, 31), (72.5, 30), (69, 28.5), (67, 28), (66, 30), (69, 32)],
+        [(69, 32), (71, 32), (72, 33), (74, 34), (77, 36), (80, 37.5), (83, 37.5), (85, 36), (87, 34.5), (85.5, 33), (83.5, 34), (80, 35.5), (78, 36), (77, 34), (80, 32)]
+    ];
     private readonly int[] _terrainHeights;
     private readonly int[] _initialTerrain;
     private readonly float[] _waterDepths;
@@ -491,13 +501,18 @@ public sealed class CellularFluidSimulation
                 z = Math.Abs(x - (48 + 18 * Math.Sin(y / 11.0))) < 7 ? Math.Max(0, 48 - y) : 64;
             if (scene == TerrainScene.Tesla)
             {
-                var reservoir = (x is >= 4 and <= 17 || x is >= 78 and <= 91) && y is >= 24 and <= 41;
-                var main = x is >= 12 and <= 83 && y is >= 29 and <= 36;
-                var bypass = DistanceToSegment(x, y, 30, 32, 43, 14) <= 3 ||
-                    DistanceToSegment(x, y, 43, 14, 62, 14) <= 3 ||
-                    DistanceToSegment(x, y, 62, 14, 72, 24) <= 3 ||
-                    DistanceToSegment(x, y, 72, 24, 64, 32) <= 3;
-                z = reservoir || main || bypass ? 0 : 48;
+                var reservoir = (x is >= 3 and <= 14 || x is >= 81 and <= 92) && y is >= 28 and <= 35;
+                var main = x is >= 3 and <= 92 && y is >= 30 and <= 33;
+                var inReturn = false;
+                foreach (var path in TeslaReturnPaths)
+                {
+                    if (DistanceSquaredToPolyline(x, y, path) <= TeslaReturnHalfWidth * TeslaReturnHalfWidth)
+                    {
+                        inReturn = true;
+                        break;
+                    }
+                }
+                z = reservoir || main || inReturn ? 0 : 48;
             }
             _initialTerrain[y * Width + x] = z;
         }
@@ -505,11 +520,22 @@ public sealed class CellularFluidSimulation
         Reset();
     }
 
-    private static double DistanceToSegment(double x, double y, double ax, double ay, double bx, double by)
+    private static double DistanceSquaredToPolyline(double x, double y, (double X, double Y)[] points)
     {
-        var t = Math.Clamp(((x - ax) * (bx - ax) + (y - ay) * (by - ay)) /
-            ((bx - ax) * (bx - ax) + (by - ay) * (by - ay)), 0, 1);
-        return Math.Sqrt(Math.Pow(x - ax - t * (bx - ax), 2) + Math.Pow(y - ay - t * (by - ay), 2));
+        var minimum = double.PositiveInfinity;
+        for (var i = 0; i < points.Length - 1; i++)
+        {
+            var (ax, ay) = points[i];
+            var (bx, by) = points[i + 1];
+            var dx = bx - ax;
+            var dy = by - ay;
+            var lengthSquared = dx * dx + dy * dy;
+            var t = lengthSquared == 0 ? 0 : Math.Clamp(((x - ax) * dx + (y - ay) * dy) / lengthSquared, 0, 1);
+            var differenceX = x - ax - t * dx;
+            var differenceY = y - ay - t * dy;
+            minimum = Math.Min(minimum, differenceX * differenceX + differenceY * differenceY);
+        }
+        return minimum;
     }
 
     public ReservoirForcing StartExperiment(ExperimentDirection direction, bool applyToReference)
@@ -518,7 +544,7 @@ public sealed class CellularFluidSimulation
             throw new InvalidOperationException("Select the Tesla scene and a flow direction.");
         Reset();
         Direction = direction;
-        for (var y = 26; y <= 39; y++)
+        for (var y = 28; y <= 35; y++)
         for (var x = 5; x <= 90; x++)
             if (x <= 11 || x >= 84)
                 _forcing[y * Width + x] = (x <= 11) == (direction == ExperimentDirection.Forward) ? 18 : 12;
@@ -545,8 +571,8 @@ public sealed class CellularFluidSimulation
             if (_forcing[i] >= 0) _waterDepths[i] = _forcing[i];
     }
 
-    public FlowProbe DischargeProbe => Probe(75, 29, 36);
-    public FlowProbe BypassProbe => Probe(52, 11, 17);
+    public FlowProbe DischargeProbe => Probe(75, 30, 33);
+    public FlowProbe BypassProbe => Probe(76, 34, 38);
     private FlowProbe Probe(int x, int top, int bottom) =>
         new(Enumerable.Range(top, bottom - top + 1).Select(y => 2 * (y * Width + x)).ToArray(),
             Enumerable.Repeat(1f / (12 * (Algorithm == FluidAlgorithm.Cellular ? 1 : TimeStepSeconds)),
