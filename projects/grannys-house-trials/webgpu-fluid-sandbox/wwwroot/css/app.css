@@ -44,9 +44,10 @@ button {
 }
 
 .workspace {
-    width: min(1180px, calc(100% - 48px));
-    margin: 0 auto;
-    padding: 54px 0 32px;
+    width: 100%;
+    min-height: 100vh;
+    margin: 0;
+    padding: 32px clamp(18px, 2vw, 48px) 24px;
 }
 
 .masthead,
@@ -86,6 +87,10 @@ h1 {
     font-size: clamp(2rem, 4vw, 3rem);
     font-weight: 620;
     letter-spacing: -0.045em;
+}
+
+.masthead h1:focus {
+    outline: none;
 }
 
 .intro,
@@ -132,12 +137,54 @@ h1 {
 
 .control-panel {
     flex-wrap: wrap;
-    padding: 18px 20px;
-    margin-bottom: 18px;
+    padding: 14px;
+    margin-bottom: 14px;
 }
 
 .control-copy {
     max-width: 450px;
+}
+
+.simulation-controls {
+    display: grid;
+    grid-template-columns: minmax(190px, 250px) minmax(0, 1fr);
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+}
+
+.algorithm-control {
+    display: grid;
+    gap: 5px;
+    color: #b2c0bc;
+    font-size: 0.8rem;
+}
+
+.algorithm-control select,
+.batch-control select,
+.batch-control input,
+.batch-control input[type="file"] {
+    min-height: 34px;
+    padding: 5px 8px;
+    border: 1px solid #435657;
+    border-radius: 6px;
+    color: #e7f0ee;
+    background: #111a1c;
+    font: inherit;
+}
+
+.algorithm-control select {
+    width: 100%;
+}
+
+.batch-control input[type="number"] {
+    width: 110px;
+}
+
+.batch-control input[type="file"] {
+    max-width: 190px;
+    padding: 3px;
+    font-size: 0.72rem;
 }
 
 .control-copy .eyebrow {
@@ -256,10 +303,59 @@ h1 {
     gap: 8px;
     color: #b2c0bc;
     font-size: 0.8rem;
+    min-width: 0;
 }
 
 .batch-control select {
     min-height: 32px;
+}
+
+.parameter-controls {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+    gap: 10px;
+}
+
+.control-group {
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid #304144;
+    border-radius: 10px;
+    background: #121c1edd;
+}
+
+.control-group h2 {
+    margin: 0 0 10px;
+    color: #dce9e5;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.control-group .actions {
+    justify-content: flex-start;
+    gap: 7px;
+}
+
+.control-group .spring-readout,
+.control-group .experiment-readout {
+    color: #b2c0bc;
+    font-size: 0.78rem;
+}
+
+.control-group .control-status {
+    margin: 8px 0 0;
+    color: #9eaeaa;
+    font-size: 0.74rem;
+    line-height: 1.4;
+}
+
+.advection-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #b2c0bc;
+    font-size: 0.78rem;
 }
 
 .performance, .readout {
@@ -417,16 +513,120 @@ footer {
     font-size: 0.74rem;
 }
 
+@media (min-width: 1200px) and (min-height: 1000px) {
+    .workspace {
+        padding-top: 20px;
+        padding-bottom: 18px;
+    }
+
+    .masthead {
+        margin-bottom: 14px;
+    }
+
+    .simulation-controls {
+        margin-bottom: 10px;
+    }
+
+    .field-card {
+        padding: 14px;
+    }
+
+    .card-heading {
+        margin-bottom: 10px;
+    }
+
+    .field-canvas {
+        height: min(40vh, 640px);
+        aspect-ratio: auto;
+    }
+
+    .vertical-navigation {
+        min-height: min(40vh, 640px);
+    }
+
+    .depth-legend {
+        gap: 6px;
+        margin: 7px 0;
+    }
+
+    .navigation-panel {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
+        align-items: center;
+        gap: 8px 14px;
+        margin-top: 10px;
+        padding: 10px 16px;
+    }
+
+    .navigation-panel input {
+        min-height: 30px;
+        margin: 0;
+    }
+
+    .navigation-panel p {
+        margin: 0;
+        line-height: 1.35;
+        white-space: nowrap;
+    }
+
+    .readout {
+        margin-top: 10px;
+        padding: 10px 16px;
+    }
+
+    .comparison {
+        margin-top: 10px;
+        padding: 12px 16px;
+    }
+
+    .parameter-controls {
+        gap: 8px;
+        padding: 10px;
+        margin-bottom: 0;
+    }
+
+    .control-group {
+        padding: 10px;
+    }
+}
+
+@media (min-width: 1900px) and (min-height: 1000px) {
+    .masthead {
+        margin-bottom: 10px;
+    }
+
+    .masthead h1 {
+        margin-bottom: 4px;
+        font-size: 2.5rem;
+    }
+
+    .performance {
+        margin-top: 6px;
+        padding-top: 7px;
+        padding-bottom: 7px;
+    }
+}
+
 @media (max-width: 760px) {
     .workspace {
-        width: min(100% - 28px, 560px);
-        padding-top: 30px;
+        width: 100%;
+        padding: 24px 14px;
     }
 
     .masthead,
     .control-panel {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .simulation-controls,
+    .parameter-controls {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .simulation-controls {
+        align-items: stretch;
     }
 
     .engine-status {
@@ -439,6 +639,11 @@ footer {
 
     .field-pair {
         grid-template-columns: 1fr;
+    }
+
+    .field-canvas {
+        height: auto;
+        aspect-ratio: 3 / 2;
     }
 
     .card-heading {
