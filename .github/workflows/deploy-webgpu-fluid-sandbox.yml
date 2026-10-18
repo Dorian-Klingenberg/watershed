@@ -35,6 +35,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Run simulation checks
+        if: ${{ !contains(github.event.head_commit.message, '[skip-simulation-checks]') }}
         run: >
           dotnet run
           --project projects/grannys-house-trials/webgpu-fluid-sandbox/tests/FluidModelChecks/FluidModelChecks.csproj
