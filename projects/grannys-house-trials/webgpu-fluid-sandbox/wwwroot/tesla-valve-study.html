@@ -38,47 +38,44 @@
 <main>
   <a class="back" href="./">← Back to Fluid Algorithm Lab</a>
   <p class="eyebrow">Geometry review · staggered MAC shallow water</p>
-  <h1>A Tesla valve should bias flow, not seal it</h1>
-  <p class="lede">A Tesla valve is a fixed, passive conduit. Its asymmetric side loops let flow pass in both directions, while the preferred direction should encounter less hydraulic resistance. Reverse flow is repeatedly diverted into loops and interacts with returning flow, increasing losses. It is a fluidic diode, not a one-way check valve.</p>
+  <h1>Model the interlocking passages, not side pockets</h1>
+  <p class="lede">The patent figure shows a long conduit filled with closely spaced, interleaved hooked passages. The curved returns alternate above and below the axis, and their narrow diagonal throats redirect flow through successive stages. My earlier sketch replaced this with three isolated U-shaped side pockets. That was the wrong topology.</p>
 
   <section class="panel">
-    <h2 style="margin-top:0">Proposed trial geometry</h2>
+    <h2 style="margin-top:0">Corrected, patent-inspired schematic</h2>
     <figure class="schematic">
       <svg viewBox="0 0 940 360" role="img" aria-labelledby="diagram-title diagram-desc" xmlns="http://www.w3.org/2000/svg">
-        <title id="diagram-title">Three-stage compact Tesla-valve candidate</title>
-        <desc id="diagram-desc">A straight four-cell-wide main channel carries easy flow from left to right. Three alternating side-loop branches each have a narrow upstream neck, a broad return pocket, and a shallow 30-degree merge pointed downstream. The same loop orientation repeats in every stage.</desc>
+        <title id="diagram-title">Alternating interlocking Tesla-valve passages</title>
+        <desc id="diagram-desc">A long conduit contains repeated hooked, re-entrant passages. Curved returns alternate above and below the centerline and overlap in sequence, creating narrow diagonal throats between stages. This is a conceptual topology sketch, not an exact tracing or dimensioned copy of Tesla's patent drawing.</desc>
         <defs>
           <marker id="arrow-water" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" fill="#147c78"/></marker>
           <marker id="arrow-hard" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" fill="#cf7542"/></marker>
         </defs>
-        <rect x="55" y="145" width="825" height="70" rx="8" fill="#d8eeeb" stroke="#17312f" stroke-width="4"/>
-        <path d="M245 145 L282 94 Q298 72 324 72 L377 72 Q410 72 426 99 L463 145" fill="none" stroke="#17312f" stroke-width="18" stroke-linejoin="round" stroke-linecap="round"/>
-        <path d="M446 215 L483 266 Q499 288 525 288 L578 288 Q611 288 627 261 L664 215" fill="none" stroke="#17312f" stroke-width="18" stroke-linejoin="round" stroke-linecap="round"/>
-        <path d="M645 145 L682 94 Q698 72 724 72 L777 72 Q810 72 826 99 L863 145" fill="none" stroke="#17312f" stroke-width="18" stroke-linejoin="round" stroke-linecap="round"/>
-        <path d="M95 179 H840" stroke="#147c78" stroke-width="5" marker-end="url(#arrow-water)"/>
-        <path d="M840 195 H95" stroke="#cf7542" stroke-width="4" stroke-dasharray="10 9" marker-end="url(#arrow-hard)"/>
-        <path d="M268 139 L300 99 Q309 88 326 88 H375 Q391 88 402 104 L430 140" fill="none" stroke="#cf7542" stroke-width="3" stroke-dasharray="6 6"/>
-        <path d="M469 221 L501 261 Q510 272 527 272 H576 Q592 272 603 256 L631 220" fill="none" stroke="#cf7542" stroke-width="3" stroke-dasharray="6 6"/>
-        <path d="M668 139 L700 99 Q709 88 726 88 H775 Q791 88 802 104 L830 140" fill="none" stroke="#cf7542" stroke-width="3" stroke-dasharray="6 6"/>
-        <text x="62" y="132" fill="#17312f" font-size="17" font-weight="700">LEFT · narrow ends first</text>
-        <text x="669" y="132" fill="#17312f" font-size="17" font-weight="700">RIGHT · broad scoops first</text>
-        <text x="286" y="52" fill="#17312f" font-size="16" font-weight="700">Stage 1</text>
-        <text x="496" y="328" fill="#17312f" font-size="16" font-weight="700">Stage 2</text>
-        <text x="704" y="52" fill="#17312f" font-size="16" font-weight="700">Stage 3</text>
-        <text x="90" y="250" fill="#147c78" font-size="15">Easier direction →</text>
-        <text x="675" y="250" fill="#a64c23" font-size="15">← Harder direction</text>
-        <text x="255" y="119" fill="#a64c23" font-size="13">~30° downstream return</text>
+        <rect x="55" y="72" width="825" height="216" rx="8" fill="#f1f8f6" stroke="#17312f" stroke-width="4"/>
+        <path d="M60 133 H154 C180 133 199 116 219 105 C245 90 280 88 300 101 C316 111 311 126 291 129 C269 132 247 122 230 130 C211 139 204 158 185 169 C161 183 128 181 111 169" fill="none" stroke="#17312f" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M145 229 H240 C266 229 285 246 305 257 C331 272 366 274 386 261 C402 251 397 236 377 233 C355 230 333 240 316 232 C297 223 290 204 271 193 C247 179 214 181 197 193" fill="none" stroke="#17312f" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M355 133 H449 C475 133 494 116 514 105 C540 90 575 88 595 101 C611 111 606 126 586 129 C564 132 542 122 525 130 C506 139 499 158 480 169 C456 183 423 181 406 169" fill="none" stroke="#17312f" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M440 229 H535 C561 229 580 246 600 257 C626 272 661 274 681 261 C697 251 692 236 672 233 C650 230 628 240 611 232 C592 223 585 204 566 193 C542 179 509 181 492 193" fill="none" stroke="#17312f" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M650 133 H744 C770 133 789 116 809 105 C835 90 870 88 880 96" fill="none" stroke="#17312f" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M72 155 C120 155 149 150 180 150 C216 150 230 172 264 172 C300 172 319 153 350 150 C390 146 425 151 455 151 C491 151 505 172 539 172 C575 172 594 153 625 150 C665 146 700 151 730 151 C766 151 785 170 820 165" fill="none" stroke="#147c78" stroke-width="4" marker-end="url(#arrow-water)"/>
+        <path d="M864 206 C810 206 779 211 748 211 C712 211 698 190 664 190 C628 190 609 209 578 212 C538 216 505 211 475 211 C439 211 425 190 391 190 C355 190 336 209 305 212 C265 216 230 211 200 211 C164 211 145 192 109 197" fill="none" stroke="#cf7542" stroke-width="4" stroke-dasharray="9 8" marker-end="url(#arrow-hard)"/>
+        <text x="74" y="111" fill="#17312f" font-size="15" font-weight="700">UPPER RETURN</text>
+        <text x="244" y="278" fill="#17312f" font-size="15" font-weight="700">LOWER RETURN</text>
+        <text x="404" y="111" fill="#17312f" font-size="15" font-weight="700">REPEATED CELL</text>
+        <text x="665" y="278" fill="#17312f" font-size="15" font-weight="700">ALTERNATING RETURN</text>
+        <text x="74" y="53" fill="#147c78" font-size="15">Main passage and narrow diagonal throats →</text>
+        <text x="610" y="315" fill="#a64c23" font-size="15">← Reverse flow meets return passages</text>
       </svg>
-      <figcaption>Conceptual top view, not to scale. Solid outlines show channel walls; cyan indicates the intended easy-direction main path and dashed rust arrows indicate the harder reverse pass. Each bypass opens from the upstream side, widens into a pocket, and rejoins downstream at a shallow angle. Keep every stage oriented the same way; alternate above/below only to fit the footprint.</figcaption>
+      <figcaption>Conceptual topology sketch, not to scale or a tracing of the patent. Unlike isolated side pockets, the return passages overlap along the conduit and alternate from one side to the other. The diagonal neck/return angles, spacing, curvature, and widths must be measured or swept in a revised grid trial before calling any one angle optimal.</figcaption>
     </figure>
-    <div class="callout"><strong>First candidate:</strong> three compact repeated loops, a four-cell-wide main run, roughly 18-cell-long branches, and a 30° downstream merge. Keep a 45° merge as the comparison case. The 30° candidate gave the strongest easy-versus-hard main-channel pulse-transfer split among the tested 30°, 45°, and 60° versions.</div>
+    <div class="callout"><strong>Revised recommendation:</strong> first reproduce the patent’s repeated, interleaved hooked channels in the 96 × 64 grid, alternating the return passage above and below the main route. Preserve a direct narrow throat beside each returning branch. Then sweep the throat/return angle (for example 30°, 45°, 60°) while holding cell pitch, widths, and pulse protocol constant. No angle is recommended yet: the earlier angle comparison used a different, non-patent side-pocket topology.</div>
   </section>
 
-  <h2>What was compared</h2>
-  <p>The trials used the exact C# staggered-MAC model from this sandbox, with first-order velocity advection enabled. The current terrain is a broad single bypass beside an eight-cell-wide straight run. Candidate layouts reduced the run to four cells, scaled each bypass down, and repeated the bypass three times. For each direction, twenty one-inch drops were added at 24-tick intervals at the inlet, for 100 cell-inches total, then the model advanced to tick 2400. “Center crossing” is the cumulative net volume crossing a full-width section at the middle of the main run, expressed in cell-inches. Branch storage is the final water held in the bypasses.</p>
-  <p class="note">For the pulse setup, left-to-right is called the intended easy direction: it meets the narrow branch neck before the wide scoop. Right-to-left meets the wide scoop first and is the intended harder direction. Results are transient comparisons from the same initially dry state. The far reservoir remained dry, so center crossing is not a completed source-to-reservoir throughput measurement.</p>
+  <h2>What the earlier trials do and do not show</h2>
+  <p>The previous pulse trials used the exact C# staggered-MAC model with first-order velocity advection enabled. They compared the existing broad single bypass against three small, isolated U-shaped side pockets. For each direction, twenty one-inch drops were added at 24-tick intervals at the inlet (100 cell-inches total), and the model advanced to tick 2400. “Center crossing” is cumulative net volume across a full-width section; branch storage is water remaining in the side pockets.</p>
+  <p class="note">Those trials were valid for comparing the two geometries that were actually rasterized, but neither candidate matches the patent’s interlocking, alternating passage sequence. The results below therefore do not validate the corrected schematic or select its angle. They remain useful evidence that transient pulse response and stored branch water can disagree with the fixed-head trial.</p>
 
-  <h2>Pulse-trial results</h2>
+  <h2>Earlier isolated side-pocket results</h2>
   <div class="panel table-wrap">
     <table>
       <thead><tr><th>Layout</th><th>Merge</th><th>Easy crossing</th><th>Hard crossing</th><th>Easy / hard</th><th>Easy / hard bypass storage</th></tr></thead>
@@ -89,11 +86,11 @@
         <tr><td>Three compact loops</td><td class="num">60°</td><td class="num">3.979</td><td class="num">4.150</td><td class="num">0.96</td><td class="num">7.009 / 9.836</td></tr>
       </tbody>
     </table>
-    <p class="note">Units for crossings and branch storage are cell-inches. Easy/hard crossing ratio above 1 favors the intended direction in this pulse protocol; it is not a diodicity or pressure-drop ratio. The 30° layout moved 18.6% more water across the center section in the easy direction and stored 38.5% more branch water in the hard direction. The 60° case slightly reversed the crossing preference.</p>
+    <p class="note">Units for crossings and branch storage are cell-inches. These labels describe the former side-pocket candidate only. Do not infer a 30° optimum for the patent-style geometry from this table. A proper directionality claim requires matched-flow pressure drop; this pulse protocol is only a transient screening measure.</p>
   </div>
 
   <h3>Orientation and model controls</h3>
-  <p>Mirroring the current single loop made main-channel pulse transfer nearly symmetric: 6.123 versus 6.153 cell-inches. The current layout also changes apparent preference with the test setup: its fixed-head equal-tick sample at tick 1600 favors forward discharge by about 10%, while the empty-start small-drop pulse moves 78% more water through the center in reverse. That mismatch is why the existing single-loop result should not be treated as dependable directional rectification.</p>
+  <p>Mirroring the former single loop made main-channel pulse transfer nearly symmetric: 6.123 versus 6.153 cell-inches. That layout also changes apparent preference with the test setup: its fixed-head equal-tick sample at tick 1600 favors forward discharge by about 10%, while the empty-start small-drop pulse moves 78% more water through the center in reverse. This is a warning against treating either old layout as a dependable Tesla-valve reproduction.</p>
   <p>With velocity advection disabled, the current layout crossed 5.301 cell-inches forward and 10.017 reverse in the same pulse protocol. This model’s response depends on transient storage and momentum treatment as well as the drawing.</p>
 
   <h2>Physics and limits</h2>
