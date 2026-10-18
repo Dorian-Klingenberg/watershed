@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Watershed — a game about water and consequences</title>
+  <style>
+    :root {
+      font-family: "Aptos", "Segoe UI", sans-serif;
+      color: #172b2b;
+      background: #e9eee8;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      --ink: #172b2b;
+      --water: #1d6670;
+      --leaf: #54734f;
+      --paper: #fbfaf5;
+    }
+
+    * { box-sizing: border-box; }
+
+    body { margin: 0; min-height: 100vh; }
+
+    main {
+      width: min(100vw, 1440px);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: clamp(1rem, 3vw, 2.75rem);
+      display: grid;
+      grid-template-rows: 1fr auto;
+      gap: 1rem;
+    }
+
+    .slide {
+      min-height: min(76vh, 850px);
+      padding: clamp(1.5rem, 5vw, 5rem);
+      border-radius: 1.5rem;
+      background: var(--paper);
+      box-shadow: 0 1rem 3rem #172b2b16;
+      align-content: center;
+      overflow: hidden;
+    }
+
+    .slide[hidden] { display: none; }
+    .eyebrow { color: var(--water); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    h1, h2, p { max-width: 22ch; }
+    h1 { margin: .3em 0; font-size: clamp(3rem, 8vw, 7.5rem); line-height: .98; }
+    h2 { margin: .25em 0 .5em; font-size: clamp(2.2rem, 5vw, 5rem); line-height: 1.04; }
+    p, li { font-size: clamp(1.15rem, 2vw, 1.8rem); line-height: 1.4; }
+    .lead { color: #38504c; font-size: clamp(1.4rem, 2.5vw, 2.2rem); }
+    .title-layout, .split, .demo-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: center;
+      gap: clamp(1.5rem, 5vw, 5rem);
+    }
+    figure { margin: 0; }
+    figure img {
+      display: block;
+      width: 100%;
+      max-height: 58vh;
+      object-fit: contain;
+      border-radius: 1rem;
+      background: #e5e8df;
+    }
+    figcaption { margin-top: .65rem; color: #53645d; font-size: 1rem; line-height: 1.4; }
+    blockquote {
+      max-width: 19ch;
+      margin: .5em 0;
+      color: var(--water);
+      font-size: clamp(2.5rem, 7vw, 6.5rem);
+      font-weight: 700;
+      line-height: 1.04;
+    }
+    .steps, .columns {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-top: 2.5rem;
+    }
+    .columns { grid-template-columns: repeat(3, 1fr); }
+    .card {
+      min-height: 10rem;
+      padding: 1.4rem;
+      border-radius: 1rem;
+      background: #e8eee5;
+    }
+    .card strong { display: block; margin-bottom: .5rem; color: var(--water); font-size: 1.35rem; }
+    .card p { margin: 0; font-size: clamp(1rem, 1.5vw, 1.3rem); }
+    .small-note { color: #53645d; font-size: 1rem; }
+    .controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      color: #38504c;
+    }
+    .controls button {
+      min-width: 7rem;
+      padding: .75rem 1rem;
+      border: 0;
+      border-radius: 999px;
+      color: white;
+      background: var(--water);
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .controls button:disabled { opacity: .45; cursor: default; }
+    .controls button:focus-visible { outline: 3px solid #c17632; outline-offset: 3px; }
+    .counter { min-width: 5rem; text-align: center; font-variant-numeric: tabular-nums; }
+
+    @media (max-width: 760px) {
+      main { padding: .75rem; }
+      .slide { min-height: 82vh; padding: 1.5rem; }
+      .title-layout, .split, .demo-layout { grid-template-columns: 1fr; }
+      .title-layout figure img { max-height: 34vh; }
+      .steps, .columns { grid-template-columns: 1fr 1fr; margin-top: 1rem; }
+      .card { min-height: auto; padding: 1rem; }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .slide { animation: arrive .25s ease-out; }
+      @keyframes arrive { from { opacity: .65; transform: translateY(.4rem); } }
+    }
+
+    @media print {
+      @page { size: landscape; margin: 0; }
+      body, main { width: 100%; min-height: 0; background: white; }
+      main { display: block; padding: 0; }
+      .slide, .slide[hidden] {
+        display: grid;
+        min-height: 100vh;
+        border-radius: 0;
+        box-shadow: none;
+        break-after: page;
+      }
+      .controls { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="slide title-layout" aria-label="Slide 1 of 8">
+      <div>
+        <p class="eyebrow">A game idea</p>
+        <h1>Watershed</h1>
+        <p class="lead">Explore a place shaped by old water systems. Make a repair. Find out what changes.</p>
+      </div>
+      <figure>
+        <img src="images/grannys-yard-concept.png" alt="Concept artwork showing a cozy rural house and garden">
+        <figcaption>A visual starting point for Granny’s House.</figcaption>
+      </figure>
+    </section>
+
+    <section class="slide" aria-label="Slide 2 of 8" hidden>
+      <p class="eyebrow">The question</p>
+      <blockquote>What if fixing a water problem here caused trouble over there?</blockquote>
+      <p class="lead">That’s the kind of mystery this game is about.</p>
+    </section>
+
+    <section class="slide" aria-label="Slide 3 of 8" hidden>
+      <p class="eyebrow">The simple idea</p>
+      <h2>Notice. Guess. Try. Learn.</h2>
+      <p class="lead">The world responds to what you change—and sometimes the result is not what you expected.</p>
+      <div class="steps">
+        <div class="card"><strong>1 · Notice</strong><p>Something is too wet, too dry, or not flowing.</p></div>
+        <div class="card"><strong>2 · Guess</strong><p>Look for the path water might be taking.</p></div>
+        <div class="card"><strong>3 · Try</strong><p>Make one careful change.</p></div>
+        <div class="card"><strong>4 · Learn</strong><p>See what improved—and what else changed.</p></div>
+      </div>
+    </section>
+
+    <section class="slide split" aria-label="Slide 4 of 8" hidden>
+      <div>
+        <p class="eyebrow">One small example</p>
+        <h2>Granny’s Yard</h2>
+        <p>Can you get water to the garden without soaking the cellar or softening the path?</p>
+        <p class="lead">A hidden old drain may connect places that look unrelated.</p>
+      </div>
+      <figure>
+        <img src="images/grannys-yard-map-study.png" alt="Early map study of a homestead, garden, and water routes">
+        <figcaption>A map study to help picture the yard and its water paths.</figcaption>
+      </figure>
+    </section>
+
+    <section class="slide split" aria-label="Slide 5 of 8" hidden>
+      <div>
+        <p class="eyebrow">The look and feel</p>
+        <h2>A familiar place with a hidden story</h2>
+        <p>A house, garden, and footpath sit above older channels. The pictures are concept art: a way to explore the setting, not a promise of finished game graphics.</p>
+      </div>
+      <figure>
+        <img src="images/house-concept-board.png" alt="House and landscape concept board for Granny’s House">
+        <figcaption>One of several visual explorations for the place.</figcaption>
+      </figure>
+    </section>
+
+    <section class="slide" aria-label="Slide 6 of 8" hidden>
+      <p class="eyebrow">What exists today</p>
+      <h2>Experiments, not a finished game</h2>
+      <div class="columns">
+        <div class="card"><strong>The game idea</strong><p>A world where understanding water and its side effects is part of play.</p></div>
+        <div class="card"><strong>A small 3D yard</strong><p>A prototype explores the place and includes an early, playable drainage round.</p></div>
+        <div class="card"><strong>A water-flow workbench</strong><p>A separate browser experiment helps us try water on shaped land.</p></div>
+      </div>
+      <p class="small-note">These pieces help us learn what the game could become. None is the complete game.</p>
+    </section>
+
+    <section class="slide demo-layout" aria-label="Slide 7 of 8" hidden>
+      <div>
+        <p class="eyebrow">A quick live experiment</p>
+        <h2>Watch water find a path</h2>
+        <p>In the browser workbench, shape the land, add water, and watch where it goes.</p>
+        <p class="small-note">This is a separate experiment—not a scene from the game. If the live demo is unavailable, this picture shows a sample terrain setup.</p>
+      </div>
+      <figure>
+        <img src="images/water-flow-demo-fallback.png" alt="A sample terrain map used in the water-flow experiment">
+        <figcaption>Fallback image from the water-flow workbench.</figcaption>
+      </figure>
+    </section>
+
+    <section class="slide" aria-label="Slide 8 of 8" hidden>
+      <p class="eyebrow">Your turn</p>
+      <h2>What part would you want to explore?</h2>
+      <p class="lead">And would you like to try making a tiny game experiment together?</p>
+      <p>There’s no need to know how games are made to have a good idea about what could be fun.</p>
+    </section>
+
+    <nav class="controls" aria-label="Presentation controls">
+      <button id="previous" type="button" aria-label="Previous slide">← Back</button>
+      <span class="counter" id="counter" aria-live="polite">1 / 8</span>
+      <span class="small-note">Use ← and → keys</span>
+      <button id="next" type="button" aria-label="Next slide">Next →</button>
+    </nav>
+  </main>
+  <script>
+    const slides = [...document.querySelectorAll(".slide")];
+    const counter = document.querySelector("#counter");
+    const previous = document.querySelector("#previous");
+    const next = document.querySelector("#next");
+    let current = 0;
+
+    function showSlide(index) {
+      current = Math.max(0, Math.min(index, slides.length - 1));
+      slides.forEach((slide, position) => {
+        slide.hidden = position !== current;
+        slide.setAttribute("aria-label", `Slide ${position + 1} of ${slides.length}`);
+      });
+      counter.textContent = `${current + 1} / ${slides.length}`;
+      previous.disabled = current === 0;
+      next.disabled = current === slides.length - 1;
+    }
+
+    previous.addEventListener("click", () => showSlide(current - 1));
+    next.addEventListener("click", () => showSlide(current + 1));
+    document.addEventListener("keydown", event => {
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.key === "ArrowLeft") showSlide(current - 1);
+      if (event.key === "ArrowRight" || event.key === " ") showSlide(current + 1);
+    });
+    showSlide(0);
+  </script>
+</body>
+</html>
