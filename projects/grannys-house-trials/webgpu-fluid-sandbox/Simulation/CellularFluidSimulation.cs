@@ -32,6 +32,9 @@ public sealed class CellularFluidSimulation
     private readonly float[] _transfers;
     private readonly float[] _scales;
     private readonly float[] _forcing;
+    private readonly float[] _springRates;
+    public const float SpringFlowIncrement = 0.25f;
+    public const float MaximumSpringFlow = 1000f;
 
     public CellularFluidSimulation(int width, int height, int[] terrainHeights)
     {
@@ -58,6 +61,7 @@ public sealed class CellularFluidSimulation
         _transfers = new float[_momentum.Length];
         _scales = new float[terrainHeights.Length];
         _forcing = Enumerable.Repeat(-1f, terrainHeights.Length).ToArray();
+        _springRates = new float[terrainHeights.Length];
     }
 
     public int Width { get; }
@@ -202,11 +206,63 @@ public sealed class CellularFluidSimulation
         }
     }
 
-    public void LoadTerrainSnapshot(int[] terrain)
+    public float AddSpring(int x, int y)
+    {
+        GetTerrainHeight(x, y);
+        var index = y * Width + x;
+        var next = _springRates[index] + SpringFlowIncrement;
+        if (next > MaximumSpringFlow) throw new InvalidOperationException("This spring has reached its maximum flow rate.");
+        return _springRates[index] = next;
+    }
+
+    public float GetSpringRate(int x, int y)
+    {
+        GetTerrainHeight(x, y);
+        return _springRates[y * Width + x];
+    }
+
+    public void RemoveSpring(int x, int y)
+    {
+        GetTerrainHeight(x, y);
+        _springRates[y * Width + x] = 0;
+    }
+
+    public void ClearSprings() => Array.Clear(_springRates);
+    public float[] GetSpringRates() => (float[])_springRates.Clone();
+    public SpringSource[] GetSpringSnapshot() => _springRates.Select((rate, i) => (rate, i))
+        .Where(item => item.rate > 0).Select(item => new SpringSource(item.i % Width, item.i / Width, item.rate)).ToArray();
+
+    private float[] ValidateSprings(SpringSource[]? springs)
+    {
+        var rates = new float[_springRates.Length];
+        if (springs is null) return rates;
+        if (springs.Length > rates.Length) throw new ArgumentException("Too many springs.", nameof(springs));
+        foreach (var source in springs)
+        {
+            if (source is null || (uint)source.X >= Width || (uint)source.Y >= Height ||
+                !float.IsFinite(source.FlowCubicFeetPerSecond) || source.FlowCubicFeetPerSecond <= 0 ||
+                source.FlowCubicFeetPerSecond > MaximumSpringFlow)
+                throw new ArgumentException("Spring positions and flow rates must be valid.", nameof(springs));
+            var index = source.Y * Width + source.X;
+            if (rates[index] != 0) throw new ArgumentException("Each cell can contain only one spring.", nameof(springs));
+            rates[index] = source.FlowCubicFeetPerSecond;
+        }
+        return rates;
+    }
+
+    private void ApplySprings()
+    {
+        for (var i = 0; i < _waterDepths.Length; i++)
+            _waterDepths[i] += _springRates[i] * TimeStepSeconds * 12;
+    }
+
+    public void LoadTerrainSnapshot(int[] terrain, SpringSource[]? springs = null)
     {
         ArgumentNullException.ThrowIfNull(terrain);
         if (terrain.Length != _terrainHeights.Length || terrain.Any(height => height is < 0 or > 4096))
             throw new ArgumentOutOfRangeException(nameof(terrain), "Map elevations must contain one 0–4096 in value per cell.");
+        var springRates = ValidateSprings(springs);
+        springRates.CopyTo(_springRates, 0);
         terrain.CopyTo(_initialTerrain, 0);
         terrain.CopyTo(_terrainHeights, 0);
         Scene = TerrainScene.InclineFlat;
@@ -249,6 +305,7 @@ public sealed class CellularFluidSimulation
         {
             StepMomentum();
             ApplyForcing();
+            ApplySprings();
             CycleCount++;
             return;
         }
@@ -330,6 +387,7 @@ public sealed class CellularFluidSimulation
 
         CycleCount++;
         ApplyForcing();
+        ApplySprings();
     }
 
     public int[] GetTerrainSnapshot() => (int[])_terrainHeights.Clone();
@@ -525,6 +583,7 @@ public sealed class CellularFluidSimulation
     {
         if (!Enum.IsDefined(scene)) throw new ArgumentOutOfRangeException(nameof(scene));
         if (Width != 96 || Height != 64) throw new InvalidOperationException("Scenes require the standard 96 × 64 field.");
+        ClearSprings();
         var slope = scene == TerrainScene.Slope ? CreateDefault().GetTerrainSnapshot() : null;
         for (var y = 0; y < Height; y++)
         for (var x = 0; x < Width; x++)
@@ -580,6 +639,7 @@ public sealed class CellularFluidSimulation
         if (Scene != TerrainScene.Tesla || direction == ExperimentDirection.None || !Enum.IsDefined(direction))
             throw new InvalidOperationException("Select the Tesla scene and a flow direction.");
         Reset();
+        ClearSprings();
         Direction = direction;
         for (var y = 28; y <= 35; y++)
         for (var x = 5; x <= 90; x++)

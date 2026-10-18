@@ -56,6 +56,15 @@
         </div>
     </section>
 
+    <section class="control-panel" aria-label="Springs">
+        <div class="actions">
+            <span role="status" class="spring-readout">Springs: @_simulation.GetSpringSnapshot().Length · total @_simulation.GetSpringSnapshot().Sum(s => s.FlowCubicFeetPerSecond).ToString("F2") ft³/s</span>
+            <FluentButton OnClick="RemoveSelectedSpringAsync" Disabled="@(!_initialized || SelectedSpringRate <= 0)">Remove selected spring</FluentButton>
+            <FluentButton OnClick="ClearSpringsAsync" Disabled="@(!_initialized || _simulation.GetSpringSnapshot().Length == 0)">Clear springs</FluentButton>
+        </div>
+        <p>Right-click creates a spring at that cell. Each repeated click adds 0.25 ft³/s. Green markers show springs; select one to see its rate. Run or Step releases water; Pause stops it. Reset keeps springs; changing terrain presets clears them. Pour 12 in remains a one-time pour.</p>
+    </section>
+
     <section class="control-panel" aria-label="Terrain editing and maps">
         <div class="actions">
             <label class="batch-control">Right-drag tool
@@ -70,7 +79,7 @@
                 <InputFile OnChange="ImportTerrainMapAsync" accept=".json,application/json" disabled="@(!_initialized)" />
             </label>
         </div>
-        <p>@_mapStatus Right-drag draws a 12 in raise stroke or lowers the bed by 12 in per stroke, down to 0 in. Save stores this terrain in this browser and downloads a JSON file you can send for review.</p>
+        <p>@_mapStatus Right-drag draws a 12 in raise stroke or lowers the bed by 12 in per stroke, down to 0 in. Save stores terrain and springs in this browser and downloads a JSON file you can send for review.</p>
     </section>
 
     <section class="control-panel" aria-label="Algorithm settings">
@@ -90,7 +99,7 @@
             }
             <FluentButton OnClick="RestoreDefaultsAsync" Disabled="@(!_initialized)">Restore algorithm defaults</FluentButton>
         </div>
-        <p>Changes pause and clear water, face state and ticks; edited terrain and camera stay unchanged.</p>
+        <p>Changes pause and clear water, face state and ticks; terrain, springs and camera stay unchanged. Springs use 0.016 seconds per tick in every mode; Cellular flow itself has no physical time calibration.</p>
         <p class="algorithm-help">@AlgorithmHelp</p>
     </section>
 
@@ -180,7 +189,7 @@
     <section class="navigation-panel" aria-label="Linked landscape navigation">
         <label for="landscape-scroll">Horizontal landscape position · both views</label>
         <input @ref="_landscapeScroll" id="landscape-scroll" type="range" min="0" max="95" value="48" step="0.1" />
-        <p>Left click: select · Left drag: orbit · Wheel over land: zoom · Right click: pour · Right drag: use the selected terrain tool.</p>
+        <p>Left click: select · Left drag: orbit · Wheel over land: zoom · Right click: create / increase spring · Right drag: use the selected terrain tool.</p>
         <p>Scroll the page using the margin or vertical scrollbar. Touch-drag over a view orbits; swipe outside it to scroll.</p>
         <p role="status">@_selectionText</p>
         <p role="status">@_referenceStatus</p>
@@ -266,7 +275,8 @@
     private IJSObjectReference? _mapModule;
     private string _terrainEditMode = "raise";
     private string _mapStatus = "Raise terrain is selected.";
-    private sealed record TerrainMapFile(int Version, string Name, int Width, int Height, int[] ElevationInches);
+    private sealed record TerrainMapFile(int Version, string Name, int Width, int Height, int[] ElevationInches, SpringSource[]? Springs = null);
+    private float SelectedSpringRate => _selectedIndex is int i ? _simulation.GetSpringRate(i % _simulation.Width, i / _simulation.Width) : 0;
     private ElementReference _cpuCanvas;
     private ElementReference _gpuCanvas;
     private ElementReference _landscapeScroll;
@@ -354,8 +364,8 @@
     }
 
     private string SerializeTerrainMap() => System.Text.Json.JsonSerializer.Serialize(
-        new TerrainMapFile(1, "incline-flat-workbench", _simulation.Width, _simulation.Height,
-            _simulation.GetTerrainSnapshot()));
+        new TerrainMapFile(2, "terrain-and-springs", _simulation.Width, _simulation.Height,
+            _simulation.GetTerrainSnapshot(), _simulation.GetSpringSnapshot()));
 
     private async Task UpdateTerrainMapCacheAsync()
     {
@@ -396,17 +406,17 @@
     {
         var map = System.Text.Json.JsonSerializer.Deserialize<TerrainMapFile>(json)
             ?? throw new InvalidDataException("The file is not a terrain map.");
-        if (map.Version != 1 || map.Width != _simulation.Width || map.Height != _simulation.Height || map.ElevationInches is null)
+        if (map.Version is not (1 or 2) || map.Width != _simulation.Width || map.Height != _simulation.Height || map.ElevationInches is null)
             throw new InvalidDataException("Map version or dimensions are not supported.");
         await StopRunAsync();
         await RunActionAsync(async () =>
         {
-            _simulation.LoadTerrainSnapshot(map.ElevationInches);
+            _simulation.LoadTerrainSnapshot(map.ElevationInches, map.Version == 2 ? map.Springs : null);
             _terrainForCpu = _simulation.GetTerrainSnapshot();
             _forwardSample = _reverseSample = null;
             await ResetBackendAsync();
             _mapStatus = $"Loaded {map.Name} · {_simulation.Width} × {_simulation.Height} terrain cells.";
-            _referenceStatus = "Saved terrain loaded · fluid cleared · camera preserved.";
+            _referenceStatus = "Saved terrain and springs loaded · fluid cleared · camera preserved.";
         });
     }
 
@@ -469,6 +479,7 @@
         _experiment = new(0, 0);
         _experimentModified = false;
         if (_gpuSupported) await Gpu.ResetAsync(_simulation, _cpuEnabled);
+        await Gpu.UpdateSpringsAsync(_simulation, _gpuSupported);
         await RenderCpuAsync();
         await UpdateTerrainMapCacheAsync();
     }
@@ -705,14 +716,14 @@
         {
             _simulation.GetTerrainHeight(x, y);
             _selectedIndex = y * _simulation.Width + x;
-            if (action == "pour")
+            if (action == "spring")
             {
                 _forwardSample = _reverseSample = null;
                 _experimentModified = _simulation.Direction != ExperimentDirection.None;
-                var delta = _simulation.AddWater(x, y, 1, PourDepthInches, _cpuEnabled);
-                if (_cpuEnabled) _summaryDirty = true;
+                _simulation.AddSpring(x, y);
                 _comparison = null;
-                if (_gpuSupported) await Gpu.ApplyEditsAsync(null, delta);
+                await Gpu.UpdateSpringsAsync(_simulation, _gpuSupported);
+                await UpdateTerrainMapCacheAsync();
             }
             else if (action is "barrier" or "carve")
             {
@@ -726,12 +737,27 @@
                 _mapStatus = _terrainEditMode == "carve" ? "Carved 12 in into the terrain." : "Raised terrain by 12 in.";
                 await UpdateTerrainMapCacheAsync();
             }
-            if (action is "pour" or "barrier" or "carve") await RenderCpuAsync();
+            if (action is "spring" or "barrier" or "carve") await RenderCpuAsync();
             _selectionText = $"Cell ({x}, {y}) · terrain {_simulation.GetTerrainHeight(x, y)} in";
+            if (SelectedSpringRate > 0) _selectionText += $" · spring {SelectedSpringRate:F2} ft³/s";
             if (_cpuEnabled) _selectionText += $" · CPU water {_simulation.GetCell(x, y).WaterDepth:F3} in";
         });
         if (!_disposed) await InvokeAsync(StateHasChanged);
     }
+
+    private Task RemoveSelectedSpringAsync() => ChangeSpringsAsync(false);
+    private Task ClearSpringsAsync() => ChangeSpringsAsync(true);
+    private Task ChangeSpringsAsync(bool clearAll) => RunActionAsync(async () =>
+    {
+        if (clearAll) _simulation.ClearSprings();
+        else if (_selectedIndex is int i) _simulation.RemoveSpring(i % _simulation.Width, i / _simulation.Width);
+        _forwardSample = _reverseSample = null;
+        _experimentModified = _simulation.Direction != ExperimentDirection.None;
+        _comparison = null;
+        await Gpu.UpdateSpringsAsync(_simulation, _gpuSupported);
+        await UpdateTerrainMapCacheAsync();
+        _selectionText = "Spring flow updated; existing water remains in the map.";
+    });
 
     private async Task CompareAsync()
     {
@@ -792,6 +818,7 @@
             var x = index % _simulation.Width;
             var y = index / _simulation.Width;
             _selectionText = $"Cell ({x}, {y}) · terrain {_simulation.GetTerrainHeight(x, y)} in";
+            if (SelectedSpringRate > 0) _selectionText += $" · spring {SelectedSpringRate:F2} ft³/s";
             if (_cpuEnabled) _selectionText += $" · CPU water {_simulation.GetCell(x, y).WaterDepth:F3} in";
             if (_gpuSupported && gpuDepth is double depth) _selectionText += $" · GPU water {depth:F3} in";
         }

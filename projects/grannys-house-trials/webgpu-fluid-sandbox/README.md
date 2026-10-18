@@ -26,7 +26,8 @@ The first implementation focuses on platform feasibility and the cellular-fluid 
 
 - Run/pause the GPU with an optional CPU reference, or manually advance one tick.
 - Explore a downhill channel, lower collecting area, and a barrier with a lower spillway.
-- Pour water uphill with the toolbar, or at a hovered cell with a right click.
+- Pour a one-time water packet with the toolbar. Right-click creates a continuous spring at that cell; repeated clicks increase its rate by 0.25 ft³/s. Sources emit on simulation ticks (0.016 s each), including batched GPU ticks; Pause stops them. Green markers and selection readouts identify springs. Remove one or clear all with the spring controls.
+- Reset and algorithm/settings changes preserve springs; selecting a terrain preset or starting a controlled reservoir experiment clears them. Saved maps include springs in version 2; version 1 terrain files still load without springs.
 - Choose **Raise terrain** or **Carve channel** and right-drag; carving lowers the bed by 12 in per pass to a 0 in floor.
 - Use the **Incline → flat workbench** preset to start with a 24 in descent into a broad level plain.
 - Save/export terrain as a JSON map, restore the browser-local save, or import a map file to continue editing and share it for review.
@@ -365,6 +366,12 @@ The companion documents hold the implementation decisions and follow-up question
   fault-injected; another check destroys the actual WebGPU device during a
   barrier upload and verifies explicit reset rather than mixed-state recovery.
   Physical driver resets remain untested.
+- Spring browser checks use the same disposable browser/server setup:
+  `node projects/grannys-house-trials/webgpu-fluid-sandbox/tests/springs-browser-checks.mjs`.
+  They exercise real repeated right-clicks, paused creation, source volume and
+  CPU/GPU agreement in all four algorithms with single and batched ticks,
+  GPU-only resume, source removal/reset, version-2 save/restore and importing
+  the version-1 playground terrain file without springs.
 - Publish static files with `dotnet publish projects/grannys-house-trials/webgpu-fluid-sandbox/WebGpuFluidSandbox.csproj --configuration Release`.
 - The GitHub Actions workflow publishes the app to GitHub Pages from `main`; set the repository's Pages source to **GitHub Actions** once in repository settings.
 - WebGPU requires a supporting browser and a secure context. When it is unavailable, the C# CPU model remains available.

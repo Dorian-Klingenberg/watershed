@@ -44,7 +44,7 @@ export function initialize(cpuCanvas, gpuCanvas, scrollbar, verticalScrollbar, d
         },
         span: Math.max(width, height) + (maximum - minimum) * heightScale,
         views: [], listeners: [], frame: null, queue: Promise.resolve(),
-        selected: null, hover: null, gesture: null, disposed: false,
+        selected: null, hover: null, gesture: null, disposed: false, springs: new Set(),
         order: null, orderAzimuth: null, terrainVersion: 0, metricTime: performance.now(), waits: new Set()
     };
     for (const canvas of [cpuCanvas, gpuCanvas]) {
@@ -267,6 +267,12 @@ function top(s, b, x, y, z) {
     ];
 }
 
+export function setSprings(sources) {
+    if (!state || state.disposed) return;
+    state.springs = new Set(sources.map(source => source.y * state.width + source.x));
+    schedule(state);
+}
+
 function draw(s, view) {
     const rect = view.canvas.getBoundingClientRect();
     view.width = Math.max(1, rect.width);
@@ -304,6 +310,12 @@ function draw(s, view) {
             s.selected?.index === index ? "#fff0a8" :
             s.hover?.index === index ? "#baf5ff" : null;
         if (outline) polygon(context, points, null, outline);
+        if (s.springs.has(index)) {
+            polygon(context, points, null, "#60ffc5");
+            const center = points.reduce((sum, p) => [sum[0] + p[0] / points.length, sum[1] + p[1] / points.length], [0, 0]);
+            context.beginPath(); context.arc(center[0], center[1], 3, 0, Math.PI * 2);
+            context.fillStyle = "#60ffc5"; context.fill();
+        }
     };
     const level = (x, y) => x < 0 || x >= s.width || y < 0 || y >= s.height
         ? s.base : s.ground[y * s.width + x] * heightScale;
@@ -521,7 +533,7 @@ function pointerUp(s, view, event) {
         if (gesture.button === 0) {
             dispatch(s, "select", gesture.hit, []);
         } else {
-            dispatch(s, "pour", gesture.hit, []);
+            dispatch(s, "spring", gesture.hit, []);
         }
     }
     s.hover = pick(s, view, local(view, event));

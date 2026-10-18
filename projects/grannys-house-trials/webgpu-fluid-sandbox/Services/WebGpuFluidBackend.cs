@@ -33,7 +33,7 @@ public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
     public ValueTask ResetAsync(CellularFluidSimulation simulation, bool cpuEnabled) =>
         Module.InvokeVoidAsync("reset", simulation.GetTerrainSnapshot(),
             simulation.GetResetWater(cpuEnabled),
-            (int)simulation.Algorithm, simulation.Settings, simulation.GetForcing());
+            (int)simulation.Algorithm, simulation.Settings, simulation.GetForcing(), simulation.GetSpringRates());
 
     public ValueTask<ExperimentReadout> MeasureAsync(CellularFluidSimulation simulation) =>
         Module.InvokeAsync<ExperimentReadout>("measure", simulation.DischargeProbe, simulation.BypassProbe);
@@ -51,6 +51,12 @@ public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
         _views = await jsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/landscape-view.js");
         await _views.InvokeVoidAsync("initialize", cpuCanvas, gpuCanvas, scrollbar, verticalScrollbar, callback,
             simulation.Width, simulation.Height, simulation.GetTerrainSnapshot(), simulation.GetWaterSnapshot());
+    }
+
+    public async ValueTask UpdateSpringsAsync(CellularFluidSimulation simulation, bool gpuSupported)
+    {
+        if (gpuSupported) await Module.InvokeVoidAsync("setSprings", simulation.GetSpringRates());
+        await Views.InvokeVoidAsync("setSprings", (object)simulation.GetSpringSnapshot());
     }
 
     public ValueTask StepAsync(int ticks) =>

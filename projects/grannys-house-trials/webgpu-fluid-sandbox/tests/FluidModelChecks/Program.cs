@@ -348,7 +348,52 @@ foreach (var algorithm in Enum.GetValues<FluidAlgorithm>())
     Assert(experiment.Direction == ExperimentDirection.None && experiment.GetForcing().Depths.All(v => v == -1),
         "explicit fallback/reset clears forcing metadata and constraints");
 }
-Console.WriteLine("All fluid model checks passed (settings, advection, scenes, repeatable Tesla measurements, four-algorithm lifecycle).");
+// Springs inject a flow per simulation tick, independently of presentation batching.
+foreach (var algorithm in Enum.GetValues<FluidAlgorithm>())
+{
+    var bowl = new int[9 * 9];
+    for (var y = 0; y < 9; y++) for (var x = 0; x < 9; x++)
+        if (x == 0 || y == 0 || x == 8 || y == 8) bowl[y * 9 + x] = 100;
+    var spring = new CellularFluidSimulation(9, 9, bowl);
+    spring.SelectAlgorithm(algorithm);
+    spring.Configure(new FluidSettings(MacAdvection: true));
+    AssertNear(0.25, spring.AddSpring(4, 4), 0, "first click creates quarter-cfs spring");
+    AssertNear(0, spring.GetSummary().TotalWater, 0, "creating spring does not pour a packet while paused");
+    for (var i = 0; i < 125; i++) spring.Step();
+    AssertNear(0.5, spring.GetSummary().TotalWater / 12, 0.001, $"{algorithm}: source injects correct volume over two seconds");
+    AssertNear(0.5, spring.AddSpring(4, 4), 0, "second click increases the same source");
+    Assert(spring.GetSpringSnapshot().Length == 1, "repeated click does not duplicate source");
+    for (var i = 0; i < 125; i++) spring.Step();
+    AssertNear(1.5, spring.GetSummary().TotalWater / 12, 0.001, $"{algorithm}: increased rate doubles subsequent injection");
+    spring.RemoveSpring(4, 4);
+    for (var i = 0; i < 25; i++) spring.Step();
+    AssertNear(1.5, spring.GetSummary().TotalWater / 12, 0.001, "removing spring stops new water without deleting old water");
+    spring.AddSpring(3, 3); spring.AddSpring(5, 5);
+    spring.Reset();
+    Assert(spring.GetSpringSnapshot().Length == 2 && spring.GetSummary().TotalWater == 0,
+        "reset keeps spring layout and clears water");
+    spring.Step();
+    AssertNear(0.5 * 0.016, spring.GetSummary().TotalWater / 12, 0.000001, "two distinct springs emit independently");
+    var saved = spring.GetSpringSnapshot();
+    spring.LoadTerrainSnapshot(bowl, saved);
+    Assert(spring.GetSpringSnapshot().SequenceEqual(saved), "terrain import restores spring locations and rates");
+    ExpectThrows<ArgumentException>(() => spring.LoadTerrainSnapshot(bowl, [saved[0], saved[0]]), "duplicate imported springs rejected");
+    ExpectThrows<ArgumentException>(() => spring.LoadTerrainSnapshot(bowl, [new(99, 3, 1)]), "out-of-bounds imported spring rejected");
+    ExpectThrows<ArgumentException>(() => spring.LoadTerrainSnapshot(bowl, [new(3, 3, float.NaN)]), "nonfinite imported rate rejected");
+    Assert(spring.GetSpringSnapshot().SequenceEqual(saved), "rejected import preserves existing springs");
+    spring.LoadTerrainSnapshot(bowl);
+    Assert(spring.GetSpringSnapshot().Length == 0, "legacy terrain-only import starts without springs");
+}
+var springScene = CellularFluidSimulation.CreateDefault();
+springScene.AddSpring(40, 30);
+springScene.Configure(new FluidSettings());
+Assert(springScene.GetSpringSnapshot().Length == 1, "settings changes preserve springs");
+springScene.SelectScene(TerrainScene.Tesla);
+Assert(springScene.GetSpringSnapshot().Length == 0, "scene change clears springs");
+springScene.AddSpring(40, 30);
+springScene.StartExperiment(ExperimentDirection.Forward, true);
+Assert(springScene.GetSpringSnapshot().Length == 0, "controlled reservoir experiment clears manual springs");
+Console.WriteLine("All fluid model checks passed (springs, settings, advection, scenes, repeatable Tesla measurements, four-algorithm lifecycle).");
 
 static void Assert(bool condition, string description)
 {

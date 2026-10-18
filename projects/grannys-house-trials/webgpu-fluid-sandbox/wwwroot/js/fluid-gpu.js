@@ -140,7 +140,7 @@ fn applyMomentum(@builtin(global_invocation_id) id: vec3<u32>) {
     var nextWater = max(0.0, waterIn[i] + delta);
     if (params.drainEdges != 0u &&
         (x == 0u || x + 1u == params.width || y == 0u || y + 1u == params.height)) { nextWater = 0.0; }
-    waterOut[i] = select(nextWater, forcing[i], forcing[i] >= 0.0);
+    waterOut[i] = select(nextWater, forcing[i], forcing[i] >= 0.0) + forcing[params.width * params.height + i] * 0.016 * 12.0;
     for (var axis = 0u; axis < 2u; axis++) {
         let neighbor = i + select(params.width, 1u, axis == 0u);
         var scale = scales[i];
@@ -282,7 +282,7 @@ fn apply(@builtin(global_invocation_id) invocation: vec3<u32>) {
         (x == 0u || x + 1u == params.width || y == 0u || y + 1u == params.height)) {
         nextWater = 0.0;
     }
-    waterOut[index] = select(nextWater, forcing[index], forcing[index] >= 0.0);
+    waterOut[index] = select(nextWater, forcing[index], forcing[index] >= 0.0) + forcing[params.width * params.height + index] * 0.016 * 12.0;
 }
 `;
 
@@ -327,7 +327,7 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
         });
         const edgeBuffer = device.createBuffer({ size: bufferSize * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
         const scaleBuffer = device.createBuffer({ size: bufferSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
-        const forcingBuffer = device.createBuffer({size: bufferSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
+        const forcingBuffer = device.createBuffer({size: bufferSize * 2, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
         device.queue.writeBuffer(forcingBuffer,0,new Float32Array(cellCount).fill(-1));
 
         const bindGroupLayout = device.createBindGroupLayout({
@@ -429,7 +429,7 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
     }
 }
 
-export async function reset(terrain, water, algorithm = 0, settings, forcing) {
+export async function reset(terrain, water, algorithm = 0, settings, forcing, springRates = null) {
     requireState();
     if (terrain.length !== state.cellCount) throw new Error("Terrain size does not match the field.");
     const nextTerrain = Array.from(terrain);
@@ -438,12 +438,20 @@ export async function reset(terrain, water, algorithm = 0, settings, forcing) {
     new DataView(state.params).setUint32(24, algorithm, true);
     writeSettings(state.params,settings);
     state.device.queue.writeBuffer(state.forcingBuffer,0,new Float32Array(forcing.depths));
+    setSprings(springRates ?? new Float32Array(state.cellCount));
     state.device.queue.writeBuffer(state.parameterBuffer, 0, state.params);
     state.device.queue.writeBuffer(state.momentumBuffer, 0, new Float32Array(state.cellCount * 2));
     state.device.queue.writeBuffer(state.terrainBuffer, 0, new Int32Array(nextTerrain));
     const values = new Float32Array(water);
     for(let i=0;i<values.length;i++) if(forcing.depths[i]>=0) values[i]=forcing.depths[i];
     await uploadWater(state, values, { terrain: nextTerrain, cycles: 0, algorithm, settings, direction:forcing.direction });
+}
+
+export function setSprings(rates) {
+    requireState();
+    if (rates.length !== state.cellCount || Array.from(rates).some(rate => !Number.isFinite(rate) || rate < 0 || rate > 1000))
+        throw new Error("Invalid spring rates.");
+    state.device.queue.writeBuffer(state.forcingBuffer, state.bufferSize, new Float32Array(rates));
 }
 
 export async function applyEdits(terrain, waterDelta) {
