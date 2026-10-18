@@ -42,6 +42,86 @@
         </div>
     </section>
 
+    <section class="control-panel parameter-controls" aria-label="Simulation setup">
+        <div class="control-group" aria-label="Springs">
+            <h2>Springs</h2>
+            <div class="actions">
+                <span role="status" class="spring-readout">Springs: @_simulation.GetSpringSnapshot().Length · @_simulation.GetSpringSnapshot().Sum(s => s.FlowCubicFeetPerSecond).ToString("F2") ft³/s</span>
+                <FluentButton OnClick="RemoveSelectedSpringAsync" Disabled="@(!_initialized || SelectedSpringRate <= 0)">Remove selected</FluentButton>
+                <FluentButton OnClick="ClearSpringsAsync" Disabled="@(!_initialized || _simulation.GetSpringSnapshot().Length == 0)">Clear</FluentButton>
+            </div>
+        </div>
+        <div class="control-group" aria-label="Terrain controls">
+            <h2>Terrain</h2>
+            <div class="actions">
+                <label class="batch-control">Scene
+                    <select value="@((int)_simulation.Scene)" @onchange="ChangeSceneAsync" disabled="@(!_initialized)" aria-label="Terrain scene">
+                        <option value="0">Slope and spillway</option>
+                        <option value="1">Enclosed basin</option>
+                        <option value="2">Water slide</option>
+                        <option value="3">Tesla valve · stamped bitmap map</option>
+                        <option value="4">Incline → flat workbench</option>
+                    </select>
+                </label>
+                <label class="batch-control">Edit
+                    <select value="@_terrainEditMode" @onchange="ChangeTerrainTool" disabled="@(!_initialized)" aria-label="Terrain editing tool">
+                        <option value="raise">Raise</option>
+                        <option value="carve">Carve</option>
+                    </select>
+                </label>
+                <FluentButton id="save-terrain-map" OnClick="SaveTerrainMapAsync" Disabled="@(!_initialized)">Save / export</FluentButton>
+                <FluentButton OnClick="RestoreSavedTerrainAsync" Disabled="@(!_initialized)">Restore</FluentButton>
+                <label class="batch-control">Import
+                    <InputFile OnChange="ImportTerrainMapAsync" accept=".json,application/json" disabled="@(!_initialized)" />
+                </label>
+            </div>
+            <p class="control-status" role="status">@_mapStatus</p>
+        </div>
+        <div class="control-group" aria-label="Flow controls">
+            <h2>Flow</h2>
+            <div class="actions">
+                @foreach (var knob in RelevantKnobs)
+                {
+                    <label class="batch-control">@knob.Label
+                        <input type="number" aria-label="@knob.Label" min="@knob.Min" max="@knob.Max" step="@knob.Step"
+                            value="@knob.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                            @onchange="e => ChangeSettingAsync(knob.Key, e)" disabled="@(!_initialized)" />
+                    </label>
+                }
+                @if (_simulation.Algorithm == FluidAlgorithm.Mac)
+                {
+                    <label class="advection-control"><input type="checkbox" aria-label="MAC velocity advection" checked="@_simulation.Settings.MacAdvection"
+                        @onchange="ChangeAdvectionAsync" disabled="@(!_initialized)" /> Upwind advection</label>
+                }
+                <FluentButton OnClick="RestoreDefaultsAsync" Disabled="@(!_initialized)">Defaults</FluentButton>
+            </div>
+        </div>
+        @if (_simulation.Scene == TerrainScene.Tesla)
+        {
+            <div class="control-group experiment-controls" aria-label="Tesla flow experiment">
+                <h2>Flow experiment</h2>
+                <div class="actions">
+                    <FluentButton OnClick="() => StartExperimentAsync(ExperimentDirection.Forward)" Disabled="@(!_initialized)">Forward</FluentButton>
+                    <FluentButton OnClick="() => StartExperimentAsync(ExperimentDirection.Reverse)" Disabled="@(!_initialized)">Reverse</FluentButton>
+                    <FluentButton OnClick="StepExperimentAsync" Disabled="@(!_initialized || _simulation.Direction == ExperimentDirection.None)">Advance 128 ticks</FluentButton>
+                    <span role="status" class="experiment-readout">@_simulation.Direction · @_experiment.Discharge.ToString("F5") @ExperimentFlowUnit · @_experiment.BypassFlow.ToString("F5") @ExperimentFlowUnit</span>
+                </div>
+                @if (_forwardSample is { } forward && _reverseSample is { } reverse)
+                {
+                    <p class="control-status">Forward @forward.Reading.Discharge.ToString("F5") at @forward.Tick · reverse @reverse.Reading.Discharge.ToString("F5") at @reverse.Tick</p>
+                    @if (forward.Tick == reverse.Tick)
+                    {
+                        <p class="control-status">Measured |forward| − |reverse|: @((Math.Abs(forward.Reading.Discharge) - Math.Abs(reverse.Reading.Discharge)).ToString("F5")) @ExperimentFlowUnit</p>
+                    }
+                }
+                @if (_experimentModified)
+                {
+                    <p class="control-status">Manual edits applied · restart an experiment to reset.</p>
+                }
+            </div>
+        }
+    </section>
+
     @if (_errorMessage is not null)
     {
         <div class="alert" role="alert">@_errorMessage</div>
