@@ -100,6 +100,12 @@ counts and maximum errors are reported separately, never combined across units;
 water-total error is in cell-inches. Reference re-enable explicitly starts a new
 independent baseline.
 
+Boundary direction is validated identity, not an implicit scene restore.
+Importing a forced baseline after Reset or into the opposite experiment is
+explicitly rejected before any state changes. Re-establish the matching scene
+and experiment direction before importing; same-direction re-enable/recovery
+retains the existing prescribed reservoir constraints.
+
 These are **adapted recreations, not exact ports or parameter-equivalent
 reproductions** of the earlier pipe-flux, terrain-head and MAC headers and lesson
 documents under `../subprojects/grass-field-003/`; none are dependencies. In
@@ -146,6 +152,9 @@ face transfers** across x=75, y=29–36, divided by 12 to convert depth to volum
 for 1-ft² cells. Momentum models additionally divide by their 0.016-s tick,
 yielding signed ft³/s. Cellular reports ft³/tick: its algorithmic tick has no
 physical duration. The bypass probe uses x=52, y=11–17. Positive is left-to-right.
+The main-channel section is downstream in forward and upstream in reverse.
+Equal transient times can still have different internal storage, so these
+samples do not establish a steady-state resistance ratio.
 The bypass metric measures branch throughput, not vorticity or recirculation.
 Readouts are the **last completed tick**, not time averages or steady-state
 estimates. The UI retains forward/reverse samples and reports a magnitude
@@ -194,7 +203,7 @@ the 1600-tick measurements above.
 Both views use the same renderer depth palette: fractional depths share their
 floor-inch band; deeper bands darken, and cyan boundaries mark neighboring
 1-inch band changes. Side faces use the same depth with darker shading; selection
-outlines remain distinct. The shared legend samples exact 1/2/3/6/12-in colors
+outlines remain distinct. The shared legend samples exact floor-inch colors 0–12
 from that renderer, not separate estimates. Shading continues beyond 18 in.
 Displays have finite color gamut, so arbitrarily deep adjacent inches cannot
 remain infinitely distinguishable; inspect the numeric depth readout for exact

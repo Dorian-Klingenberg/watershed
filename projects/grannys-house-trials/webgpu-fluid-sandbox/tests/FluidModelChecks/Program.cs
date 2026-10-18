@@ -298,7 +298,22 @@ foreach (var algorithm in Enum.GetValues<FluidAlgorithm>())
         experiment.StartExperiment(direction, true);
         for (var tick = 0; tick < 1600; tick++) experiment.Step();
         Assert(FluidComparison.Compare(copy, experiment.GetStateSnapshot()).Matches, "experiment is repeatable");
+        experiment.Reset();
+        ExpectThrows<ArgumentException>(() => experiment.SynchronizeState(copy),
+            "forced baseline import after Reset explicitly rejects missing boundary forcing");
+        Assert(experiment.CycleCount == 0 && experiment.GetSummary().TotalWater == 0,
+            "rejected post-reset import leaves reset state unchanged");
+        var opposite = direction == ExperimentDirection.Forward ? ExperimentDirection.Reverse : ExperimentDirection.Forward;
+        experiment.StartExperiment(opposite, true);
+        var oppositeState = experiment.GetStateSnapshot();
+        ExpectThrows<ArgumentException>(() => experiment.SynchronizeState(copy),
+            "opposite-direction baseline import explicitly rejects incompatible reservoir heads");
+        Assert(FluidComparison.Compare(oppositeState, experiment.GetStateSnapshot()).Matches,
+            "rejected opposite-direction import is atomic");
+        experiment.StartExperiment(direction, true);
         experiment.SynchronizeState(copy);
+        Assert(FluidComparison.Compare(copy, experiment.GetStateSnapshot()).Matches,
+            "re-establishing matching forcing permits exact complete-state resume after Reset");
         experiment.Step();
         AssertNear(forcing.Depths[32 * 96 + 8], experiment.GetCell(8, 32).WaterDepth, 0,
             "same-direction synchronization retains prescribed reservoir forcing");

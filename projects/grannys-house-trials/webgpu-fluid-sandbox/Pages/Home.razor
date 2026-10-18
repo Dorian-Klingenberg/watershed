@@ -85,12 +85,12 @@
             <div>
                 <p>Each experiment restores the same flat-bottom channel, pauses at tick 0, and fixes reservoir depths to 18 / 12 in (Δhead 6 in), swapped in reverse. Run or Step to advance. Unforced channel starts uniformly at 15 in.</p>
                 <p>Experimental depth-averaged model: no guaranteed resistance difference, check-valve closure, or resolved turbulence.</p>
-                <p role="status" class="experiment-readout">Direction: @_simulation.Direction · outlet section signed discharge @(_experiment.Discharge.ToString("F5")) @ExperimentFlowUnit · bypass section signed flow @(_experiment.BypassFlow.ToString("F5")) @ExperimentFlowUnit.</p>
+                <p role="status" class="experiment-readout">Direction: @_simulation.Direction · main-channel section signed discharge @(_experiment.Discharge.ToString("F5")) @ExperimentFlowUnit · bypass section signed flow @(_experiment.BypassFlow.ToString("F5")) @ExperimentFlowUnit.</p>
                 @if (_experimentModified)
                 {
                     <p>Manual edits invalidate the controlled comparison. Restart a direction to restore the repeatable experiment.</p>
                 }
-                <p>Last completed tick only (not a steady-state estimate). Positive = left-to-right. Outlet section x=75, y=29–36; bypass section x=52, y=11–17. @ExperimentMeasurementHelp Bypass flow measures branch throughput, not vorticity or closed-loop circulation.</p>
+                <p>Last completed tick only (not a steady-state estimate). Positive = left-to-right. Main-channel section x=75, y=29–36; bypass section x=52, y=11–17. @ExperimentMeasurementHelp Bypass flow measures branch throughput, not vorticity or closed-loop circulation.</p>
                 <p>Record forward/reverse at identical ticks and settings. Different transient or steady results are measurements, not a claim of physical rectification.</p>
                 @if (_forwardSample is { } forward && _reverseSample is { } reverse)
                 {
@@ -149,12 +149,12 @@
 
     <div class="depth-legend" aria-label="Water depth in inches">
         <span>Water depth · 1-inch bands</span>
-        <span class="depth-key depth-1">1 in</span>
-        <span class="depth-key depth-2">2 in</span>
-        <span class="depth-key depth-3">3 in</span>
-        <span class="depth-key depth-6">6 in</span>
-        <span class="depth-key depth-12">12 in</span>
-        <span>darker = deeper · outlines mark 1-inch changes</span>
+        @for (var band = 0; band < 12; band++)
+        {
+            <span class="depth-band"><span class="depth-swatch depth-@band"></span>@band–@(band + 1)</span>
+        }
+        <span class="depth-band"><span class="depth-swatch depth-12"></span>12+</span>
+        <span>Above 12 in continues darkening · contours mark band changes</span>
     </div>
 
     <section class="navigation-panel" aria-label="Linked landscape navigation">

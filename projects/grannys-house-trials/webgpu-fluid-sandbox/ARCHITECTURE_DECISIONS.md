@@ -147,7 +147,7 @@ are references for behavior and lessons only.
 - **Measurements:** C# defines signed face probes; the backend reads actual
   limited transfers, applies probe weights, and returns only two scalar rates.
   Transfer scratch is read back only while forcing is active; ordinary batches
-  retain the depth/face-state-only readback. Outlet discharge and bypass throughput are final-tick measurements, not
+  retain the depth/face-state-only readback. Main-channel discharge and bypass throughput are final-tick measurements, not
   circulation/vorticity or steady-state estimates. Equal-tick directional samples
   can differ without implying check-valve closure or guaranteed resistance.
   Momentum models report ft³/s using their 0.016-s tick; Cellular has no physical

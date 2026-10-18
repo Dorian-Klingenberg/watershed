@@ -97,9 +97,9 @@ const palette = await evaluate(`import('./js/landscape-view.js').then(({waterDep
         deeper18:color(18)!==color(19),
         safe:[-1,NaN,Infinity,-Infinity].every(v=>color(v)===color(0)),
         darkerSides:side.every((c,i)=>Math.abs(light(c)-light(top[i])*0.8)<0.0011),
-        legend:[1,2,3,6,12].every(n=>{
+        legend:Array.from({length:13},(_,n)=>n).every(n=>{
             const variable=getComputedStyle(document.documentElement).getPropertyValue('--water-depth-'+n).trim();
-            const swatch=document.querySelector('.depth-key.depth-'+n);
+            const swatch=document.querySelector('.depth-swatch.depth-'+n);
             return variable===color(n)&&swatch&&getComputedStyle(swatch).backgroundColor===normalize(color(n));
         }),
         labelled:!!document.querySelector('[aria-label="Water depth in inches"]')
@@ -107,6 +107,10 @@ const palette = await evaluate(`import('./js/landscape-view.js').then(({waterDep
 })`);
 for(const [check,passed] of Object.entries(palette)) assert(passed,`shared renderer depth palette: ${check}`);
 console.log("Shared inch-band palette and exact legend colors passed.");
+if(process.env.FLUID_PALETTE_ONLY==="1"){
+    ws.close();
+    process.exit(0);
+}
 await evaluate(`(() => {
     window.validationCpuDraws=0;
     const original=CanvasRenderingContext2D.prototype.fillRect;
