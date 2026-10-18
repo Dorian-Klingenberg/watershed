@@ -21,12 +21,18 @@ const send = (method, params = {}) => new Promise((resolve, reject) => {
     pending.set(id, {resolve, reject});
     ws.send(JSON.stringify({id, method, params}));
 });
-const evaluate = async expression => {
-    const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
-    if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
-    return result.result.value;
-};
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const evaluate = async expression => {
+    const deadline = Date.now() + 90000;
+    while (true) {
+        const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
+        if (!result.exceptionDetails) return result.result.value;
+        const error = JSON.stringify(result.exceptionDetails);
+        // A reset upload deliberately rejects snapshots until its complete baseline is ready.
+        if (!error.includes('An incomplete GPU reset or edit') || Date.now() >= deadline) throw new Error(error);
+        await sleep(200);
+    }
+};
 const wait = async (expression, timeout = 90000) => {
     const start = Date.now();
     while (!await evaluate(expression)) {
@@ -95,7 +101,12 @@ const saved=await evaluate(`JSON.parse(localStorage.getItem('webgpu-fluid-sandbo
 assert.equal(saved.Version,2);assert.equal(saved.Springs.length,1);assert.equal(saved.Springs[0].FlowCubicFeetPerSecond,.5);
 for(let algorithm=0;algorithm<4;algorithm++) {
  await select('Fluid algorithm',algorithm);
- if(algorithm===3){await evaluate(`document.querySelector('[aria-label="MAC velocity advection"]').click()`);await sleep(300);}
+ await wait(`import('./js/fluid-gpu.js').then(m=>m.snapshot()).then(s=>s.algorithm===${algorithm}&&s.cycles===0)`);
+ if(algorithm===3){
+  await wait(`!!document.querySelector('[aria-label="MAC velocity advection"]')`);
+  await evaluate(`document.querySelector('[aria-label="MAC velocity advection"]').click()`);
+  await wait(`import('./js/fluid-gpu.js').then(m=>m.snapshot()).then(s=>s.settings.macAdvection===true)`);
+ }
  await click('Step both');await wait(`import('./js/fluid-gpu.js').then(m=>m.snapshot()).then(s=>s.cycles===1)`);
  snapshot=await evaluate(`import('./js/fluid-gpu.js').then(m=>m.snapshot())`);
  assert.equal(snapshot.cycles,1);assert(Math.abs(snapshot.water.reduce((a,b)=>a+b,0)/12-.5*.016)<1e-6,`algorithm ${algorithm}: single-tick volume`);
