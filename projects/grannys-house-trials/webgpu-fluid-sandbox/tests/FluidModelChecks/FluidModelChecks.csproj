@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Include="../../Simulation/CellularFluidSimulation.cs" Link="CellularFluidSimulation.cs" />
     <Compile Include="../../Simulation/FluidComparison.cs" Link="FluidComparison.cs" />
+    <Compile Include="../../Simulation/FluidSettings.cs" Link="FluidSettings.cs" />
   </ItemGroup>
 
 </Project>

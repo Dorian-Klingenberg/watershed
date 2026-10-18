@@ -234,7 +234,82 @@ foreach (var algorithm in Enum.GetValues<FluidAlgorithm>())
     }
 }
 
-Console.WriteLine("All fluid model checks passed (four algorithms, complete-state lifecycle and terrain behavior).");
+var configurable = CellularFluidSimulation.CreateDefault();
+foreach (var settings in new[] { new FluidSettings(CellularMaxFlow: float.NaN),
+    new FluidSettings(PipeArea: 0), new FluidSettings(PipeRetention: 1.1f),
+    new FluidSettings(ManningRoughness: -1), new FluidSettings(MacDamping: 6) })
+    ExpectThrows<ArgumentOutOfRangeException>(() => configurable.Configure(settings), "invalid settings rejected");
+configurable.AddBarrier([100]);
+var retainedTerrain = configurable.GetTerrainSnapshot();
+configurable.AddCenterWater(1, 12);
+configurable.Step();
+configurable.Configure(new(MacAdvection: true));
+Assert(configurable.GetTerrainSnapshot().SequenceEqual(retainedTerrain) && configurable.CycleCount == 0 &&
+    configurable.GetSummary().TotalWater == 0, "settings clear fluid, preserving edited terrain");
+ExpectThrows<ArgumentException>(() => configurable.SynchronizeState(configurable.GetStateSnapshot() with
+    { Settings = new() }), "mismatched baseline settings rejected");
+
+foreach (var scene in Enum.GetValues<TerrainScene>())
+{
+    configurable.SelectScene(scene);
+    var bed = configurable.GetTerrainSnapshot();
+    configurable.AddBarrier([200]);
+    configurable.Reset();
+    Assert(configurable.Scene == scene && bed.SequenceEqual(configurable.GetTerrainSnapshot()), $"{scene} reset restores selected terrain");
+}
+Assert(configurable.GetTerrainHeight(52, 14) == 0 && configurable.GetTerrainHeight(52, 24) == 48 &&
+    configurable.GetTerrainHeight(52, 32) == 0, "Tesla bypass has a separated solid island, not open cavity");
+Assert(configurable.GetTerrainHeight(8, 32) == configurable.GetTerrainHeight(88, 32), "comparable flat reservoir bottoms");
+
+var advectionOff = new CellularFluidSimulation(9, 9, new int[81]);
+advectionOff.SelectAlgorithm(FluidAlgorithm.Mac);
+var advectionOn = new CellularFluidSimulation(9, 9, new int[81]);
+advectionOn.SelectAlgorithm(FluidAlgorithm.Mac);
+advectionOn.Configure(new(MacAdvection: true));
+var moving = advectionOff.GetStateSnapshot();
+Array.Fill(moving.Water, 12);
+moving.Momentum[2 * 40] = 2;
+moving.Momentum[2 * 41] = 1;
+advectionOff.SynchronizeState(moving);
+advectionOn.SynchronizeState(moving with { Settings = advectionOn.Settings });
+advectionOff.Step(); advectionOn.Step();
+Assert(!advectionOff.GetStateSnapshot().Momentum.SequenceEqual(advectionOn.GetStateSnapshot().Momentum), "advection toggle changes actual velocity evolution");
+
+foreach (var algorithm in Enum.GetValues<FluidAlgorithm>())
+{
+    var experiment = CellularFluidSimulation.CreateDefault();
+    experiment.SelectScene(TerrainScene.Tesla);
+    experiment.SelectAlgorithm(algorithm);
+    experiment.Configure(new(MacAdvection: true));
+    foreach (var direction in new[] { ExperimentDirection.Forward, ExperimentDirection.Reverse })
+    {
+        var forcing = experiment.StartExperiment(direction, true);
+        Assert(forcing.Depths[32 * 96 + 8] == (direction == ExperimentDirection.Forward ? 18 : 12) &&
+            forcing.Depths[32 * 96 + 88] == (direction == ExperimentDirection.Forward ? 12 : 18), "heads swap, equal imposed difference");
+        for (var tick = 0; tick < 1600; tick++) experiment.Step();
+        var measured = experiment.MeasureExperiment();
+        var flowUnit = algorithm == FluidAlgorithm.Cellular ? "ft3/tick" : "ft3/s";
+        Console.WriteLine($"Tesla {algorithm} advection={experiment.Settings.MacAdvection} {direction} tick={experiment.CycleCount}: Q={measured.Discharge:F7} {flowUnit}; bypass={measured.BypassFlow:F7} {flowUnit}");
+        AssertNear(algorithm == FluidAlgorithm.Cellular ? 1f / 12 : 1f / (12 * 0.016f),
+            experiment.DischargeProbe.Weights[0], 0.000001, "probe units distinguish algorithmic ticks from physical seconds");
+        Assert(experiment.GetWaterSnapshot().All(v => v >= 0 && float.IsFinite(v)), "forced experiment remains finite");
+        AssertNear(forcing.Depths[32 * 96 + 8], experiment.GetCell(8, 32).WaterDepth, 0, "fixed reservoir head is maintained");
+        var copy = experiment.GetStateSnapshot();
+        experiment.StartExperiment(direction, true);
+        for (var tick = 0; tick < 1600; tick++) experiment.Step();
+        Assert(FluidComparison.Compare(copy, experiment.GetStateSnapshot()).Matches, "experiment is repeatable");
+        experiment.SynchronizeState(copy);
+        experiment.Step();
+        AssertNear(forcing.Depths[32 * 96 + 8], experiment.GetCell(8, 32).WaterDepth, 0,
+            "same-direction synchronization retains prescribed reservoir forcing");
+    }
+    experiment.StartExperiment(ExperimentDirection.Forward, false);
+    Assert(experiment.CycleCount == 0 && experiment.GetSummary().TotalWater == 0, "CPU-off forcing does not populate frozen CPU state");
+    experiment.Reset();
+    Assert(experiment.Direction == ExperimentDirection.None && experiment.GetForcing().Depths.All(v => v == -1),
+        "explicit fallback/reset clears forcing metadata and constraints");
+}
+Console.WriteLine("All fluid model checks passed (settings, advection, scenes, repeatable Tesla measurements, four-algorithm lifecycle).");
 
 static void Assert(bool condition, string description)
 {

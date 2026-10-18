@@ -9,8 +9,8 @@ that remains intentionally outside its scope.
   after assessing the linked projected-column views.
 - [ ] Revisit remaining historical heightfield SWE, virtual-pipe, O'Brien volume-only,
   slosh scenario presets, and hydraulic erosion/rain branches after the four models.
-- [ ] Consider a scenario picker separately from algorithm/execution selection.
-- [ ] Consider MAC velocity self-advection (currently omitted/off).
+- [ ] Assess longer-time convergence and calibrated Tesla geometries; current
+  depth-averaged forward/reverse measurements are experimental, not guaranteed resistance.
 - [ ] Evaluate additional browsers after the initial Chrome target.
 - [ ] Decide whether the provisional project name should change.
 - [ ] Reassess dedicated workers only after profiling; do not assume Pages provides
@@ -19,6 +19,9 @@ that remains intentionally outside its scope.
 ## First-slice choices already made
 
 - [x] Use Blazor WebAssembly with Fluent UI Blazor controls.
+- [x] Add validated per-model settings, restore defaults, and real optional MAC velocity advection.
+- [x] Separate terrain selection from algorithms: slope, basin, slide, single-stage Tesla.
+- [x] Add repeatable equal-head forward/reverse reservoir trials and actual transfer-rate probes.
 - [x] Keep the app independent of earlier implementations.
 - [x] Implement the cellular-fluid model in both C# and WGSL.
 - [x] Add paired Pipe-flux, Terrain-head and staggered MAC models, preserving the current

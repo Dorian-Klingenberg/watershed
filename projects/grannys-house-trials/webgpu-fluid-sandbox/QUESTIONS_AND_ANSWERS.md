@@ -25,7 +25,7 @@ current confirmed scope is recorded below.
 
 Four real numeric models now run on both C# and WebGPU: Cellular, Pipe-flux
 shallow water, Terrain-head pipe flow, and staggered MAC shallow water. The
-existing landscape remains the shared scenario; execution optimizations and
+terrain selector is independent of the algorithm; execution optimizations and
 historical scenario names are not presented as extra algorithms.
 
 Changing algorithm pauses and clears depths, face rates/velocities and ticks,
@@ -34,9 +34,33 @@ starting scene while retaining the chosen algorithm. Complete-state comparison,
 reference re-enable and GPU-failure recovery include all face state, not just
 water depths. Pipe-flux uses linearly damped volume rates, Terrain-head adds
 depth-dependent rough-bed friction, and MAC transports donor depth with genuine
-face velocity state. MAC velocity advection and other historical/erosion
-branches are explicitly deferred. See README for units, numerical safeguards,
+face velocity state. MAC velocity advection is now a real optional first-order
+upwind stage (default off); other historical/erosion branches remain deferred.
+See README for units, numerical safeguards,
 comparison tolerance and behavioral references.
+
+### Approved settings and terrain experiments follow-up
+
+C# owns validated immutable settings for each model: cellular max flow/settle,
+pipe area/retention, terrain-head area/roughness, MAC damping/advection. Only
+relevant controls appear. Changes pause and reset complete fluid state without
+discarding terrain edits or camera; restore defaults affects the current model.
+Synchronization/comparison includes settings identity.
+
+The scene picker provides slope, enclosed basin, water slide, and a flat-bottom
+single-stage Tesla channel with a separate, well-resolved bypass and solid
+island. Reset restores the selected terrain. Forward/reverse experiment controls
+restore identical initial wetting and swap fixed 18/12-in reservoir heads.
+C# generates those constraints; GPU kernels and CPU implement the same forcing.
+CPU-off still skips CPU reference state work.
+
+Discharge and bypass throughput use signed actual face transfers. Momentum
+models divide by their 0.016-s tick and report ft³/s. Cellular has no physical
+tick duration and instead reports ft³/tick; no physical rate is implied.
+They are not circulation/vorticity or guaranteed steady flow.
+The depth-averaged scene is an experimental passive-geometry test, not a promise
+of check-valve closure or directional resistance. README records measured
+equal-time forward/reverse results, including essentially symmetric pipe-flux flow.
 
 ### Approved interactive follow-up
 

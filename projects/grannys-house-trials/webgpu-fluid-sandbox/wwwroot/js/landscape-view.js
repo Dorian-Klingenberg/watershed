@@ -5,6 +5,13 @@ let state = null;
 
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
+export function waterDepthColor(depth, side = false) {
+    const band = Math.floor(Number.isFinite(depth) ? Math.max(0, depth) : 0);
+    const light = band === 0 ? 60 : band <= 12 ? 52 - 2 * band
+        : band <= 72 ? 28 - 0.3 * (band - 12) : 10 / (1 + 0.02 * (band - 72));
+    return `hsl(${201 + Math.min(band * 0.35, 25)} 82% ${(light * (side ? 0.8 : 1)).toFixed(3)}%)`;
+}
+
 function snapshot(values, count) {
     if (!values || values.length !== count) {
         throw new Error(`Landscape snapshots require ${count} cells.`);
@@ -50,6 +57,9 @@ export function initialize(cpuCanvas, gpuCanvas, scrollbar, verticalScrollbar, d
         });
     }
     state = s;
+    for (let depth = 0; depth <= 12; depth++) {
+        document.documentElement.style.setProperty(`--water-depth-${depth}`, waterDepthColor(depth));
+    }
     for (const view of s.views) {
         view.canvas.style.touchAction = "none";
         listen(s, view.canvas, "pointerdown", event => pointerDown(s, view, event));
@@ -335,13 +345,40 @@ function draw(s, view) {
                 ], color, null);
                 if (side.points) face(side.points, side.color, null);
                 const waterBottom = Math.max(z, surface(side.nx, side.ny));
-                if (waterZ > waterBottom + 0.00035) sideFace(waterBottom, waterZ, "#216a96");
+                if (waterZ > waterBottom + 0.00035) {
+                    sideFace(waterBottom, waterZ, waterDepthColor(view.water[index], true));
+                }
             }
             if (waterZ > z + 0.00035) {
                 const waterDepth = Math.max(0, view.water[index]);
-                const light = Math.round(54 - Math.min(waterDepth, 18));
-                face(top(s, b, x, y, waterZ),
-                    `hsl(201 65% ${light}%)`, index);
+                const points = top(s, b, x, y, waterZ);
+                face(points, waterDepthColor(waterDepth), index);
+                // Depth contours remain readable when adjacent deep blues look similar.
+                const band = Math.floor(waterDepth);
+                const neighbors = [y > 0 ? index - s.width : -1,
+                    x + 1 < s.width ? index + 1 : -1,
+                    y + 1 < s.height ? index + s.width : -1,
+                    x > 0 ? index - 1 : -1];
+                let contour = false;
+                for (let edge = 0; edge < 4; edge++) {
+                    const neighbor = neighbors[edge];
+                    if (neighbor < 0 || view.water[neighbor] <= 0.001 ||
+                        Math.floor(view.water[neighbor]) === band) continue;
+                    if (!contour) { context.beginPath(); contour = true; }
+                    context.moveTo(...points[edge]);
+                    context.lineTo(...points[(edge + 1) % 4]);
+                }
+                if (contour) {
+                    context.strokeStyle = "rgba(135, 205, 255, 0.55)";
+                    context.lineWidth = 0.7;
+                    context.stroke();
+                    context.lineWidth = 1.5;
+                }
+                if (preview?.has(index) || s.selected?.index === index || s.hover?.index === index) {
+                    const outline = preview?.has(index) ? "#ffb454" :
+                        s.selected?.index === index ? "#fff0a8" : "#baf5ff";
+                    polygon(context, points, null, outline);
+                }
             }
     }
 }

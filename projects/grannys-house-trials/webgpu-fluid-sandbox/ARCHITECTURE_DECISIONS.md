@@ -102,7 +102,8 @@ are references for behavior and lessons only.
 - **State:** C# owns algorithm identity, fixed-step/unit policy and independent
   reference depth plus all signed face state. WGSL reproduces those equations.
   Cellular uses two passes; momentum models use edge proposal, donor-budget
-  limiting, then depth divergence/state commit. Face state is shared on each
+  limiting, then depth divergence/state commit. Enabled MAC advection adds a
+  preceding velocity pass into existing edge scratch storage. Face state is shared on each
   interior east/south edge; exterior faces are implicit zero.
 - **Lifecycle:** Switching pauses and clears all fluid/ticks, preserving current
   terrain and camera. Reset retains algorithm but restores starting terrain.
@@ -114,14 +115,44 @@ are references for behavior and lessons only.
   counts and maximum errors stay separate, not mixed across units.
 - **Limits:** Fixed 0.016 s momentum ticks, local Courant speed cap and 25% donor
   budget target ordinary pours, not arbitrary flood magnitudes. Terrain crests
-  are overtoppable, never absolute-height walls. MAC velocity advection,
-  additional historical models, erosion and scenario selection remain deferred.
+  are overtoppable, never absolute-height walls. Additional historical models
+  and erosion remain deferred.
   See README for equations, units and deliberate departures from C++ references.
 - **Fidelity:** The momentum solvers are adapted recreations, not exact C++ ports.
   The browser uses its own documented timestep, pipe area, friction and shared-edge
   storage; C#/WGSL comparisons validate matching browser equations, not the old
   executable's trajectories or byte-identical floating-point results. Pours retain
   face impulse; terrain edits invalidate only changed cells' incident faces.
+
+### ADR-009: Validated settings and controlled terrain experiments
+
+- **Status:** Accepted and implemented
+- **Decision:** Keep immutable validated per-algorithm settings and terrain/forcing
+  policies in C#. Expose only relevant knobs; restore defaults for the current
+  algorithm. Any setting change pauses and clears full fluid state, preserving
+  terrain/camera. Complete-state baselines include settings identity.
+- **MAC:** Optional first-order upwind staggered velocity advection is real in
+  both implementations. It precedes pressure/drag and the existing positivity
+  and local speed limits; default remains off. A separate GPU advection pass
+  avoids pathological SwiftShader compilation from inlining a staggered stencil
+  inside the dynamic momentum-axis loop, without extra persistent state.
+- **Scenes:** Slope, enclosed basin, water slide, and a single-stage Tesla channel.
+  Scene selection pauses/replaces terrain/clears fluid; Reset restores the selected
+  scene. Camera remains presentation-owned and unchanged.
+- **Experiment:** C# generates uniform initial wetting and fixed-head numeric
+  reservoir operations (18/12 in or 12/18 in), not JavaScript scene logic. The
+  channel bottom is flat and reservoirs comparable; a resolved solid island
+  separates main channel and bypass. Kernels clamp prescribed depths after every
+  tick; CPU-off does not execute or snapshot reference state.
+- **Measurements:** C# defines signed face probes; the backend reads actual
+  limited transfers, applies probe weights, and returns only two scalar rates.
+  Transfer scratch is read back only while forcing is active; ordinary batches
+  retain the depth/face-state-only readback. Outlet discharge and bypass throughput are final-tick measurements, not
+  circulation/vorticity or steady-state estimates. Equal-tick directional samples
+  can differ without implying check-valve closure or guaranteed resistance.
+  Momentum models report ft³/s using their 0.016-s tick; Cellular has no physical
+  time calibration and reports transferred ft³ per algorithmic tick instead.
+  README records measured forward/reverse observations and model limitations.
 
 ## Implemented architecture
 
@@ -136,7 +167,8 @@ architecture:
   picking, linked camera/navigation, and gesture previews. Committed cell edits
   are dispatched to C#; it does not own fluid or terrain-edit rules.
 - `wwwroot/js/fluid-gpu.js` owns WebGPU resources and executes the WGSL
-  two cellular or three momentum passes. GPU depths stay in ping-pong buffers
+  two cellular or three momentum passes, plus the optional MAC advection pass.
+  GPU depths stay in ping-pong buffers
   and persistent face state in a separate buffer between actions.
 - Reset uploads the complete starting field. Pours send additive edits, preserving
   each active implementation's independent water state. Barrier strokes update terrain

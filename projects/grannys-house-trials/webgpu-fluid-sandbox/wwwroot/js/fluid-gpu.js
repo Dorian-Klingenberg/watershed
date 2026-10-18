@@ -17,6 +17,12 @@ struct FluidParameters {
     minimumWater: f32,
     drainEdges: u32,
     algorithm: u32,
+    pipeArea: f32,
+    retention: f32,
+    terrainArea: f32,
+    roughness: f32,
+    damping: f32,
+    advection: u32,
 };
 
 @group(0) @binding(0) var<storage, read> terrain: array<i32>;
@@ -27,6 +33,32 @@ struct FluidParameters {
 @group(0) @binding(5) var<storage, read_write> momentum: array<vec2<f32>>;
 @group(0) @binding(6) var<storage, read_write> edges: array<vec4<f32>>;
 @group(0) @binding(7) var<storage, read_write> scales: array<f32>;
+@group(0) @binding(8) var<storage, read> forcing: array<f32>;
+
+fn velocity(x: i32, y: i32) -> vec2<f32> {
+    if (x < 0 || y < 0 || x >= i32(params.width) || y >= i32(params.height)) { return vec2<f32>(0.0); }
+    let q = momentum[u32(y) * params.width + u32(x)];
+    return vec2<f32>(select(q.x, 0.0, x == i32(params.width)-1),
+        select(q.y, 0.0, y == i32(params.height)-1));
+}
+
+@compute @workgroup_size(64)
+fn advectVelocity(@builtin(global_invocation_id) id: vec3<u32>) {
+    let i = id.x;
+    if (i >= params.width * params.height) { return; }
+    let x = i32(i % params.width); let y = i32(i / params.width);
+    let c = velocity(x,y); let w = velocity(x-1,y); let e = velocity(x+1,y);
+    let n = velocity(x,y-1); let s = velocity(x,y+1);
+    let ne = velocity(x+1,y-1); let sw = velocity(x-1,y+1);
+    let crossU = (c.x+w.x+s.x+sw.x)*0.25;
+    let crossV = (c.y+e.y+n.y+ne.y)*0.25;
+    let ux = select(e.x-c.x,c.x-w.x,c.x>=0.0);
+    let uy = select(s.x-c.x,c.x-n.x,crossV>=0.0);
+    let vx = select(e.y-c.y,c.y-w.y,crossU>=0.0);
+    let vy = select(s.y-c.y,c.y-n.y,c.y>=0.0);
+    edges[i] = vec4<f32>(c.x-0.016*(c.x*ux+crossV*uy),
+        c.y-0.016*(crossU*vx+c.y*vy),0.0,0.0);
+}
 
 fn edgeTransfer(i: u32, axis: u32) -> f32 {
     return edges[i][axis + 2u];
@@ -53,16 +85,18 @@ fn proposeMomentum(@builtin(global_invocation_id) id: vec3<u32>) {
         if (left == 0.0 && right == 0.0) { continue; }
         let head = left - right;
         let old = momentum[i][axis];
-        let area = select(0.25, 1.0, params.algorithm == 3u);
-        var next = old + 0.016 * area * 32.174 * head;
+        let area = select(select(params.pipeArea,params.terrainArea,params.algorithm==2u), 1.0, params.algorithm == 3u);
+        var initial = old;
+        if (params.algorithm == 3u && params.advection != 0u) { initial = edges[i][axis]; }
+        var next = initial + 0.016 * area * 32.174 * head;
         let donor = select(right, left, next >= 0.0);
         if (donor <= 0.0) { continue; }
         if (params.algorithm == 2u) {
             let radius = max(donor, 0.001);
             let radiusPower = pow(radius, 4.0 / 3.0);
-            next /= 1.0 + 0.016 * 32.174 * 0.04 * 0.04 * abs(next) / (area * radiusPower);
+            next /= 1.0 + 0.016 * 32.174 * params.roughness * params.roughness * abs(next) / (area * radiusPower);
         } else {
-            next *= select(0.94, 1.0 - 0.02 * 0.016, params.algorithm == 3u);
+            next *= select(params.retention, 1.0 - params.damping * 0.016, params.algorithm == 3u);
         }
         let speedLimit = max(0.0, 0.45 / 0.016 - sqrt(32.174 * max(left, right)));
         let limit = speedLimit * select(area, 1.0, params.algorithm == 3u);
@@ -106,7 +140,7 @@ fn applyMomentum(@builtin(global_invocation_id) id: vec3<u32>) {
     var nextWater = max(0.0, waterIn[i] + delta);
     if (params.drainEdges != 0u &&
         (x == 0u || x + 1u == params.width || y == 0u || y + 1u == params.height)) { nextWater = 0.0; }
-    waterOut[i] = nextWater;
+    waterOut[i] = select(nextWater, forcing[i], forcing[i] >= 0.0);
     for (var axis = 0u; axis < 2u; axis++) {
         let neighbor = i + select(params.width, 1u, axis == 0u);
         var scale = scales[i];
@@ -248,13 +282,13 @@ fn apply(@builtin(global_invocation_id) invocation: vec3<u32>) {
         (x == 0u || x + 1u == params.width || y == 0u || y + 1u == params.height)) {
         nextWater = 0.0;
     }
-    waterOut[index] = nextWater;
+    waterOut[index] = select(nextWater, forcing[index], forcing[index] >= 0.0);
 }
 `;
 
 let state;
 
-export async function initialize(canvas, width, height, terrain, water, maxFlow, settleRate, minimumWater, drainEdges, algorithm = 0) {
+export async function initialize(canvas, width, height, terrain, water, maxFlow, settleRate, minimumWater, drainEdges, algorithm = 0, settings) {
     if (!navigator.gpu) {
         return { supported: false, message: "WebGPU is not available in this browser; the CPU reference remains usable." };
     }
@@ -278,21 +312,23 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
         }));
         const proposalBuffer = device.createBuffer({
             size: cellCount * 20,
-            usage: GPUBufferUsage.STORAGE
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
         });
         const parameterBuffer = device.createBuffer({
-            size: 32,
+            size: 64,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
         const readbackBuffer = device.createBuffer({
-            size: bufferSize * 3,
+            size: bufferSize * 8,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
         });
         const momentumBuffer = device.createBuffer({
             size: bufferSize * 2, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
         });
-        const edgeBuffer = device.createBuffer({ size: bufferSize * 4, usage: GPUBufferUsage.STORAGE });
-        const scaleBuffer = device.createBuffer({ size: bufferSize, usage: GPUBufferUsage.STORAGE });
+        const edgeBuffer = device.createBuffer({ size: bufferSize * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+        const scaleBuffer = device.createBuffer({ size: bufferSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+        const forcingBuffer = device.createBuffer({size: bufferSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
+        device.queue.writeBuffer(forcingBuffer,0,new Float32Array(cellCount).fill(-1));
 
         const bindGroupLayout = device.createBindGroupLayout({
             entries: [
@@ -301,7 +337,8 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
                 { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
                 { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
                 { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
-                ...[5, 6, 7].map(binding => ({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } }))
+                ...[5, 6, 7].map(binding => ({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } })),
+                {binding:8,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}}
             ]
         });
         const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
@@ -316,11 +353,14 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
         });
         const momentumPipelines = ["proposeMomentum", "limitMomentum", "applyMomentum"].map(entryPoint =>
             device.createComputePipeline({ layout: pipelineLayout, compute: { module, entryPoint } }));
+        const advectionPipeline = device.createComputePipeline({
+            layout: pipelineLayout, compute: {module,entryPoint:"advectVelocity"}
+        });
         const compilation = await module.getCompilationInfo();
         const errors = compilation.messages.filter(message => message.type === "error");
         if (errors.length) { device.destroy(); throw new Error(errors.map(error => error.message).join("\n")); }
 
-        const params = new ArrayBuffer(32);
+        const params = new ArrayBuffer(64);
         const view = new DataView(params);
         view.setUint32(0, width, true);
         view.setUint32(4, height, true);
@@ -329,6 +369,7 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
         view.setFloat32(16, minimumWater, true);
         view.setUint32(20, drainEdges ? 1 : 0, true);
         view.setUint32(24, algorithm, true);
+        writeSettings(params,settings);
 
         device.queue.writeBuffer(terrainBuffer, 0, new Int32Array(terrain));
         device.queue.writeBuffer(parameterBuffer, 0, params);
@@ -342,7 +383,8 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
                 { binding: 4, resource: { buffer: parameterBuffer } },
                 { binding: 5, resource: { buffer: momentumBuffer } },
                 { binding: 6, resource: { buffer: edgeBuffer } },
-                { binding: 7, resource: { buffer: scaleBuffer } }
+                { binding: 7, resource: { buffer: scaleBuffer } },
+                { binding: 8, resource: { buffer: forcingBuffer } }
             ]
         }));
 
@@ -359,10 +401,11 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
             readbackBuffer,
             proposePipeline,
             applyPipeline,
-            momentumPipelines, momentumBuffer, edgeBuffer, scaleBuffer, parameterBuffer, params, algorithm,
+            momentumPipelines, advectionPipeline, momentumBuffer, edgeBuffer, scaleBuffer, parameterBuffer, params, algorithm, settings, proposalBuffer, forcingBuffer,
             bindGroups,
             current: 0,
             cycles: 0,
+            direction: 0,
             cachedWater: new Float32Array(water),
             cachedMomentum: new Float32Array(cellCount * 2),
             terrainDirty: true,
@@ -386,17 +429,21 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
     }
 }
 
-export async function reset(terrain, water, algorithm = 0) {
+export async function reset(terrain, water, algorithm = 0, settings, forcing) {
     requireState();
     if (terrain.length !== state.cellCount) throw new Error("Terrain size does not match the field.");
     const nextTerrain = Array.from(terrain);
     // A partial reset cannot safely pair old cached water with C#'s reset terrain.
     state.recoveryInvalid = true;
     new DataView(state.params).setUint32(24, algorithm, true);
+    writeSettings(state.params,settings);
+    state.device.queue.writeBuffer(state.forcingBuffer,0,new Float32Array(forcing.depths));
     state.device.queue.writeBuffer(state.parameterBuffer, 0, state.params);
     state.device.queue.writeBuffer(state.momentumBuffer, 0, new Float32Array(state.cellCount * 2));
     state.device.queue.writeBuffer(state.terrainBuffer, 0, new Int32Array(nextTerrain));
-    await uploadWater(state, water, { terrain: nextTerrain, cycles: 0, algorithm });
+    const values = new Float32Array(water);
+    for(let i=0;i<values.length;i++) if(forcing.depths[i]>=0) values[i]=forcing.depths[i];
+    await uploadWater(state, values, { terrain: nextTerrain, cycles: 0, algorithm, settings, direction:forcing.direction });
 }
 
 export async function applyEdits(terrain, waterDelta) {
@@ -442,6 +489,13 @@ export async function step(ticks = 1) {
     const encoder = state.device.createCommandEncoder();
     for (let tick = 0; tick < ticks; ++tick) {
         if (state.algorithm !== 0) {
+            if(state.algorithm===3 && state.settings.macAdvection) {
+                const pass=encoder.beginComputePass();
+                pass.setPipeline(state.advectionPipeline);
+                pass.setBindGroup(0,state.bindGroups[state.current]);
+                pass.dispatchWorkgroups(state.workgroupCount);
+                pass.end();
+            }
             for (const pipeline of state.momentumPipelines) {
                 const pass = encoder.beginComputePass();
                 pass.setPipeline(pipeline);
@@ -470,6 +524,7 @@ export async function step(ticks = 1) {
     requireState();
     state.cachedWater = complete.water;
     state.cachedMomentum = complete.momentum;
+    state.cachedTransfers = complete.transfers;
     state.cycles += ticks;
     drawGpuSnapshot(state);
 }
@@ -485,7 +540,7 @@ export async function snapshot(fresh = false) {
         requireState();
     }
     return { water: Array.from(state.cachedWater), momentum: Array.from(state.cachedMomentum),
-        cycles: state.cycles, algorithm: state.algorithm };
+        cycles: state.cycles, algorithm: state.algorithm, settings:state.settings, direction:state.direction };
 }
 
 export function dispose() {
@@ -512,6 +567,9 @@ async function uploadWater(currentState, water, baseline = null) {
         currentState.terrainDirty = true;
         currentState.cycles = baseline.cycles;
         currentState.algorithm = baseline.algorithm;
+        currentState.settings = baseline.settings;
+        currentState.direction = baseline.direction;
+        currentState.cachedTransfers = new Float32Array(currentState.cellCount * 2);
         currentState.cachedMomentum = new Float32Array(currentState.cellCount * 2);
         currentState.recoveryInvalid = false;
     }
@@ -533,11 +591,40 @@ async function readCurrentWater(currentState) {
         currentState.bufferSize);
     encoder.copyBufferToBuffer(currentState.momentumBuffer, 0, currentState.readbackBuffer,
         currentState.bufferSize, currentState.bufferSize * 2);
+    if(currentState.direction!==0) {
+        encoder.copyBufferToBuffer(currentState.algorithm===0 ? currentState.proposalBuffer : currentState.edgeBuffer,0,
+            currentState.readbackBuffer,currentState.bufferSize*3,currentState.bufferSize*(currentState.algorithm===0?5:4));
+        if(currentState.algorithm!==0) encoder.copyBufferToBuffer(currentState.scaleBuffer,0,currentState.readbackBuffer,currentState.bufferSize*7,currentState.bufferSize);
+    }
     currentState.device.queue.submit([encoder.finish()]);
     await currentState.readbackBuffer.mapAsync(GPUMapMode.READ);
-    const values = new Float32Array(currentState.readbackBuffer.getMappedRange()).slice();
+    const values = new Float32Array(currentState.readbackBuffer.getMappedRange(0,currentState.bufferSize*(currentState.direction!==0?8:3))).slice();
     currentState.readbackBuffer.unmap();
-    return { water: values.slice(0, currentState.cellCount), momentum: values.slice(currentState.cellCount) };
+    const n=currentState.cellCount;
+    const transfers=currentState.direction!==0 ? new Float32Array(n*2) : null;
+    if(transfers) for(let i=0;i<n;i++) for(let axis=0;axis<2;axis++){
+        const neighbor=i+(axis===0?1:currentState.width);
+        if(neighbor>=n || (axis===0 && i%currentState.width===currentState.width-1)) continue;
+        if(currentState.algorithm===0) transfers[2*i+axis]=values[3*n+5*i+(axis===0?2:4)]-values[3*n+5*neighbor+(axis===0?1:3)];
+        else {
+            const t=values[3*n+4*i+axis+2];
+            transfers[2*i+axis]=t*values[7*n+(t>=0?i:neighbor)];
+        }
+    }
+    return { water: values.slice(0, n), momentum: values.slice(n,3*n),transfers };
+}
+
+function writeSettings(params,s) {
+    const v=new DataView(params);
+    v.setFloat32(8,s.cellularMaxFlow,true);v.setFloat32(12,s.cellularSettleRate,true);
+    [s.pipeArea,s.pipeRetention,s.terrainHeadArea,s.manningRoughness,s.macDamping].forEach((x,i)=>v.setFloat32(28+4*i,x,true));
+    v.setUint32(48,s.macAdvection?1:0,true);
+}
+
+export function measure(discharge,bypass) {
+    requireState();
+    const read=p=>p.faces.reduce((sum,face,i)=>sum+(state.cachedTransfers?.[face]??0)*p.weights[i],0);
+    return {discharge:read(discharge),bypassFlow:read(bypass)};
 }
 
 function requireState() {

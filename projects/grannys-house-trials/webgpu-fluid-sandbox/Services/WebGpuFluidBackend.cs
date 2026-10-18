@@ -27,13 +27,16 @@ public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
             CellularFluidSimulation.SettleRate,
             CellularFluidSimulation.MinimumWaterInches,
             CellularFluidSimulation.DrainEdges,
-            (int)simulation.Algorithm);
+            (int)simulation.Algorithm, simulation.Settings);
     }
 
     public ValueTask ResetAsync(CellularFluidSimulation simulation, bool cpuEnabled) =>
         Module.InvokeVoidAsync("reset", simulation.GetTerrainSnapshot(),
-            cpuEnabled ? simulation.GetWaterSnapshot() : new float[simulation.Width * simulation.Height],
-            (int)simulation.Algorithm);
+            simulation.GetResetWater(cpuEnabled),
+            (int)simulation.Algorithm, simulation.Settings, simulation.GetForcing());
+
+    public ValueTask<ExperimentReadout> MeasureAsync(CellularFluidSimulation simulation) =>
+        Module.InvokeAsync<ExperimentReadout>("measure", simulation.DischargeProbe, simulation.BypassProbe);
 
     public ValueTask ApplyEditsAsync(int[]? terrain, float[]? waterDelta) =>
         Module.InvokeVoidAsync("applyEdits", terrain, waterDelta);
@@ -119,5 +122,7 @@ public sealed class WebGpuFluidBackend(IJSRuntime jsRuntime) : IAsyncDisposable
 public sealed record GpuInitializationResult(bool Supported, string Message);
 public sealed record GpuBaseline(float[] Water, float[] Momentum, int Cycles, FluidAlgorithm Algorithm)
 {
-    public FluidState ToState() => new(Water, Momentum, Cycles, Algorithm);
+    public FluidSettings Settings { get; init; } = new();
+    public ExperimentDirection Direction { get; init; }
+    public FluidState ToState() => new(Water, Momentum, Cycles, Algorithm) { Settings = Settings, Direction = Direction };
 }

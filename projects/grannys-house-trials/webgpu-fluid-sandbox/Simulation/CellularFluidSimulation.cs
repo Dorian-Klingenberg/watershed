@@ -21,6 +21,7 @@ public sealed class CellularFluidSimulation
     private readonly float[] _proposed;
     private readonly float[] _transfers;
     private readonly float[] _scales;
+    private readonly float[] _forcing;
 
     public CellularFluidSimulation(int width, int height, int[] terrainHeights)
     {
@@ -46,12 +47,31 @@ public sealed class CellularFluidSimulation
         _proposed = new float[_momentum.Length];
         _transfers = new float[_momentum.Length];
         _scales = new float[terrainHeights.Length];
+        _forcing = Enumerable.Repeat(-1f, terrainHeights.Length).ToArray();
     }
 
     public int Width { get; }
     public int Height { get; }
     public int CycleCount { get; private set; }
     public FluidAlgorithm Algorithm { get; private set; }
+    public FluidSettings Settings { get; private set; } = new();
+    public TerrainScene Scene { get; private set; }
+    public ExperimentDirection Direction { get; private set; }
+    public (int X, int Y) PourLocation => Scene switch
+    {
+        TerrainScene.EnclosedBasin => (Width / 2, Height / 2),
+        TerrainScene.WaterSlide => ((int)Math.Round(48 + 18 * Math.Sin(12 / 11.0)), 12),
+        TerrainScene.Tesla => (12, 32),
+        _ => (Width / 2, 12)
+    };
+
+    public void Configure(FluidSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        settings.Validate();
+        Settings = settings;
+        ClearFluid();
+    }
 
     public void SelectAlgorithm(FluidAlgorithm algorithm)
     {
@@ -64,6 +84,9 @@ public sealed class CellularFluidSimulation
     {
         Array.Clear(_waterDepths);
         Array.Clear(_momentum);
+        Array.Clear(_transfers);
+        Array.Fill(_forcing, -1);
+        Direction = ExperimentDirection.None;
         CycleCount = 0;
     }
 
@@ -180,11 +203,13 @@ public sealed class CellularFluidSimulation
         if (Algorithm != FluidAlgorithm.Cellular)
         {
             StepMomentum();
+            ApplyForcing();
             CycleCount++;
             return;
         }
         var deltas = _stepDeltas;
         Array.Clear(deltas);
+        Array.Clear(_transfers);
         Span<int> lowerIndices = stackalloc int[4];
         Span<float> lowerSurfaces = stackalloc float[4];
         Span<float> desiredInflows = stackalloc float[4];
@@ -228,8 +253,8 @@ public sealed class CellularFluidSimulation
                 }
 
                 var totalFlow = Math.Min(
-                    Math.Min(availableWater, MaxFlowInches),
-                    desiredOutflow * SettleRate);
+                    Math.Min(availableWater, Settings.CellularMaxFlow),
+                    desiredOutflow * Settings.CellularSettleRate);
                 if (totalFlow <= MinimumWaterInches)
                 {
                     continue;
@@ -240,6 +265,10 @@ public sealed class CellularFluidSimulation
                 for (var i = 0; i < lowerCount; i++)
                 {
                     deltas[lowerIndices[i]] += desiredInflows[i] * flowScale;
+                    var neighbor = lowerIndices[i];
+                    var edge = neighbor > currentIndex ? 2 * currentIndex + (neighbor == currentIndex + 1 ? 0 : 1)
+                        : 2 * neighbor + (neighbor == currentIndex - 1 ? 0 : 1);
+                    _transfers[edge] += (neighbor > currentIndex ? 1 : -1) * desiredInflows[i] * flowScale;
                 }
             }
         }
@@ -255,15 +284,17 @@ public sealed class CellularFluidSimulation
         }
 
         CycleCount++;
+        ApplyForcing();
     }
 
     public int[] GetTerrainSnapshot() => (int[])_terrainHeights.Clone();
     public float[] GetWaterSnapshot() => (float[])_waterDepths.Clone();
-    public FluidState GetStateSnapshot() => new(GetWaterSnapshot(), (float[])_momentum.Clone(), CycleCount, Algorithm);
+    public FluidState GetStateSnapshot() => new(GetWaterSnapshot(), (float[])_momentum.Clone(), CycleCount, Algorithm)
+        { Settings = Settings, Direction = Direction };
 
     public void SynchronizeState(FluidState state)
     {
-        if (state.Algorithm != Algorithm || state.Momentum.Length != _momentum.Length ||
+        if (state.Direction != Direction || state.Settings != Settings || state.Algorithm != Algorithm || state.Momentum.Length != _momentum.Length ||
             state.Momentum.Any(value => !float.IsFinite(value)))
             throw new ArgumentException("Invalid algorithm or momentum baseline.", nameof(state));
         ImportWater(state.Water, state.Cycles);
@@ -370,8 +401,10 @@ public sealed class CellularFluidSimulation
                 if (left == 0 && right == 0) continue;
                 var head = left - right;
                 var old = _momentum[edge];
-                var area = Algorithm == FluidAlgorithm.Mac ? 1 : 0.25f;
-                var next = old + TimeStepSeconds * area * Gravity * head;
+                var area = Algorithm == FluidAlgorithm.Mac ? 1
+                    : Algorithm == FluidAlgorithm.TerrainHead ? Settings.TerrainHeadArea : Settings.PipeArea;
+                var advected = Algorithm == FluidAlgorithm.Mac && Settings.MacAdvection ? Advect(i, axis) : old;
+                var next = advected + TimeStepSeconds * area * Gravity * head;
                 var donor = next >= 0 ? left : right;
                 if (donor <= 0) continue;
                 if (Algorithm == FluidAlgorithm.TerrainHead)
@@ -379,9 +412,9 @@ public sealed class CellularFluidSimulation
                     // Manning-style semi-implicit rough-bed loss; radius in feet.
                     var radius = Math.Max(donor, 0.001f);
                     var radiusPower = MathF.Pow(radius, 4.0f / 3);
-                    next /= 1 + TimeStepSeconds * Gravity * 0.04f * 0.04f * Math.Abs(next) / (area * radiusPower);
+                    next /= 1 + TimeStepSeconds * Gravity * Settings.ManningRoughness * Settings.ManningRoughness * Math.Abs(next) / (area * radiusPower);
                 }
-                else next *= Algorithm == FluidAlgorithm.Mac ? 1 - 0.02f * TimeStepSeconds : 0.94f;
+                else next *= Algorithm == FluidAlgorithm.Mac ? 1 - Settings.MacDamping * TimeStepSeconds : Settings.PipeRetention;
                 var speedLimit = Math.Max(0, 0.45f / TimeStepSeconds - MathF.Sqrt(Gravity * Math.Max(left, right)));
                 var limit = speedLimit * (Algorithm == FluidAlgorithm.Mac ? 1 : area);
                 next = Math.Clamp(next, -limit, limit);
@@ -392,6 +425,7 @@ public sealed class CellularFluidSimulation
                 if ((transfer > 0 && left > 0) || (transfer < 0 && right > 0))
                     _transfers[edge] = transfer;
             }
+
         }
         for (var i = 0; i < _waterDepths.Length; i++)
         {
@@ -422,10 +456,115 @@ public sealed class CellularFluidSimulation
         }
         if (DrainEdges) DrainBoundary();
     }
+
+    private float Face(int x, int y, int axis)
+        => x < 0 || y < 0 || x >= Width || y >= Height ||
+           (axis == 0 && x == Width - 1) || (axis == 1 && y == Height - 1)
+            ? 0 : _momentum[2 * (y * Width + x) + axis];
+
+    private float Advect(int i, int axis)
+    {
+        var x = i % Width;
+        var y = i / Width;
+        var u = axis == 0 ? Face(x, y, 0) :
+            (Face(x, y, 0) + Face(x - 1, y, 0) + Face(x, y + 1, 0) + Face(x - 1, y + 1, 0)) * 0.25f;
+        var v = axis == 1 ? Face(x, y, 1) :
+            (Face(x, y, 1) + Face(x + 1, y, 1) + Face(x, y - 1, 1) + Face(x + 1, y - 1, 1)) * 0.25f;
+        var q = Face(x, y, axis);
+        var dx = u >= 0 ? q - Face(x - 1, y, axis) : Face(x + 1, y, axis) - q;
+        var dy = v >= 0 ? q - Face(x, y - 1, axis) : Face(x, y + 1, axis) - q;
+        return q - TimeStepSeconds * (u * dx + v * dy);
+    }
+
+    public void SelectScene(TerrainScene scene)
+    {
+        if (!Enum.IsDefined(scene)) throw new ArgumentOutOfRangeException(nameof(scene));
+        if (Width != 96 || Height != 64) throw new InvalidOperationException("Scenes require the standard 96 × 64 field.");
+        var slope = scene == TerrainScene.Slope ? CreateDefault().GetTerrainSnapshot() : null;
+        for (var y = 0; y < Height; y++)
+        for (var x = 0; x < Width; x++)
+        {
+            var z = slope?[y * Width + x] ?? 48;
+            if (scene == TerrainScene.EnclosedBasin)
+                z = x is >= 8 and <= 87 && y is >= 8 and <= 55 ? 0 : 36;
+            if (scene == TerrainScene.WaterSlide)
+                z = Math.Abs(x - (48 + 18 * Math.Sin(y / 11.0))) < 7 ? Math.Max(0, 48 - y) : 64;
+            if (scene == TerrainScene.Tesla)
+            {
+                var reservoir = (x is >= 4 and <= 17 || x is >= 78 and <= 91) && y is >= 24 and <= 41;
+                var main = x is >= 12 and <= 83 && y is >= 29 and <= 36;
+                var bypass = DistanceToSegment(x, y, 30, 32, 43, 14) <= 3 ||
+                    DistanceToSegment(x, y, 43, 14, 62, 14) <= 3 ||
+                    DistanceToSegment(x, y, 62, 14, 72, 24) <= 3 ||
+                    DistanceToSegment(x, y, 72, 24, 64, 32) <= 3;
+                z = reservoir || main || bypass ? 0 : 48;
+            }
+            _initialTerrain[y * Width + x] = z;
+        }
+        Scene = scene;
+        Reset();
+    }
+
+    private static double DistanceToSegment(double x, double y, double ax, double ay, double bx, double by)
+    {
+        var t = Math.Clamp(((x - ax) * (bx - ax) + (y - ay) * (by - ay)) /
+            ((bx - ax) * (bx - ax) + (by - ay) * (by - ay)), 0, 1);
+        return Math.Sqrt(Math.Pow(x - ax - t * (bx - ax), 2) + Math.Pow(y - ay - t * (by - ay), 2));
+    }
+
+    public ReservoirForcing StartExperiment(ExperimentDirection direction, bool applyToReference)
+    {
+        if (Scene != TerrainScene.Tesla || direction == ExperimentDirection.None || !Enum.IsDefined(direction))
+            throw new InvalidOperationException("Select the Tesla scene and a flow direction.");
+        Reset();
+        Direction = direction;
+        for (var y = 26; y <= 39; y++)
+        for (var x = 5; x <= 90; x++)
+            if (x <= 11 || x >= 84)
+                _forcing[y * Width + x] = (x <= 11) == (direction == ExperimentDirection.Forward) ? 18 : 12;
+        if (applyToReference) GetExperimentInitialWater().CopyTo(_waterDepths, 0);
+        return GetForcing();
+    }
+
+    public float[] GetResetWater(bool cpuEnabled) => Direction != ExperimentDirection.None
+        ? GetExperimentInitialWater() : cpuEnabled ? GetWaterSnapshot() : new float[_waterDepths.Length];
+
+    private float[] GetExperimentInitialWater()
+    {
+        var water = new float[_terrainHeights.Length];
+        for (var i = 0; i < water.Length; i++)
+            water[i] = _forcing[i] >= 0 ? _forcing[i] : _terrainHeights[i] == 0 ? 15 : 0;
+        return water;
+    }
+
+    public ReservoirForcing GetForcing() => new((float[])_forcing.Clone(), Direction);
+    private void ApplyForcing()
+    {
+        if (Direction == ExperimentDirection.None) return;
+        for (var i = 0; i < _forcing.Length; i++)
+            if (_forcing[i] >= 0) _waterDepths[i] = _forcing[i];
+    }
+
+    public FlowProbe DischargeProbe => Probe(75, 29, 36);
+    public FlowProbe BypassProbe => Probe(52, 11, 17);
+    private FlowProbe Probe(int x, int top, int bottom) =>
+        new(Enumerable.Range(top, bottom - top + 1).Select(y => 2 * (y * Width + x)).ToArray(),
+            Enumerable.Repeat(1f / (12 * (Algorithm == FluidAlgorithm.Cellular ? 1 : TimeStepSeconds)),
+                bottom - top + 1).ToArray());
+
+    public ExperimentReadout MeasureExperiment()
+    {
+        double Read(FlowProbe probe) => probe.Faces.Select((face, j) => (double)_transfers[face] * probe.Weights[j]).Sum();
+        return new(Read(DischargeProbe), Read(BypassProbe));
+    }
 }
 
 public enum FluidAlgorithm { Cellular, PipeFlux, TerrainHead, Mac }
-public sealed record FluidState(float[] Water, float[] Momentum, int Cycles, FluidAlgorithm Algorithm);
+public sealed record FluidState(float[] Water, float[] Momentum, int Cycles, FluidAlgorithm Algorithm)
+{
+    public FluidSettings Settings { get; init; } = new();
+    public ExperimentDirection Direction { get; init; }
+}
 public readonly record struct FluidSummary(int Cycles, int WetCells, double TotalWater, float MaximumDepth);
 
 public sealed record FluidCell(int X, int Y, int TerrainHeight, float WaterDepth);

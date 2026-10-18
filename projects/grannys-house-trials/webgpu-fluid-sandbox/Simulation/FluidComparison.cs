@@ -4,7 +4,8 @@ public static class FluidComparison
 {
     public static FluidComparisonResult Compare(FluidState reference, FluidState candidate)
     {
-        if (reference.Algorithm != candidate.Algorithm || reference.Cycles != candidate.Cycles)
+        if (reference.Direction != candidate.Direction || reference.Settings != candidate.Settings ||
+            reference.Algorithm != candidate.Algorithm || reference.Cycles != candidate.Cycles)
             throw new ArgumentException("Complete states must have the same algorithm and tick.");
         var depthTolerance = reference.Algorithm == FluidAlgorithm.Cellular
             ? CellularFluidSimulation.ComparisonTolerance : CellularFluidSimulation.StateTolerance;

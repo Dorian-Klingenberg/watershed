@@ -20,7 +20,7 @@
     <section class="control-panel" aria-label="Simulation controls">
         <div class="control-copy">
             <span class="eyebrow">ONE FIELD · TWO IMPLEMENTATIONS</span>
-            <p>Pour onto the slope, watch the spillway, and explore both implementations together.</p>
+            <p>Explore terrain, solver parameters, and controlled reservoir experiments.</p>
         </div>
         <div class="actions">
             <label class="batch-control">Algorithm
@@ -29,6 +29,14 @@
                     <option value="1">Pipe-flux shallow water</option>
                     <option value="2">Terrain-head pipe flow</option>
                     <option value="3">Staggered MAC shallow water</option>
+                </select>
+            </label>
+            <label class="batch-control">Terrain
+                <select value="@((int)_simulation.Scene)" @onchange="ChangeSceneAsync" disabled="@(!_initialized)" aria-label="Terrain scene">
+                    <option value="0">Slope and spillway</option>
+                    <option value="1">Enclosed basin</option>
+                    <option value="2">Water slide</option>
+                    <option value="3">Single-stage Tesla channel</option>
                 </select>
             </label>
             <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ToggleRun" Disabled="@(!_initialized)">@(_running ? "Pause" : "Run")</FluentButton>
@@ -44,6 +52,63 @@
             </label>
         </div>
     </section>
+
+    <section class="control-panel" aria-label="Algorithm settings">
+        <div class="actions">
+            @foreach (var knob in RelevantKnobs)
+            {
+                <label class="batch-control">@knob.Label
+                    <input type="number" aria-label="@knob.Label" min="@knob.Min" max="@knob.Max" step="@knob.Step"
+                        value="@knob.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                        @onchange="e => ChangeSettingAsync(knob.Key, e)" disabled="@(!_initialized)" />
+                </label>
+            }
+            @if (_simulation.Algorithm == FluidAlgorithm.Mac)
+            {
+                <label><input type="checkbox" aria-label="MAC velocity advection" checked="@_simulation.Settings.MacAdvection"
+                    @onchange="ChangeAdvectionAsync" disabled="@(!_initialized)" /> First-order upwind velocity advection</label>
+            }
+            <FluentButton OnClick="RestoreDefaultsAsync" Disabled="@(!_initialized)">Restore algorithm defaults</FluentButton>
+        </div>
+        <p>Changes pause and clear water, face state and ticks; edited terrain and camera stay unchanged.</p>
+        <p class="algorithm-help">@AlgorithmHelp</p>
+    </section>
+
+    @if (_simulation.Scene == TerrainScene.Tesla)
+    {
+        <section class="control-panel" aria-label="Tesla experiment">
+            <div class="actions">
+                <FluentButton OnClick="() => StartExperimentAsync(ExperimentDirection.Forward)" Disabled="@(!_initialized)">Forward experiment</FluentButton>
+                <FluentButton OnClick="() => StartExperimentAsync(ExperimentDirection.Reverse)" Disabled="@(!_initialized)">Reverse experiment</FluentButton>
+                <FluentButton OnClick="StepExperimentAsync" Disabled="@(!_initialized || _simulation.Direction == ExperimentDirection.None)">Advance 128 experiment ticks</FluentButton>
+            </div>
+            <div>
+                <p>Each experiment restores the same flat-bottom channel, pauses at tick 0, and fixes reservoir depths to 18 / 12 in (Δhead 6 in), swapped in reverse. Run or Step to advance. Unforced channel starts uniformly at 15 in.</p>
+                <p>Experimental depth-averaged model: no guaranteed resistance difference, check-valve closure, or resolved turbulence.</p>
+                <p role="status" class="experiment-readout">Direction: @_simulation.Direction · outlet section signed discharge @(_experiment.Discharge.ToString("F5")) @ExperimentFlowUnit · bypass section signed flow @(_experiment.BypassFlow.ToString("F5")) @ExperimentFlowUnit.</p>
+                @if (_experimentModified)
+                {
+                    <p>Manual edits invalidate the controlled comparison. Restart a direction to restore the repeatable experiment.</p>
+                }
+                <p>Last completed tick only (not a steady-state estimate). Positive = left-to-right. Outlet section x=75, y=29–36; bypass section x=52, y=11–17. @ExperimentMeasurementHelp Bypass flow measures branch throughput, not vorticity or closed-loop circulation.</p>
+                <p>Record forward/reverse at identical ticks and settings. Different transient or steady results are measurements, not a claim of physical rectification.</p>
+                @if (_forwardSample is { } forward && _reverseSample is { } reverse)
+                {
+                    <p>Latest forward: @forward.Reading.Discharge.ToString("F5") @ExperimentFlowUnit at tick @forward.Tick;
+                        reverse: @reverse.Reading.Discharge.ToString("F5") @ExperimentFlowUnit at tick @reverse.Tick.</p>
+                    @if (forward.Tick == reverse.Tick)
+                    {
+                        <p>Measured |forward| − |reverse|: @((Math.Abs(forward.Reading.Discharge) - Math.Abs(reverse.Reading.Discharge)).ToString("F5")) @ExperimentFlowUnit
+                            at equal tick @forward.Tick (transient sample, not guaranteed resistance).</p>
+                    }
+                    else
+                    {
+                        <p>Unequal sample times: no directional difference reported. Step the shorter trial to the same tick.</p>
+                    }
+                }
+            </div>
+        </section>
+    }
 
     @if (_errorMessage is not null)
     {
@@ -80,6 +145,16 @@
         <label for="landscape-vertical">Depth position · both views</label>
         <input @ref="_landscapeVertical" id="landscape-vertical" aria-label="Vertical landscape position · both views" type="range" min="0" max="64" value="32" step="0.1" />
     </div>
+    </div>
+
+    <div class="depth-legend" aria-label="Water depth in inches">
+        <span>Water depth · 1-inch bands</span>
+        <span class="depth-key depth-1">1 in</span>
+        <span class="depth-key depth-2">2 in</span>
+        <span class="depth-key depth-3">3 in</span>
+        <span class="depth-key depth-6">6 in</span>
+        <span class="depth-key depth-12">12 in</span>
+        <span>darker = deeper · outlines mark 1-inch changes</span>
     </div>
 
     <section class="navigation-panel" aria-label="Linked landscape navigation">
@@ -144,7 +219,7 @@
 
     <footer>
         <span>Barrier strokes raise terrain by 12 in from its starting height. Reset restores the scene.</span>
-        <span>Depth tolerance: @DepthTolerance in. Face tolerance: @CellularFluidSimulation.StateTolerance @FaceStateUnit. MAC velocity advection deferred (off).</span>
+        <span>Depth tolerance: @DepthTolerance in. Face tolerance: @CellularFluidSimulation.StateTolerance @FaceStateUnit. One cell = 1 ft². @(_simulation.Algorithm == FluidAlgorithm.Cellular ? "Cellular ticks have no physical duration." : "Fixed tick = 0.016 s.")</span>
     </footer>
 </div>
 
@@ -155,6 +230,17 @@
         ? CellularFluidSimulation.ComparisonTolerance : CellularFluidSimulation.StateTolerance;
     private string FaceStateUnit => _simulation.Algorithm == FluidAlgorithm.Mac ? "ft/s"
         : _simulation.Algorithm == FluidAlgorithm.Cellular ? "(unused, zero state)" : "ft³/s";
+    private string ExperimentFlowUnit => _simulation.Algorithm == FluidAlgorithm.Cellular ? "ft³/tick" : "ft³/s";
+    private string ExperimentMeasurementHelp => _simulation.Algorithm == FluidAlgorithm.Cellular
+        ? "Cellular reports actual transferred volume per algorithmic tick in ft³/tick; it has no physical seconds per tick."
+        : "Flow sums actual limited face transfers across 1-ft² cells, converted to ft³ and divided by the 0.016-s tick.";
+    private string AlgorithmHelp => _simulation.Algorithm switch
+    {
+        FluidAlgorithm.Cellular => "Maximum flow caps each cell's outgoing depth per tick. Higher settle rate redistributes more of the free-surface imbalance each tick. Neither creates inertia or physical time.",
+        FluidAlgorithm.PipeFlux => "Larger pipe area strengthens pressure-driven volume flow. Higher retention preserves more face-flow inertia each tick; lower retention damps it faster.",
+        FluidAlgorithm.TerrainHead => "Larger area strengthens pressure-driven pipe flow. Higher Manning roughness increases bed-friction losses, especially in shallow water.",
+        _ => "Higher damping removes face velocity faster. Optional upwind advection transports velocity with the flow before pressure and drag; first-order transport also introduces numerical diffusion."
+    };
 
     private readonly CellularFluidSimulation _simulation = CellularFluidSimulation.CreateDefault();
     private ElementReference _cpuCanvas;
@@ -184,6 +270,106 @@
     private double _cpuFps, _gpuFps, _cpuDrawMs, _gpuDrawMs, _cpuStepMs, _gpuRoundtripMs, _ticksPerSecond;
     private long _metricStart = System.Diagnostics.Stopwatch.GetTimestamp();
     private int _metricTicks;
+    private ExperimentReadout _experiment = new(0, 0);
+    private (int Tick, ExperimentReadout Reading)? _forwardSample, _reverseSample;
+    private bool _experimentModified;
+    private sealed record Knob(string Key, string Label, float Value, float Min, float Max, string Step);
+    private Knob[] RelevantKnobs => _simulation.Algorithm switch
+    {
+        FluidAlgorithm.Cellular => [
+            new("flow", "Maximum flow (in/tick)", _simulation.Settings.CellularMaxFlow, 0.01f, 12, "0.1"),
+            new("settle", "Settle rate", _simulation.Settings.CellularSettleRate, 0.01f, 1, "0.01")],
+        FluidAlgorithm.PipeFlux => [
+            new("pipe", "Pipe area (ft²)", _simulation.Settings.PipeArea, 0.01f, 1, "0.01"),
+            new("retention", "Momentum retention / tick", _simulation.Settings.PipeRetention, 0, 1, "0.01")],
+        FluidAlgorithm.TerrainHead => [
+            new("terrain", "Terrain-head area (ft²)", _simulation.Settings.TerrainHeadArea, 0.01f, 1, "0.01"),
+            new("roughness", "Manning roughness", _simulation.Settings.ManningRoughness, 0.001f, 0.2f, "0.001")],
+        _ => [new("damping", "MAC damping (1/s)", _simulation.Settings.MacDamping, 0, 5, "0.01")]
+    };
+
+    private Task ChangeSettingAsync(string key, ChangeEventArgs args)
+    {
+        if (!float.TryParse(args.Value?.ToString(), System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var value))
+        {
+            _errorMessage = "Enter a finite numeric setting.";
+            return Task.CompletedTask;
+        }
+        var s = _simulation.Settings;
+        return ApplySettingsAsync(key switch
+        {
+            "flow" => s with { CellularMaxFlow = value }, "settle" => s with { CellularSettleRate = value },
+            "pipe" => s with { PipeArea = value }, "retention" => s with { PipeRetention = value },
+            "terrain" => s with { TerrainHeadArea = value }, "roughness" => s with { ManningRoughness = value },
+            _ => s with { MacDamping = value }
+        });
+    }
+
+    private Task ChangeAdvectionAsync(ChangeEventArgs args) =>
+        ApplySettingsAsync(_simulation.Settings with { MacAdvection = args.Value is true });
+
+    private Task RestoreDefaultsAsync()
+    {
+        var s = _simulation.Settings;
+        var defaults = _simulation.Algorithm switch
+        {
+            FluidAlgorithm.Cellular => s with { CellularMaxFlow = 2, CellularSettleRate = 0.5f },
+            FluidAlgorithm.PipeFlux => s with { PipeArea = 0.25f, PipeRetention = 0.94f },
+            FluidAlgorithm.TerrainHead => s with { TerrainHeadArea = 0.25f, ManningRoughness = 0.04f },
+            _ => s with { MacDamping = 0.02f, MacAdvection = false }
+        };
+        return ApplySettingsAsync(defaults);
+    }
+
+    private async Task ApplySettingsAsync(FluidSettings settings)
+    {
+        await StopRunAsync();
+        await RunActionAsync(async () =>
+        {
+            _simulation.Configure(settings);
+            _forwardSample = _reverseSample = null;
+            await ResetBackendAsync();
+            _referenceStatus = "Settings applied · paused · complete fluid state cleared; terrain and camera preserved.";
+        });
+    }
+
+    private async Task ChangeSceneAsync(ChangeEventArgs args)
+    {
+        await StopRunAsync();
+        await RunActionAsync(async () =>
+        {
+            _simulation.SelectScene((TerrainScene)int.Parse(args.Value!.ToString()!));
+            _forwardSample = _reverseSample = null;
+            _terrainForCpu = _simulation.GetTerrainSnapshot();
+            await ResetBackendAsync();
+            _referenceStatus = "Terrain scene selected · paused · fluid cleared; camera preserved.";
+        });
+    }
+
+    private async Task StartExperimentAsync(ExperimentDirection direction)
+    {
+        await StopRunAsync();
+        await RunActionAsync(async () =>
+        {
+            _simulation.StartExperiment(direction, _cpuEnabled);
+            _experimentModified = false;
+            _terrainForCpu = _simulation.GetTerrainSnapshot();
+            await ResetBackendAsync();
+            _referenceStatus = $"{direction} experiment · paused at tick 0 · fixed reservoir heads; Run or Step.";
+        });
+    }
+
+    private async Task ResetBackendAsync()
+    {
+        _comparison = null;
+        _summaryDirty = true;
+        _gpuCycles = 0;
+        _experiment = new(0, 0);
+        _experimentModified = false;
+        if (_gpuSupported) await Gpu.ResetAsync(_simulation, _cpuEnabled);
+        await RenderCpuAsync();
+    }
 
     protected override void OnInitialized()
     {
@@ -241,6 +427,9 @@
         await RunActionAsync(async () =>
         {
             _simulation.Reset();
+            _forwardSample = _reverseSample = null;
+            _experimentModified = false;
+            _experiment = new(0, 0);
             _summaryDirty = true;
             _terrainForCpu = _simulation.GetTerrainSnapshot();
             _comparison = null;
@@ -263,6 +452,9 @@
         await RunActionAsync(async () =>
         {
             _simulation.SelectAlgorithm(algorithm);
+            _forwardSample = _reverseSample = null;
+            _experimentModified = false;
+            _experiment = new(0, 0);
             _comparison = null;
             _summaryDirty = true;
             _gpuCycles = 0;
@@ -276,7 +468,10 @@
     {
         await RunActionAsync(async () =>
         {
-            var delta = _simulation.AddWater(_simulation.Width / 2, 12, PourRadius, PourDepthInches, _cpuEnabled);
+            _forwardSample = _reverseSample = null;
+            _experimentModified = _simulation.Direction != ExperimentDirection.None;
+            var point = _simulation.PourLocation;
+            var delta = _simulation.AddWater(point.X, point.Y, PourRadius, PourDepthInches, _cpuEnabled);
             if (_cpuEnabled) _summaryDirty = true;
             _comparison = null;
             await RenderCpuAsync();
@@ -289,29 +484,50 @@
 
     private Task StepAsync() => AdvanceAsync(CancellationToken.None, 1);
 
-    private async Task AdvanceAsync(CancellationToken cancellationToken, int ticks)
+    private async Task StepExperimentAsync()
     {
+        await StopRunAsync();
         await RunActionAsync(async () =>
         {
-            if (cancellationToken.IsCancellationRequested) return;
-            if (_cpuEnabled)
-            {
-                var start = System.Diagnostics.Stopwatch.GetTimestamp();
-                for (var i = 0; i < ticks; i++) _simulation.Step();
-                _summaryDirty = true;
-                _cpuStepMs = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds / ticks;
-            }
-            _comparison = null;
-            await RenderCpuAsync();
-            if (_gpuSupported)
-            {
-                var start = System.Diagnostics.Stopwatch.GetTimestamp();
-                await Gpu.StepAsync(ticks);
-                _gpuRoundtripMs = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
-                _gpuCycles += ticks;
-            }
-            _metricTicks += ticks;
+            if (_simulation.Direction == ExperimentDirection.None) return;
+            for (var batch = 0; batch < 16; batch++)
+                await AdvanceCoreAsync(CancellationToken.None, 8);
         });
+    }
+
+    private Task AdvanceAsync(CancellationToken cancellationToken, int ticks) =>
+        RunActionAsync(() => AdvanceCoreAsync(cancellationToken, ticks));
+
+    private async Task AdvanceCoreAsync(CancellationToken cancellationToken, int ticks)
+    {
+        if (cancellationToken.IsCancellationRequested) return;
+        if (_cpuEnabled)
+        {
+            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+            for (var i = 0; i < ticks; i++) _simulation.Step();
+            _summaryDirty = true;
+            _cpuStepMs = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds / ticks;
+        }
+        _comparison = null;
+        await RenderCpuAsync();
+        if (_gpuSupported)
+        {
+            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+            await Gpu.StepAsync(ticks);
+            _gpuRoundtripMs = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+            _gpuCycles += ticks;
+        }
+        _metricTicks += ticks;
+        if (_simulation.Direction != ExperimentDirection.None)
+        {
+            _experiment = _gpuSupported ? await Gpu.MeasureAsync(_simulation) : _simulation.MeasureExperiment();
+            var sample = (_gpuSupported ? _gpuCycles : _simulation.CycleCount, _experiment);
+            if (!_experimentModified)
+            {
+                if (_simulation.Direction == ExperimentDirection.Forward) _forwardSample = sample;
+                else _reverseSample = sample;
+            }
+        }
     }
 
     private async Task ToggleRun()
@@ -377,6 +593,8 @@
             _selectedIndex = y * _simulation.Width + x;
             if (action == "pour")
             {
+                _forwardSample = _reverseSample = null;
+                _experimentModified = _simulation.Direction != ExperimentDirection.None;
                 var delta = _simulation.AddWater(x, y, 1, PourDepthInches, _cpuEnabled);
                 if (_cpuEnabled) _summaryDirty = true;
                 _comparison = null;
@@ -384,6 +602,8 @@
             }
             else if (action == "barrier")
             {
+                _forwardSample = _reverseSample = null;
+                _experimentModified = _simulation.Direction != ExperimentDirection.None;
                 _simulation.AddBarrier(cells);
                 _terrainForCpu = _simulation.GetTerrainSnapshot();
                 _comparison = null;
@@ -488,6 +708,8 @@
                 catch
                 {
                     _simulation.Reset();
+                    _experiment = new(0, 0);
+                    _forwardSample = _reverseSample = null;
                     _referenceStatus = "GPU recovery unavailable · CPU fallback explicitly reset to tick 0 (not stale reference state).";
                 }
                 _cpuEnabled = true;

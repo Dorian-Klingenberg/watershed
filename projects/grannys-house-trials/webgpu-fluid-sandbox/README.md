@@ -37,18 +37,34 @@ The first implementation focuses on platform feasibility and the cellular-fluid 
 ## Algorithms, scenario, and execution
 
 The **Algorithm** selector changes the numeric model in both implementations.
-The existing sloped landscape is the scenario; CPU/WebGPU are execution backends,
+The terrain selector offers slope/spillway, enclosed basin, water slide, and
+single-stage Tesla channel; CPU/WebGPU are execution backends,
 not different algorithms. Changing algorithm pauses Run and clears water, all
 face state, and ticks while preserving **current edited terrain and camera**.
 Reset instead restores starting terrain and clears fluid while retaining the
-selected algorithm. CPU-only fallback supports all four.
+selected terrain and algorithm. CPU-only fallback supports all four.
 
 | Algorithm | Persistent state and model |
 | --- | --- |
-| Cellular | Depth-only synchronous four-neighbor redistribution; no momentum or physical seconds per tick. |
-| Pipe-flux shallow water (adapted) | Signed edge volume rates, free-surface pressure impulse through fixed 0.25 ft² virtual pipes, linear damping (0.94/tick), old/new trapezoidal volume transport. |
+| Cellular | Depth-only synchronous four-neighbor redistribution; configurable max flow (default 2 in/tick) and settle rate (0.5). No physical seconds per tick; experiment transfers are ft³/tick, never ft³/s. |
+| Pipe-flux shallow water (adapted) | Signed edge volume rates, free-surface pressure impulse through configurable virtual pipes (default 0.25 ft²), retention (0.94/tick), old/new trapezoidal volume transport. |
 | Terrain-head pipe flow (adapted) | Signed pipe volume rates and trapezoidal transport, but depth-dependent semi-implicit Manning-style rough-bed friction (n=0.04), rather than constant linear damping. Shallow flow loses more momentum than deep flow. |
-| Staggered MAC shallow water (adapted) | Persistent face velocities, gravity impulse and linear drag (0.02/s); first-order donor-depth continuity flux, **not** fixed-pipe-area transport. Velocity self-advection remains deferred/off, not an exposed nonfunctional option. |
+| Staggered MAC shallow water (adapted) | Persistent face velocities, gravity impulse and configurable linear drag (default 0.02/s); donor-depth continuity flux, **not** fixed-pipe-area transport. Optional first-order upwind velocity self-advection is implemented in C# and WGSL (off by default). |
+
+Only relevant settings appear for the current algorithm. Terrain-head exposes
+pipe area and Manning roughness. Validated immutable C# settings are included in
+complete baselines and comparison identity (along with active forcing direction). Changing any setting pauses and
+clears fluid/ticks while preserving edited terrain and camera. Restore defaults
+affects only the selected algorithm. Bounds are flow 0.01–12 in/tick, settle
+0.01–1, areas 0.01–1 ft², retention 0–1, roughness 0.001–0.2,
+and MAC damping 0–5/s; nonfinite/out-of-range values are rejected atomically.
+
+MAC advection computes `q' = q - dt*(u*upwind_dx(q) + v*upwind_dy(q))`
+on the staggered faces, interpolating the transverse velocity from four adjacent
+faces. Missing/exterior faces are zero. Gravity, drag, local speed cap and donor
+limiting then act on that advected velocity; depth transport remains upwind.
+The GPU uses a separate optional advection pass into existing scratch storage
+to keep real Chromium/SwiftShader pipeline compilation tractable.
 
 The three momentum models use 1 ft cells, gravity 32.174 ft/s² and fixed
 0.016 s ticks. Public/render depths and terrain are inches; pipe states are
@@ -73,7 +89,7 @@ production flood solver, incompressible Navier–Stokes, or a calibrated erosion
 Only outer grid cells drain; enclosed terrain basins conserve water.
 
 Complete baseline exports/imports contain depths, **all face rates/velocities**,
-algorithm identity and tick. Reference re-enable and device-loss recovery import
+algorithm identity, immutable settings and tick. Reference re-enable and device-loss recovery import
 that complete state, not just depths. Each completed GPU display batch caches
 both depth and face state together; there is still no CPU snapshot transfer or
 solver/draw/summary work while the CPU reference is off. Comparison checks
@@ -101,8 +117,58 @@ positivity limiting and complete-state recovery. Historical cellular
 round/parallel/active-source/GPU variants are execution optimizations of cellular
 physics, not extra algorithm choices. Original heightfield SWE, virtual-pipe,
 O'Brien volume-only, slosh scenario presets, hydraulic erosion/rain and other
-historical branches remain **deferred**, as do new scenario selection and MAC
-velocity advection. The column-raycast renderer is also still deferred.
+historical branches remain **deferred**. The column-raycast renderer is also still deferred.
+
+### Controlled single-stage Tesla experiment
+
+The Tesla scene is a flat-bottom 96×64-cell channel with equal-size end reservoirs,
+an 8-cell-wide main path, and a roughly 6-cell-wide asymmetric bypass connected
+at two distinct mouths. A solid terrain island separates branch and main path:
+this is not an open D-shaped cavity. The geometry is experimental and not a
+dimensionally faithful reproduction of a patented/industrial valve. Walls are
+48 in high and remain overtoppable under arbitrary extra pours.
+
+**Forward experiment** and **Reverse experiment** each restore that terrain and
+pause at tick 0. All unforced channel/reservoir cells begin at 15 in; interior
+reservoir patches maintain 18/12 in in forward, 12/18 in in reverse (same 6-in
+imposed head difference). No terrain gradient favors either direction.
+C# generates initial conditions and per-cell prescribed-depth operations;
+WGSL imposes those numeric constraints after each tick. The same policy runs
+on the CPU. Reservoirs inject/remove water, so forced runs do not conserve
+closed-system mass. CPU-off builds domain reset/forcing operations but does not
+step, populate, snapshot, or measure the frozen CPU reference.
+
+Run, Step, or **Advance 128 experiment ticks** after starting a direction. The
+bounded 128-tick action stays paused and serializes all 16 eight-tick batches
+against edits/reset, making equal-time trials possible without pause timing.
+The readout sums **actual positivity-limited
+face transfers** across x=75, y=29–36, divided by 12 to convert depth to volume
+for 1-ft² cells. Momentum models additionally divide by their 0.016-s tick,
+yielding signed ft³/s. Cellular reports ft³/tick: its algorithmic tick has no
+physical duration. The bypass probe uses x=52, y=11–17. Positive is left-to-right.
+The bypass metric measures branch throughput, not vorticity or recirculation.
+Readouts are the **last completed tick**, not time averages or steady-state
+estimates. The UI retains forward/reverse samples and reports a magnitude
+difference only at matching ticks; setting/scene changes and edits clear them.
+Reset turns forcing off and clears fluid; restart a direction to reproduce a trial.
+
+Example deterministic C# observations at tick 1600 (25.6 simulated seconds for
+momentum models only), default
+parameters except MAC velocity advection enabled:
+
+| Model | Unit | Forward discharge | Reverse discharge | Forward bypass | Reverse bypass |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Cellular | ft³/tick | 0.020777 | -0.020712 | 0.003471 | -0.003307 |
+| Pipe-flux | ft³/s | 0.281122 | -0.281122 | 0.000023 | -0.000023 |
+| Terrain-head | ft³/s | 5.333757 | -5.494946 | 2.637643 | -2.846550 |
+| MAC + advection | ft³/s | 29.372301 | -26.516822 | 5.061925 | -4.909123 |
+
+These are repeatable **transient measurements**, not
+steady flow, a ranking of solvers, or calibrated resistance. Pipe-flux shows
+essentially no directional distinction here; the others need not favor the
+nominal forward direction. Cellular cannot be compared to physical volume rates.
+This depth-averaged model does not resolve 3D turbulence or guarantee rectification,
+flow closure, or real Tesla-valve performance.
 
 Headless Chromium/SwiftShader regression checks covered at least 448 ticks per
 algorithm, including a real barrier stroke, another pour, GPU-only stepping and
@@ -114,7 +180,25 @@ arbitrarily long runs or other adapters. The declared complete-state tolerance
 remains 0.0001 in for cellular depth, 0.002 in for momentum-model depth,
 0.002 ft³/s for pipe rates and 0.002 ft/s for MAC.
 
+The expanded published-Release Chromium/SwiftShader suite also passes with
+nondefault settings, MAC velocity advection on/off and complete-state resume,
+all four scenes on each model, exact 128-tick forward/reverse forced trials
+(including advective MAC), GPU-only forcing, selected-scene resets, responsive
+layout, actual device failure during a terrain upload, recovered fallback, and
+all four models/scenes without WebGPU. Every explicit full-state comparison
+passes the declared tolerances. Deterministic model checks separately repeat
+the 1600-tick measurements above.
+
 ## Navigation and controls
+
+Both views use the same renderer depth palette: fractional depths share their
+floor-inch band; deeper bands darken, and cyan boundaries mark neighboring
+1-inch band changes. Side faces use the same depth with darker shading; selection
+outlines remain distinct. The shared legend samples exact 1/2/3/6/12-in colors
+from that renderer, not separate estimates. Shading continues beyond 18 in.
+Displays have finite color gamut, so arbitrarily deep adjacent inches cannot
+remain infinitely distinguishable; inspect the numeric depth readout for exact
+values.
 
 | Input | Behavior in either view |
 | --- | --- |
@@ -127,6 +211,8 @@ remains 0.0001 in for cellular depth, 0.002 in for momentum-model depth,
 | Vertical landscape slider, physically right of the views | Move both cameras along the other terrain axis |
 | CPU reference: on/off | Suspend the reference; re-enable from a fresh GPU baseline |
 | Algorithm | Pause; clear water, face state and ticks; preserve edited terrain/camera |
+| Terrain | Pause; replace terrain, clear fluid/ticks/forcing; preserve camera |
+| Algorithm settings / restore defaults | Pause and reset complete fluid state, preserving terrain/camera |
 | Ticks / display | Run 1, 2 (default), 4, or 8 ticks per display snapshot; manual Step remains one tick |
 
 Selection, hover, barrier previews, and camera state are linked. A movement threshold distinguishes clicks from drags; canceling a gesture discards its pending edit. Overlapping barrier strokes do not repeatedly raise the same cells. Terrain edits preserve water depth rather than displacing water volume.

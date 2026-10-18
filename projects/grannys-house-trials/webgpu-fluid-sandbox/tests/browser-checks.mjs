@@ -38,6 +38,23 @@ const click = async text => evaluate(`(() => {
     if (!b) throw Error('Missing button ' + ${JSON.stringify(text)});
     b.click();
 })()`);
+const select = async (label, value) => {
+    await evaluate(`(() => {const s=document.querySelector('[aria-label=${JSON.stringify(label)}]');
+        s.value=${JSON.stringify(String(value))};s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await sleep(350);
+};
+const compare = async description => {
+    await click("Compare states");
+    await wait(`!!document.querySelector('.comparison')`);
+    assert(await evaluate(`document.querySelector('.comparison').classList.contains('match')`),
+        `${description}: ${await evaluate(`document.querySelector('.comparison').innerText`)}`);
+};
+const advance = async ticks => {
+    const start = await evaluate(`Number(document.querySelector('.readout .metric strong').textContent)`);
+    await click("Run");
+    await wait(`Number(document.querySelector('.readout .metric strong').textContent)>=${start+ticks}`,180000);
+    await click("Pause");await sleep(300);
+};
 await send("Network.enable");
 await send("Network.setCacheDisabled",{cacheDisabled:true});
 await send("Page.enable");
@@ -65,6 +82,31 @@ await send("Page.navigate", { url: baseUrl });
 await send("Emulation.setDeviceMetricsOverride", {width:1368,height:912,deviceScaleFactor:1,mobile:false});
 await wait(`document.body?.innerText.includes('WebGPU compute ready')`);
 console.log(await evaluate("document.body.innerText.slice(0,550)"));
+const palette = await evaluate(`import('./js/landscape-view.js').then(({waterDepthColor: color}) => {
+    const top=Array.from({length:73},(_,i)=>color(i));
+    const side=Array.from({length:73},(_,i)=>color(i,true));
+    const light=c=>Number(c.match(/([\\d.]+)%\\)$/)[1]);
+    const normalize=c=>{
+        const span=document.createElement('span');span.style.color=c;document.body.append(span);
+        const result=getComputedStyle(span).color;span.remove();return result;
+    };
+    return {
+        sameBand:color(0.1)===color(0.9),
+        distinct:new Set(top.slice(1)).size===72,
+        monotone:top.every((c,i)=>i===0||light(c)<light(top[i-1])),
+        deeper18:color(18)!==color(19),
+        safe:[-1,NaN,Infinity,-Infinity].every(v=>color(v)===color(0)),
+        darkerSides:side.every((c,i)=>Math.abs(light(c)-light(top[i])*0.8)<0.0011),
+        legend:[1,2,3,6,12].every(n=>{
+            const variable=getComputedStyle(document.documentElement).getPropertyValue('--water-depth-'+n).trim();
+            const swatch=document.querySelector('.depth-key.depth-'+n);
+            return variable===color(n)&&swatch&&getComputedStyle(swatch).backgroundColor===normalize(color(n));
+        }),
+        labelled:!!document.querySelector('[aria-label="Water depth in inches"]')
+    };
+})`);
+for(const [check,passed] of Object.entries(palette)) assert(passed,`shared renderer depth palette: ${check}`);
+console.log("Shared inch-band palette and exact legend colors passed.");
 await evaluate(`(() => {
     window.validationCpuDraws=0;
     const original=CanvasRenderingContext2D.prototype.fillRect;
@@ -81,6 +123,16 @@ for (let algorithm = 0; algorithm < 4; algorithm++) {
     await sleep(300);
     await click("Reset");
     await sleep(200);
+    const knobs = [
+        [["Maximum flow (in/tick)",1.3],["Settle rate",0.37]],
+        [["Pipe area (ft²)",0.33],["Momentum retention / tick",0.89]],
+        [["Terrain-head area (ft²)",0.31],["Manning roughness",0.055]],
+        [["MAC damping (1/s)",0.08]]
+    ][algorithm];
+    assert.equal(await evaluate(`document.querySelectorAll('[aria-label="Algorithm settings"] input[type="number"]').length`),knobs.length,"only algorithm-relevant knobs visible");
+    assert(await evaluate(`document.querySelector('.algorithm-help').textContent.includes(${JSON.stringify(["settle rate","retention","roughness","advection"][algorithm])})`),
+        "per-algorithm help explains knob effects");
+    for(const [label,value] of knobs) await select(label,value);
     await click("Pour 12 in");
     await evaluate(`(() => {
         const s = document.querySelector('[aria-label="Ticks per display"]');
@@ -150,6 +202,79 @@ for (let algorithm = 0; algorithm < 4; algorithm++) {
     await click("Reset");
     await wait(`Number(document.querySelector('.navigation-panel p[role="status"]').textContent.match(/terrain (\\d+)/)[1]) === ${initialTerrain}`);
 }
+// Terrain is independent of solver and settings; every scene is resettable on each backend.
+for(let scene=0;scene<4;scene++) for(let algorithm=0;algorithm<4;algorithm++){
+    await select("Terrain scene",scene);
+    await select("Fluid algorithm",algorithm);
+    await click("Restore algorithm defaults");await sleep(300);
+    if(scene===3) {
+        for(const direction of ["Forward","Reverse"]){
+            await click(`${direction} experiment`);
+            await wait(`import('./js/fluid-gpu.js').then(m=>m.snapshot()).then(s=>s.cycles===0&&s.direction===${direction==="Forward"?1:2}).catch(()=>false)`);
+            await click("Advance 128 experiment ticks");
+            await wait(`Number(document.querySelector('.readout .metric strong').textContent)===128`,180000);
+            await compare(`Tesla ${algorithm} ${direction}`);
+            const baseline=await evaluate(`import('./js/fluid-gpu.js').then(m=>m.snapshot())`);
+            assert.equal(baseline.water[32*96+8],direction==="Forward"?18:12,"fixed left reservoir head");
+            assert.equal(baseline.water[32*96+88],direction==="Forward"?12:18,"fixed right reservoir head");
+            console.log("Tesla measurement",algorithm,direction,"tick",baseline.cycles,
+                await evaluate(`document.querySelector('.experiment-readout').innerText`));
+            assert(await evaluate(`document.querySelector('.experiment-readout').innerText.includes(${JSON.stringify(algorithm===0?"ft³/tick":"ft³/s")})`),
+                "experiment reports correct physical or algorithmic-time units");
+        }
+        assert(await evaluate(`document.body.innerText.includes('Measured |forward| − |reverse|:')`),"equal-tick trial reports measured directional difference");
+        await click("CPU reference: on");await sleep(300);
+        await click("Forward experiment");
+        await wait(`import('./js/fluid-gpu.js').then(m=>m.snapshot()).then(s=>s.cycles===0&&s.direction===1).catch(()=>false)`);
+        await advance(64);
+        await click("CPU reference: off");
+        await wait(`document.body.innerText.includes('CPU re-synchronized')`);
+        await advance(64);
+        await compare(`Tesla ${algorithm} GPU-only forcing/resume`);
+    } else {
+        await click("Pour 12 in");
+        await advance(64);
+        await compare(`scene ${scene}, model ${algorithm}`);
+    }
+    await click("Reset");
+    await wait(`import('./js/fluid-gpu.js').then(m=>m.snapshot()).then(s=>s.cycles===0).catch(()=>false)`);
+    const reset=await evaluate(`import('./js/fluid-gpu.js').then(m=>m.snapshot())`);
+    assert.equal(reset.cycles,0);
+    assert(reset.water.every(v=>v===0)&&reset.momentum.every(v=>v===0),"scene reset clears all fluid and forcing");
+}
+await select("Terrain scene",1);
+await select("Fluid algorithm",3);
+await evaluate(`document.querySelector('[aria-label="MAC velocity advection"]').click()`);
+await sleep(300);
+await click("Pour 12 in");
+await advance(128);
+await compare("real MAC velocity advection enabled");
+assert(await evaluate(`import('./js/fluid-gpu.js').then(async m=>(await m.snapshot()).settings.macAdvection)`),"advection setting included in complete state");
+await click("CPU reference: on");await sleep(300);
+await advance(64);
+await click("CPU reference: off");
+await wait(`document.body.innerText.includes('CPU re-synchronized')`);
+await advance(64);
+await compare("advective MAC complete-state resume");
+await select("Terrain scene",3);
+for(const direction of ["Forward","Reverse"]){
+    await click(`${direction} experiment`);
+    await wait(`import('./js/fluid-gpu.js').then(m=>m.snapshot()).then(s=>s.cycles===0&&s.direction===${direction==="Forward"?1:2}).catch(()=>false)`);
+    await click("Advance 128 experiment ticks");
+    await wait(`Number(document.querySelector('.readout .metric strong').textContent)===128`,180000);
+    await compare(`advective Tesla ${direction}`);
+    console.log("Tesla advective MAC",direction,await evaluate(`document.querySelector('.experiment-readout').innerText`));
+}
+const savedCamera=await evaluate(`JSON.stringify([...document.querySelectorAll('input[type="range"]')].map(s=>s.value))`);
+await select("MAC damping (1/s)",0.12);
+await wait(`import('./js/fluid-gpu.js').then(m=>m.snapshot()).then(s=>s.cycles===0&&s.settings.macDamping===0.12).catch(()=>false)`);
+const changed=await evaluate(`import('./js/fluid-gpu.js').then(m=>m.snapshot())`);
+assert(changed.cycles===0&&changed.water.every(v=>v===0)&&changed.momentum.every(v=>v===0),"settings reset all fluid");
+assert.equal(await evaluate(`JSON.stringify([...document.querySelectorAll('input[type="range"]')].map(s=>s.value))`),savedCamera,"settings preserve camera");
+await click("Restore algorithm defaults");await sleep(300);
+assert(!await evaluate(`document.querySelector('[aria-label="MAC velocity advection"]').checked`),"restore defaults disables actual advection");
+await select("Terrain scene",0);
+await click("Reset");await sleep(300);
 for (const [width,height] of [[390,844],[320,720],[912,1368]]) {
     await send("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:1,mobile:false});
     await sleep(300);
@@ -192,7 +317,8 @@ await wait(`Number(document.querySelector('.readout .metric strong').textContent
 await send("Page.addScriptToEvaluateOnNewDocument", {source:`Object.defineProperty(Navigator.prototype,'gpu',{get:()=>undefined,configurable:true})`});
 await send("Page.reload");
 await wait(`document.body?.innerText.includes('WebGPU is not available')`);
-for(let algorithm=0;algorithm<4;algorithm++){
+for(let scene=0;scene<4;scene++) for(let algorithm=0;algorithm<4;algorithm++){
+    await select("Terrain scene",scene);
     await evaluate(`(() => { const s=document.querySelector('[aria-label="Fluid algorithm"]');
         s.value='${algorithm}';s.dispatchEvent(new Event('change',{bubbles:true})); })()`);
     await sleep(200);
@@ -201,5 +327,5 @@ for(let algorithm=0;algorithm<4;algorithm++){
     await wait(`Number(document.querySelector('.readout .metric strong').textContent)===1`);
     assert(await evaluate(`[...document.querySelectorAll('fluent-button,button')].find(b=>b.textContent.trim()==='CPU reference: on').disabled`),"fallback cannot disable CPU");
 }
-console.log("All four actual WebGPU/C# comparisons, real edits, full-state resume, switch/reset, responsive layout and fallback checks passed.");
+console.log("All actual WebGPU/C# comparisons, nondefault settings, advection, four terrains, controlled Tesla forcing, edits, full-state resume, switch/reset, responsive layout and fallback checks passed.");
 ws.close();
