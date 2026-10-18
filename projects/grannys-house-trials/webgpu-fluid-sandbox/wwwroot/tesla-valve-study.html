@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Tesla Valve Geometry Study · Fluid Algorithm Lab</title>
+  <style>
+    :root { color-scheme: light; --ink:#17312f; --muted:#526966; --line:#c8d9d4; --paper:#f5faf8; --water:#147c78; --branch:#cf7542; --panel:#fff; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.62 system-ui,-apple-system,"Segoe UI",sans-serif; }
+    main { max-width:1000px; margin:auto; padding:28px clamp(18px,4vw,48px) 64px; }
+    a { color:#075f64; }
+    .back { display:inline-block; margin-bottom:22px; }
+    h1,h2,h3 { line-height:1.2; }
+    h1 { max-width:780px; font-size:clamp(2rem,5vw,3.3rem); margin:.3rem 0 1rem; }
+    h2 { margin-top:2.6rem; border-bottom:1px solid var(--line); padding-bottom:.5rem; }
+    h3 { margin-bottom:.35rem; }
+    .eyebrow { color:var(--water); font-size:.78rem; font-weight:750; letter-spacing:.12em; text-transform:uppercase; }
+    .lede { max-width:780px; color:var(--muted); font-size:1.12rem; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:clamp(16px,3vw,26px); margin:20px 0; }
+    .schematic { overflow-x:auto; }
+    .schematic svg { display:block; min-width:650px; width:100%; height:auto; }
+    figcaption,.note { color:var(--muted); font-size:.91rem; }
+    table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+    th,td { text-align:left; vertical-align:top; padding:10px 12px; border-bottom:1px solid var(--line); }
+    th { font-size:.88rem; }
+    td.num { text-align:right; white-space:nowrap; }
+    .table-wrap { overflow-x:auto; }
+    .callout { border-left:4px solid var(--water); padding:12px 16px; background:#e8f4f1; border-radius:0 8px 8px 0; }
+    .warning { border-left-color:#bd6b39; background:#fff2e8; }
+    code { background:#edf2f0; padding:.1rem .3rem; border-radius:4px; }
+    footer { margin-top:3rem; border-top:1px solid var(--line); padding-top:1rem; color:var(--muted); }
+    @media(max-width:640px) { body { font-size:15px; } th,td { padding:8px; } }
+  </style>
+</head>
+<body>
+<main>
+  <a class="back" href="./">← Back to Fluid Algorithm Lab</a>
+  <p class="eyebrow">Geometry review · staggered MAC shallow water</p>
+  <h1>A Tesla valve should bias flow, not seal it</h1>
+  <p class="lede">A Tesla valve is a fixed, passive conduit. Its asymmetric side loops let flow pass in both directions, while the preferred direction should encounter less hydraulic resistance. Reverse flow is repeatedly diverted into loops and interacts with returning flow, increasing losses. It is a fluidic diode, not a one-way check valve.</p>
+
+  <section class="panel">
+    <h2 style="margin-top:0">Proposed trial geometry</h2>
+    <figure class="schematic">
+      <svg viewBox="0 0 940 360" role="img" aria-labelledby="diagram-title diagram-desc" xmlns="http://www.w3.org/2000/svg">
+        <title id="diagram-title">Three-stage compact Tesla-valve candidate</title>
+        <desc id="diagram-desc">A straight four-cell-wide main channel carries easy flow from left to right. Three alternating side-loop branches each have a narrow upstream neck, a broad return pocket, and a shallow 30-degree merge pointed downstream. The same loop orientation repeats in every stage.</desc>
+        <defs>
+          <marker id="arrow-water" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" fill="#147c78"/></marker>
+          <marker id="arrow-hard" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" fill="#cf7542"/></marker>
+        </defs>
+        <rect x="55" y="145" width="825" height="70" rx="8" fill="#d8eeeb" stroke="#17312f" stroke-width="4"/>
+        <path d="M245 145 L282 94 Q298 72 324 72 L377 72 Q410 72 426 99 L463 145" fill="none" stroke="#17312f" stroke-width="18" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="M446 215 L483 266 Q499 288 525 288 L578 288 Q611 288 627 261 L664 215" fill="none" stroke="#17312f" stroke-width="18" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="M645 145 L682 94 Q698 72 724 72 L777 72 Q810 72 826 99 L863 145" fill="none" stroke="#17312f" stroke-width="18" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="M95 179 H840" stroke="#147c78" stroke-width="5" marker-end="url(#arrow-water)"/>
+        <path d="M840 195 H95" stroke="#cf7542" stroke-width="4" stroke-dasharray="10 9" marker-end="url(#arrow-hard)"/>
+        <path d="M268 139 L300 99 Q309 88 326 88 H375 Q391 88 402 104 L430 140" fill="none" stroke="#cf7542" stroke-width="3" stroke-dasharray="6 6"/>
+        <path d="M469 221 L501 261 Q510 272 527 272 H576 Q592 272 603 256 L631 220" fill="none" stroke="#cf7542" stroke-width="3" stroke-dasharray="6 6"/>
+        <path d="M668 139 L700 99 Q709 88 726 88 H775 Q791 88 802 104 L830 140" fill="none" stroke="#cf7542" stroke-width="3" stroke-dasharray="6 6"/>
+        <text x="62" y="132" fill="#17312f" font-size="17" font-weight="700">LEFT · narrow ends first</text>
+        <text x="669" y="132" fill="#17312f" font-size="17" font-weight="700">RIGHT · broad scoops first</text>
+        <text x="286" y="52" fill="#17312f" font-size="16" font-weight="700">Stage 1</text>
+        <text x="496" y="328" fill="#17312f" font-size="16" font-weight="700">Stage 2</text>
+        <text x="704" y="52" fill="#17312f" font-size="16" font-weight="700">Stage 3</text>
+        <text x="90" y="250" fill="#147c78" font-size="15">Easier direction →</text>
+        <text x="675" y="250" fill="#a64c23" font-size="15">← Harder direction</text>
+        <text x="255" y="119" fill="#a64c23" font-size="13">~30° downstream return</text>
+      </svg>
+      <figcaption>Conceptual top view, not to scale. Solid outlines show channel walls; cyan indicates the intended easy-direction main path and dashed rust arrows indicate the harder reverse pass. Each bypass opens from the upstream side, widens into a pocket, and rejoins downstream at a shallow angle. Keep every stage oriented the same way; alternate above/below only to fit the footprint.</figcaption>
+    </figure>
+    <div class="callout"><strong>First candidate:</strong> three compact repeated loops, a four-cell-wide main run, roughly 18-cell-long branches, and a 30° downstream merge. Keep a 45° merge as the comparison case. The 30° candidate gave the strongest easy-versus-hard main-channel pulse-transfer split among the tested 30°, 45°, and 60° versions.</div>
+  </section>
+
+  <h2>What was compared</h2>
+  <p>The trials used the exact C# staggered-MAC model from this sandbox, with first-order velocity advection enabled. The current terrain is a broad single bypass beside an eight-cell-wide straight run. Candidate layouts reduced the run to four cells, scaled each bypass down, and repeated the bypass three times. For each direction, twenty one-inch drops were added at 24-tick intervals at the inlet, for 100 cell-inches total, then the model advanced to tick 2400. “Center crossing” is the cumulative net volume crossing a full-width section at the middle of the main run, expressed in cell-inches. Branch storage is the final water held in the bypasses.</p>
+  <p class="note">For the pulse setup, left-to-right is called the intended easy direction: it meets the narrow branch neck before the wide scoop. Right-to-left meets the wide scoop first and is the intended harder direction. Results are transient comparisons from the same initially dry state. The far reservoir remained dry, so center crossing is not a completed source-to-reservoir throughput measurement.</p>
+
+  <h2>Pulse-trial results</h2>
+  <div class="panel table-wrap">
+    <table>
+      <thead><tr><th>Layout</th><th>Merge</th><th>Easy crossing</th><th>Hard crossing</th><th>Easy / hard</th><th>Easy / hard bypass storage</th></tr></thead>
+      <tbody>
+        <tr><td>Current single loop</td><td class="num">45°</td><td class="num">4.522</td><td class="num">8.038</td><td class="num">0.56</td><td class="num">7.000 / 2.338</td></tr>
+        <tr><td>Three compact loops</td><td class="num">30°</td><td class="num">3.669</td><td class="num">3.093</td><td class="num">1.19</td><td class="num">7.564 / 10.474</td></tr>
+        <tr><td>Three compact loops</td><td class="num">45°</td><td class="num">3.799</td><td class="num">3.446</td><td class="num">1.10</td><td class="num">7.359 / 10.483</td></tr>
+        <tr><td>Three compact loops</td><td class="num">60°</td><td class="num">3.979</td><td class="num">4.150</td><td class="num">0.96</td><td class="num">7.009 / 9.836</td></tr>
+      </tbody>
+    </table>
+    <p class="note">Units for crossings and branch storage are cell-inches. Easy/hard crossing ratio above 1 favors the intended direction in this pulse protocol; it is not a diodicity or pressure-drop ratio. The 30° layout moved 18.6% more water across the center section in the easy direction and stored 38.5% more branch water in the hard direction. The 60° case slightly reversed the crossing preference.</p>
+  </div>
+
+  <h3>Orientation and model controls</h3>
+  <p>Mirroring the current single loop made main-channel pulse transfer nearly symmetric: 6.123 versus 6.153 cell-inches. The current layout also changes apparent preference with the test setup: its fixed-head equal-tick sample at tick 1600 favors forward discharge by about 10%, while the empty-start small-drop pulse moves 78% more water through the center in reverse. That mismatch is why the existing single-loop result should not be treated as dependable directional rectification.</p>
+  <p>With velocity advection disabled, the current layout crossed 5.301 cell-inches forward and 10.017 reverse in the same pulse protocol. This model’s response depends on transient storage and momentum treatment as well as the drawing.</p>
+
+  <h2>Physics and limits</h2>
+  <p>Real Tesla-valve action comes from direction-dependent losses in an asymmetric, fixed passage. In the favorable direction, most flow can continue down the main path, with limited diversion. In reverse, the branch entrances capture more of the stream; turns, contractions, separation, recirculation and collisions with returning flow dissipate more energy. The geometry permits both directions. Performance changes with Reynolds number and flow rate, so a small, slow drop experiment may show weak or inconsistent bias.</p>
+  <p>A meaningful engineering measure is diodicity: pressure drop in the unfavorable direction divided by pressure drop in the favorable direction at matched flow rate. This sandbox instead reports finite-time water transfer and branch storage. Its two-dimensional, depth-averaged MAC scheme does not resolve three-dimensional boundary layers, detailed vortex structure, or turbulent losses; one grid cell is one foot. Treat these runs as a way to screen candidate shapes, then measure matched-flow pressure drop in a higher-fidelity fluid solver or physical model.</p>
+  <div class="callout warning"><strong>UI reproduction note:</strong> right-click in the live sandbox currently adds 12 inches per click. This study used one-inch increments. To reproduce the pulse protocol interactively, the pour depth control needs to expose a 1-inch setting or use a one-inch click increment. The published simulation itself is unchanged by this study.</div>
+
+  <h2>Sources</h2>
+  <ul>
+    <li>Nikola Tesla, <a href="https://patents.google.com/patent/US1329559A/en">US Patent 1,329,559, “Valvular Conduit” (1920)</a> — primary source for the fixed conduit and its directional-flow concept.</li>
+    <li><a href="https://github.com/Karthik-Rajgopal/Tesla-Valve-CFD-Simulations">Tesla Valve CFD Simulations</a> — public CFD example documenting Navier–Stokes/PISO and large-eddy simulation. This is an illustrative project, not a peer-reviewed validation of the present layout.</li>
+    <li><a href="https://github.com/Dorian-Klingenberg/watershed/blob/main/projects/grannys-house-trials/webgpu-fluid-sandbox/README.md">Sandbox model and baseline notes</a> — solver assumptions, existing single-stage geometry, repeatable fixed-head measurements, and CPU/GPU validation.</li>
+  </ul>
+  <footer>Study artifact for the WebGPU Fluid Sandbox. Candidate pulse trials were run in the C# reference model; the compact candidates have not yet been added to the live GPU terrain selector.</footer>
+</main>
+</body>
+</html>
