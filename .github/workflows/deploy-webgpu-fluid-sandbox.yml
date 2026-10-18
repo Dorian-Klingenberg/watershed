@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "projects/grannys-house-trials/webgpu-fluid-sandbox/**"
+      - "projects/grannys-house-trials/presentation/**"
       - ".github/workflows/deploy-webgpu-fluid-sandbox.yml"
   workflow_dispatch:
 
@@ -47,6 +48,11 @@ jobs:
           projects/grannys-house-trials/webgpu-fluid-sandbox/WebGpuFluidSandbox.csproj
           --configuration Release
           --output artifacts/publish
+
+      - name: Add presentation under its own path
+        run: |
+          mkdir -p artifacts/publish/wwwroot/presentation
+          cp -R projects/grannys-house-trials/presentation/. artifacts/publish/wwwroot/presentation/
 
       - name: Set site base path and routing fallback
         env:
