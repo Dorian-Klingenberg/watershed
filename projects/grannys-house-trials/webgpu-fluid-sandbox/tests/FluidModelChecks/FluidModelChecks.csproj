@@ -13,6 +13,7 @@
     <Compile Include="../../Simulation/FluidSettings.cs" Link="FluidSettings.cs" />
     <EmbeddedResource Include="../../artifacts/tesla-valve-map.json"
                       Link="terrain.json" LogicalName="TeslaTerrain.json" />
+    <None Include="../../artifacts/tesla-valve-map.json" Link="tesla-valve-map.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

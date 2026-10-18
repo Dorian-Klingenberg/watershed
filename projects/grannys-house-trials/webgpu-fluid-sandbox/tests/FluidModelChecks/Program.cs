@@ -276,8 +276,29 @@ foreach (var scene in Enum.GetValues<TerrainScene>())
 configurable.SelectScene(TerrainScene.Tesla);
 var stampedMap = configurable.GetTerrainSnapshot();
 Assert(stampedMap.Length == CellularFluidSimulation.StandardWidth * CellularFluidSimulation.StandardHeight &&
-    stampedMap.All(height => height is 0 or 48), "single stamped Tesla map loads on the standard grid");
-Assert(configurable.GetTerrainHeight(8, 64) == 0, "Tesla pour point lies in the stamped channel");
+    stampedMap.All(height => height is >= 0 and <= 48), "single graded Tesla map loads on the standard grid");
+Assert(configurable.GetTerrainHeight(8, 64) == 24 && configurable.GetTerrainHeight(184, 69) == 0,
+    "Tesla channel descends from inlet to outlet");
+var gradedMask = System.Text.Json.JsonDocument.Parse(File.OpenRead(
+    Path.Combine(AppContext.BaseDirectory, "tesla-valve-map.json")));
+var channelMask = gradedMask.RootElement.GetProperty("ChannelMask").EnumerateArray().Select(cell => cell.GetBoolean()).ToArray();
+var gradeDiffs = new List<int>();
+for (var y = 0; y < configurable.Height; y++)
+for (var x = 0; x < configurable.Width; x++)
+{
+    var index = y * configurable.Width + x;
+    foreach (var (nx, ny) in new[] { (x + 1, y), (x, y + 1) })
+    {
+        if (nx >= configurable.Width || ny >= configurable.Height) continue;
+        var neighbor = ny * configurable.Width + nx;
+        if (channelMask[index] && channelMask[neighbor])
+            gradeDiffs.Add(Math.Abs(stampedMap[index] - stampedMap[neighbor]));
+    }
+}
+Assert(gradeDiffs.Count > 3000 && gradeDiffs.Max() <= 1 && gradeDiffs.Any(delta => delta > 0),
+    "Tesla channel has a smooth, gradual bed grade across branches and junctions");
+Assert(stampedMap.Where((_, index) => !channelMask[index]).All(height => height == 48),
+    "Tesla banks remain at the raised background elevation");
 Assert(configurable.PourLocation == (8, 64), "Tesla map pours at the left port");
 configurable.AddWater(configurable.PourLocation.X, configurable.PourLocation.Y, 0, 12);
 AssertNear(12, configurable.GetSummary().TotalWater, 0.0001, "Tesla port pour starts as a small isolated drop");
@@ -309,9 +330,9 @@ foreach (var algorithm in Enum.GetValues<FluidAlgorithm>())
     {
         var forcing = experiment.StartExperiment(direction, true);
         var inlet = 64 * experiment.Width + 8;
-        var outlet = 64 * experiment.Width + 184;
+        var outlet = 69 * experiment.Width + 184;
         Assert(forcing.Depths[inlet] == (direction == ExperimentDirection.Forward ? 18 : 12) &&
-            forcing.Depths[outlet] == (direction == ExperimentDirection.Forward ? 12 : 18), "heads swap, equal imposed difference");
+            forcing.Depths[outlet] == (direction == ExperimentDirection.Forward ? 36 : 42), "port surface heads swap at equal difference over the slope");
         for (var tick = 0; tick < 1600; tick++) experiment.Step();
         var measured = experiment.MeasureExperiment();
         var flowUnit = algorithm == FluidAlgorithm.Cellular ? "ft3/tick" : "ft3/s";

@@ -85,7 +85,7 @@
     @if (_simulation.Scene == TerrainScene.Tesla)
     {
         <section class="control-panel" aria-label="Tesla valve map guidance">
-            <p>Single Tesla terrain map: the stamped blue cells are the low channel (0 in); gray cells are raised terrain (48 in). The purple arrows and black drawing marks are annotations, not terrain. The map is 192 × 128 cells at 1 ft per cell. The left port is near (8, 64). Right-click any channel cell to add a spring; repeated clicks there increase its flow. Use Staggered MAC to explore the route.</p>
+            <p>Single Tesla terrain map: the stamped blue cells are the channel and gray cells are raised banks. The floor eases from 24 in at the left port to 0 in at the outlet. Elevations are solved across the full channel network, so longer routes have a gentler grade between their merge points. Purple arrows and black drawing marks are annotations, not terrain. Right-click a channel cell to add a spring.</p>
         </section>
     }
 
@@ -119,14 +119,14 @@
                 <FluentButton OnClick="StepExperimentAsync" Disabled="@(!_initialized || _simulation.Direction == ExperimentDirection.None)">Advance 128 experiment ticks</FluentButton>
             </div>
             <div>
-                <p>Each experiment restores this stamped map, pauses at tick 0, and fixes clear cells in the two ports to 18 / 12 in (Δhead 6 in), swapped in reverse. Run or Step to advance. Other open channel cells start uniformly at 15 in.</p>
+                <p>Each experiment restores this stamped map and sets port water-surface elevations to 42 / 36 in (Δhead 6 in), swapped in reverse. Water depths adjust for the local bed elevation; other channel cells start at a 36 in water surface.</p>
                 <p>Experimental depth-averaged model: no guaranteed resistance difference, check-valve closure, or resolved turbulence.</p>
-                <p role="status" class="experiment-readout">Direction: @_simulation.Direction · main-channel section signed discharge @(_experiment.Discharge.ToString("F5")) @ExperimentFlowUnit · bypass section signed flow @(_experiment.BypassFlow.ToString("F5")) @ExperimentFlowUnit.</p>
+                <p role="status" class="experiment-readout">Direction: @_simulation.Direction · lower route signed discharge @(_experiment.Discharge.ToString("F5")) @ExperimentFlowUnit · upper return route signed flow @(_experiment.BypassFlow.ToString("F5")) @ExperimentFlowUnit.</p>
                 @if (_experimentModified)
                 {
                     <p>Manual edits invalidate the controlled comparison. Restart a direction to restore the repeatable experiment.</p>
                 }
-                <p>Last completed tick only (not a steady-state estimate). Positive = left-to-right. Main-trunk section x=160, y=63–64; off-axis section x=160, y=57–62 and 65–70. @ExperimentMeasurementHelp The off-axis probe measures branch throughput, not vorticity or closed-loop circulation.</p>
+                <p>Last completed tick only (not a steady-state estimate). Positive = left-to-right. Lower-route section x=160, y=66–74; upper-return section x=160, y=58–61. @ExperimentMeasurementHelp The upper probe measures branch throughput, not vorticity or closed-loop circulation.</p>
                 <p>Record forward/reverse at identical ticks and settings. Different transient or steady results are measurements, not a claim of physical rectification.</p>
                 @if (_forwardSample is { } forward && _reverseSample is { } reverse)
                 {

@@ -17,7 +17,7 @@ public sealed class CellularFluidSimulation
     private const int MaximumCellCount = 262_144;
     public const int StandardWidth = 192;
     public const int StandardHeight = 128;
-    private static readonly Lazy<int[]> TeslaTerrain = new(LoadTeslaTerrain);
+    private static readonly Lazy<TeslaTerrainData> TeslaTerrain = new(() => LoadTeslaTerrainData());
     private readonly int[] _terrainHeights;
     private readonly int[] _initialTerrain;
     private readonly float[] _waterDepths;
@@ -581,7 +581,7 @@ public sealed class CellularFluidSimulation
             throw new InvalidOperationException($"Scenes require the standard {StandardWidth} × {StandardHeight} field.");
         ClearSprings();
         var slope = scene == TerrainScene.Slope ? CreateDefault().GetTerrainSnapshot() : null;
-        var tesla = scene == TerrainScene.Tesla ? TeslaTerrain.Value : null;
+        var tesla = scene == TerrainScene.Tesla ? TeslaTerrain.Value.ElevationInches : null;
         for (var y = 0; y < Height; y++)
         for (var x = 0; x < Width; x++)
         {
@@ -599,7 +599,7 @@ public sealed class CellularFluidSimulation
         Reset();
     }
 
-    private static int[] LoadTeslaTerrain()
+    private static TeslaTerrainData LoadTeslaTerrainData()
     {
         using var stream = typeof(CellularFluidSimulation).Assembly
             .GetManifestResourceStream("TeslaTerrain.json")
@@ -613,9 +613,13 @@ public sealed class CellularFluidSimulation
 
         var elevations = map.GetProperty("ElevationInches").EnumerateArray()
             .Select(cell => cell.GetInt32()).ToArray();
+        var channelMask = map.GetProperty("ChannelMask").EnumerateArray()
+            .Select(cell => cell.GetBoolean()).ToArray();
         if (elevations.Length != StandardWidth * StandardHeight || elevations.Any(height => height is < 0 or > 4096))
             throw new InvalidDataException("The stamped Tesla terrain asset has invalid elevations.");
-        return elevations;
+        if (channelMask.Length != elevations.Length)
+            throw new InvalidDataException("The stamped Tesla terrain asset has an invalid channel mask.");
+        return new TeslaTerrainData(elevations, channelMask);
     }
 
     public ReservoirForcing StartExperiment(ExperimentDirection direction, bool applyToReference)
@@ -625,10 +629,19 @@ public sealed class CellularFluidSimulation
         Reset();
         ClearSprings();
         Direction = direction;
-        for (var y = 57; y <= 70; y++)
-        for (var x = 3; x <= Width - 4; x++)
-            if ((x <= 9 || x >= Width - 10) && _terrainHeights[y * Width + x] == 0)
-                _forcing[y * Width + x] = (x <= 9) == (direction == ExperimentDirection.Forward) ? 18 : 12;
+        var terrain = TeslaTerrain.Value;
+        var leftStage = direction == ExperimentDirection.Forward ? 42 : 36;
+        var rightStage = direction == ExperimentDirection.Forward ? 36 : 42;
+        for (var y = 0; y < Height; y++)
+        for (var x = 0; x < Width; x++)
+        {
+            var index = y * Width + x;
+            if (terrain.ChannelMask[index] && (x <= 9 && y is >= 63 and <= 70 || x >= Width - 8 && y is >= 66 and <= 73))
+            {
+                var stage = x <= 9 ? leftStage : rightStage;
+                _forcing[index] = Math.Max(0, stage - _terrainHeights[index]);
+            }
+        }
         if (applyToReference) GetExperimentInitialWater().CopyTo(_waterDepths, 0);
         return GetForcing();
     }
@@ -640,7 +653,8 @@ public sealed class CellularFluidSimulation
     {
         var water = new float[_terrainHeights.Length];
         for (var i = 0; i < water.Length; i++)
-            water[i] = _forcing[i] >= 0 ? _forcing[i] : _terrainHeights[i] == 0 ? 15 : 0;
+            water[i] = _forcing[i] >= 0 ? _forcing[i] :
+                TeslaTerrain.Value.ChannelMask[i] ? Math.Max(0, 36 - _terrainHeights[i]) : 0;
         return water;
     }
 
@@ -652,8 +666,8 @@ public sealed class CellularFluidSimulation
             if (_forcing[i] >= 0) _waterDepths[i] = _forcing[i];
     }
 
-    public FlowProbe DischargeProbe => Probe(160, 63, 64);
-    public FlowProbe BypassProbe => Probe(160, 57, 62, 65, 70);
+    public FlowProbe DischargeProbe => Probe(160, 66, 74);
+    public FlowProbe BypassProbe => Probe(160, 58, 61);
     private FlowProbe Probe(int x, int top, int bottom) =>
         new(Enumerable.Range(top, bottom - top + 1).Select(y => 2 * (y * Width + x)).ToArray(),
             Enumerable.Repeat(1f / (12 * (Algorithm == FluidAlgorithm.Cellular ? 1 : TimeStepSeconds)),
@@ -671,6 +685,8 @@ public sealed class CellularFluidSimulation
         return new(Read(DischargeProbe), Read(BypassProbe));
     }
 }
+
+internal sealed record TeslaTerrainData(int[] ElevationInches, bool[] ChannelMask);
 
 public enum FluidAlgorithm { Cellular, PipeFlux, TerrainHead, Mac }
 public sealed record FluidState(float[] Water, float[] Momentum, int Cycles, FluidAlgorithm Algorithm)

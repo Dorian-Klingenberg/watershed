@@ -5,16 +5,22 @@ user-approved 192 × 128 grid. The top-down PNG is
 [`wwwroot/tesla-valve-layout.png`](../wwwroot/tesla-valve-layout.png); its
 cell-by-cell elevations are in [`tesla-valve-map.json`](tesla-valve-map.json).
 
-Each cell is 1 ft. Blue cells are channel floor at 0 in; every other cell is
-raised terrain at 48 in. The purple flow arrows and black mounting marks in the
-drawing are annotations, not open water cells or terrain features. The stamp
-follows the indicated channel route without adding branches or smoothing the
-user's geometry.
+Each cell is 1 ft. The blue-cell channel mask follows the stamp without adding
+branches or smoothing the user's geometry. The bed eases from 24 in at the left
+port to 0 in at the right port. Its elevations are harmonically relaxed over
+the channel graph, which gives every merge a shared bed height and distributes
+the remaining fall over each branch's actual length. Adjacent channel cells
+vary by no more than 1 in. Every cell outside the channel remains raised to 48
+in. The purple flow arrows and black mounting marks in the drawing are
+annotations, not open water cells or terrain features.
 
 The preferred app starting point is the left port at (8, 64). The terrain can
 also be explored with right-click springs and the existing forward/reverse
-reservoir controls. No new trials were run for this map. Earlier trial numbers
-refer to different terrain and should not be used to characterize this layout.
+reservoir controls. Controlled experiments now use equal 6 in surface-head
+difference in either direction; initial channel water is set relative to a
+level 36 in free surface so the sloping bed does not introduce artificial
+starting puddles. Earlier trial numbers refer to different terrain and should
+not be used to characterize this layout.
 
 The geometry follows the asymmetric return paths associated with Tesla's
 valvular conduit, where reverse flow is repeatedly redirected while the

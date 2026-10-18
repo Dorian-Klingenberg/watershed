@@ -133,10 +133,14 @@ historical branches remain **deferred**. The column-raycast renderer is also sti
 The terrain selector has one Tesla map: the approved blue-route stamp at
 `wwwroot/tesla-valve-layout.png`, encoded for the solver in
 `artifacts/tesla-valve-map.json`. The 192×128 grid is 1 ft per cell. Blue cells
-become the low channel at 0 in; all other cells become raised terrain at 48 in.
-Purple arrows and black drawing marks are annotations and are not stamped into
-the terrain. The app starts a pour at the left port, and right-click springs
-remain available for placing water elsewhere along the channel.
+are preserved as the channel mask; their bed descends smoothly from 24 in at
+the inlet to 0 in at the outlet. The elevation field is harmonically relaxed
+over the channel network: branches share elevations at junctions, while longer
+paths spread the same head drop over more distance. All cells outside the
+channel remain at 48 in. Purple arrows and black drawing marks are annotations
+and are not stamped into the terrain. The app starts a pour at the left port,
+and right-click springs remain available for placing water elsewhere along the
+channel.
 
 Forward/reverse controls remain available for exploration. Historical Tesla
 trial measurements in earlier map versions have been removed because they do
