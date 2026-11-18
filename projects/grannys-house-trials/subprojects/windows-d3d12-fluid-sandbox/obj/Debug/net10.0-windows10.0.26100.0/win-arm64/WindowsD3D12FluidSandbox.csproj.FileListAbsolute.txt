@@ -85,3 +85,4 @@ C:\repos\watershed-edge-d3d12\projects\grannys-house-trials\subprojects\windows-
 C:\repos\watershed-edge-d3d12\projects\grannys-house-trials\subprojects\windows-d3d12-fluid-sandbox\obj\Debug\net10.0-windows10.0.26100.0\win-arm64\qualifiers.txt
 C:\repos\watershed-edge-d3d12\projects\grannys-house-trials\subprojects\windows-d3d12-fluid-sandbox\obj\Debug\net10.0-windows10.0.26100.0\win-arm64\qualifiers.txt.intermediate
 C:\repos\watershed-edge-d3d12\projects\grannys-house-trials\subprojects\windows-d3d12-fluid-sandbox\obj\Debug\net10.0-windows10.0.26100.0\win-arm64\MultipleQualifiersPerDimensionFound.txt
+C:\repos\watershed-edge-d3d12\projects\grannys-house-trials\subprojects\windows-d3d12-fluid-sandbox\bin\Debug\net10.0-windows10.0.26100.0\win-arm64\WindowsD3D12FluidSandbox.runtimeconfig.dev.json

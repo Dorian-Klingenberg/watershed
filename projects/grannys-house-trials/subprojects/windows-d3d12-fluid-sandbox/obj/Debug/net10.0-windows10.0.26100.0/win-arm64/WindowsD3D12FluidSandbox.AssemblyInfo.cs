@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("WindowsD3D12FluidSandbox")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e65e213f1d9ca26334866eac7194aa9a2e8e68e5")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+bbadcb6a5c3062c61791bc4009f413c78bb046b4")]
 [assembly: System.Reflection.AssemblyProductAttribute("WindowsD3D12FluidSandbox")]
 [assembly: System.Reflection.AssemblyTitleAttribute("WindowsD3D12FluidSandbox")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
