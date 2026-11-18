@@ -294,12 +294,25 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
     }
 
     try {
+        const initStart = performance.now();
+        const adapterStart = performance.now();
         const adapter = await navigator.gpu.requestAdapter();
+        const adapterRequestMs = performance.now() - adapterStart;
         if (!adapter) {
             return { supported: false, message: "No WebGPU adapter was found; the CPU reference remains usable." };
         }
 
+        const deviceStart = performance.now();
         const device = await adapter.requestDevice();
+        const deviceRequestMs = performance.now() - deviceStart;
+        let adapterInfo = null;
+        try {
+            adapterInfo = typeof adapter.requestAdapterInfo === "function"
+                ? await adapter.requestAdapterInfo()
+                : adapter.info ?? null;
+        } catch {
+            adapterInfo = adapter.info ?? null;
+        }
         const cellCount = width * height;
         const bufferSize = cellCount * Float32Array.BYTES_PER_ELEMENT;
         const terrainBuffer = device.createBuffer({
@@ -356,7 +369,9 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
         const advectionPipeline = device.createComputePipeline({
             layout: pipelineLayout, compute: {module,entryPoint:"advectVelocity"}
         });
+        const compilationStart = performance.now();
         const compilation = await module.getCompilationInfo();
+        const shaderCompilationMs = performance.now() - compilationStart;
         const errors = compilation.messages.filter(message => message.type === "error");
         if (errors.length) { device.destroy(); throw new Error(errors.map(error => error.message).join("\n")); }
 
@@ -410,7 +425,22 @@ export async function initialize(canvas, width, height, terrain, water, maxFlow,
             cachedMomentum: new Float32Array(cellCount * 2),
             terrainDirty: true,
             error: null,
-            workgroupCount: Math.ceil(cellCount / 64)
+            workgroupCount: Math.ceil(cellCount / 64),
+            adapterInfo,
+            adapterFeatures: Array.from(adapter.features),
+            adapterFallback: adapter.isFallbackAdapter,
+            initialization: {
+                adapterRequestMs,
+                deviceRequestMs,
+                shaderCompilationMs,
+                totalMs: performance.now() - initStart
+            },
+            metrics: {
+                stepSamples: [],
+                queueSubmitSamples: [],
+                readbackSamples: [],
+                roundtripSamples: []
+            }
         };
         const initializedState = state;
         const fail = message => {
@@ -491,9 +521,10 @@ function uploadTerrain(terrain) {
     state.device.queue.writeBuffer(state.terrainBuffer, 0, new Int32Array(terrain));
 }
 
-export async function step(ticks = 1) {
+export async function step(ticks = 1, present = true) {
     requireState();
     if (!Number.isInteger(ticks) || ticks < 1 || ticks > 8) throw new Error("Invalid tick batch.");
+    const roundtripStart = performance.now();
     const encoder = state.device.createCommandEncoder();
     for (let tick = 0; tick < ticks; ++tick) {
         if (state.algorithm !== 0) {
@@ -527,14 +558,24 @@ export async function step(ticks = 1) {
         applyPass.end();
         state.current = 1 - state.current;
     }
+    const submitStart = performance.now();
     state.device.queue.submit([encoder.finish()]);
+    const queueSubmitMs = performance.now() - submitStart;
     const complete = await readCurrentWater(state);
     requireState();
     state.cachedWater = complete.water;
     state.cachedMomentum = complete.momentum;
     state.cachedTransfers = complete.transfers;
     state.cycles += ticks;
-    drawGpuSnapshot(state);
+    const roundtripMs = performance.now() - roundtripStart;
+    recordStepTiming(state, {
+        ticks,
+        queueSubmitMs,
+        readbackMs: complete.readbackMs,
+        mapWaitMs: complete.mapWaitMs,
+        roundtripMs
+    });
+    if (present) drawGpuSnapshot(state);
 }
 
 export async function snapshot(fresh = false) {
@@ -590,6 +631,7 @@ function drawGpuSnapshot(currentState) {
 }
 
 async function readCurrentWater(currentState) {
+    const readbackStart = performance.now();
     const encoder = currentState.device.createCommandEncoder();
     encoder.copyBufferToBuffer(
         currentState.waterBuffers[currentState.current],
@@ -605,7 +647,9 @@ async function readCurrentWater(currentState) {
         if(currentState.algorithm!==0) encoder.copyBufferToBuffer(currentState.scaleBuffer,0,currentState.readbackBuffer,currentState.bufferSize*7,currentState.bufferSize);
     }
     currentState.device.queue.submit([encoder.finish()]);
+    const mapWaitStart = performance.now();
     await currentState.readbackBuffer.mapAsync(GPUMapMode.READ);
+    const mapWaitMs = performance.now() - mapWaitStart;
     const values = new Float32Array(currentState.readbackBuffer.getMappedRange(0,currentState.bufferSize*(currentState.direction!==0?8:3))).slice();
     currentState.readbackBuffer.unmap();
     const n=currentState.cellCount;
@@ -619,7 +663,13 @@ async function readCurrentWater(currentState) {
             transfers[2*i+axis]=t*values[7*n+(t>=0?i:neighbor)];
         }
     }
-    return { water: values.slice(0, n), momentum: values.slice(n,3*n),transfers };
+    return {
+        water: values.slice(0, n),
+        momentum: values.slice(n,3*n),
+        transfers,
+        mapWaitMs,
+        readbackMs: performance.now() - readbackStart
+    };
 }
 
 function writeSettings(params,s) {
@@ -633,6 +683,91 @@ export function measure(discharge,bypass) {
     requireState();
     const read=p=>p.faces.reduce((sum,face,i)=>sum+(state.cachedTransfers?.[face]??0)*p.weights[i],0);
     return {discharge:read(discharge),bypassFlow:read(bypass)};
+}
+
+export function diagnostics() {
+    requireState();
+    const limits = {};
+    for (const key of [
+        "maxBufferSize",
+        "maxComputeInvocationsPerWorkgroup",
+        "maxComputeWorkgroupSizeX",
+        "maxComputeWorkgroupStorageSize",
+        "maxStorageBufferBindingSize",
+        "maxUniformBufferBindingSize"
+    ]) {
+        limits[key] = state.device.limits?.[key] ?? null;
+    }
+    return {
+        browser: {
+            userAgent: navigator.userAgent,
+            platform: navigator.platform,
+            hardwareConcurrency: navigator.hardwareConcurrency,
+            deviceMemory: navigator.deviceMemory ?? null
+        },
+        adapter: {
+            ...(state.adapterInfo ?? {}),
+            fallback: state.adapterFallback,
+            features: state.adapterFeatures
+        },
+        device: {
+            label: state.device.label,
+            isLost: state.device.lost ? false : null,
+            limits
+        },
+        initialization: state.initialization,
+        metrics: state.metrics,
+        field: {
+            width: state.width,
+            height: state.height,
+            cellCount: state.cellCount,
+            workgroupCount: state.workgroupCount,
+            algorithm: state.algorithm,
+            cycles: state.cycles
+        }
+    };
+}
+
+export async function benchmark(ticks = 1, repeats = 25) {
+    requireState();
+    if (!Number.isInteger(ticks) || ticks < 1 || ticks > 8) throw new Error("Invalid tick batch.");
+    if (!Number.isInteger(repeats) || repeats < 1 || repeats > 500) throw new Error("Invalid repeat count.");
+    for (let i = 0; i < 5; i++) await step(ticks, false);
+    const samples = [];
+    for (let i = 0; i < repeats; i++) {
+        const start = performance.now();
+        await step(ticks, false);
+        samples.push(performance.now() - start);
+    }
+    return summarizeBenchmark(ticks, repeats, samples);
+}
+
+function recordStepTiming(currentState, sample) {
+    const keep = 100;
+    currentState.metrics.stepSamples.push(sample);
+    currentState.metrics.queueSubmitSamples.push(sample.queueSubmitMs);
+    currentState.metrics.readbackSamples.push(sample.readbackMs);
+    currentState.metrics.roundtripSamples.push(sample.roundtripMs);
+    for (const key of ["stepSamples", "queueSubmitSamples", "readbackSamples", "roundtripSamples"]) {
+        if (currentState.metrics[key].length > keep) currentState.metrics[key].splice(0, currentState.metrics[key].length - keep);
+    }
+}
+
+function summarizeBenchmark(ticks, repeats, samples) {
+    const sorted = [...samples].sort((a, b) => a - b);
+    const percentile = fraction => sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * fraction))];
+    const mean = samples.reduce((sum, value) => sum + value, 0) / samples.length;
+    return {
+        ticks,
+        repeats,
+        meanMs: mean,
+        medianMs: percentile(0.5),
+        p95Ms: percentile(0.95),
+        minMs: sorted[0],
+        maxMs: sorted[sorted.length - 1],
+        samples,
+        diagnostics: diagnostics()
+    };
 }
 
 function requireState() {

@@ -150,6 +150,24 @@
       "presentation": { "reveal": "always", "panel": "shared" },
       "problemMatcher": "$msCompile"
     },
+    {
+      "label": "build: windows d3d12 fluid native",
+      "type": "shell",
+      "command": "cmake --build --preset build-vs2026-arm64-debug --target windows_d3d12_fluid_native",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build: windows d3d12 fluid app",
+      "type": "shell",
+      "command": "dotnet build projects/grannys-house-trials/subprojects/windows-d3d12-fluid-sandbox/WindowsD3D12FluidSandbox.csproj --configuration Debug --runtime win-arm64",
+      "options": { "cwd": "${workspaceFolder}" },
+      "dependsOn": ["build: windows d3d12 fluid native"],
+      "dependsOrder": "sequence",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
 
     // Tests
     {
