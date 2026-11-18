@@ -35,6 +35,8 @@ add_executable(
     playtest/evidence_board_view_tests.cpp
     playtest/grannys_yard_session_tests.cpp
     playtest/scenario_001_script_regression_tests.cpp
+    windows_d3d12_fluid_diagnostics_tests.cpp
+    ../subprojects/windows-d3d12-fluid-sandbox/native/native_d3d12_diagnostics.cpp
     playtest/round_result_tests.cpp
 )
 
@@ -45,6 +47,12 @@ target_link_libraries(
     grannys_house_trials::core
     d3d12
     dxgi
+)
+
+target_include_directories(
+  grannys_house_trials_tests
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../subprojects/windows-d3d12-fluid-sandbox/native
 )
 
 set_property(TARGET grannys_house_trials_tests PROPERTY FOLDER "Granny's House Trials")

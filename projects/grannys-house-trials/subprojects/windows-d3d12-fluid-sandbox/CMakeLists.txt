@@ -52,6 +52,7 @@ add_custom_target(windows_d3d12_fluid_native_shaders
 
 add_library(windows_d3d12_fluid_native SHARED
     native/native_d3d12_fluid_renderer.cpp
+    native/native_d3d12_diagnostics.cpp
 )
 
 target_include_directories(windows_d3d12_fluid_native PRIVATE

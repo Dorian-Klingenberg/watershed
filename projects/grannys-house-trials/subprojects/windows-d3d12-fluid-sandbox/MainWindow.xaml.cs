@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -62,6 +63,11 @@ public sealed partial class MainWindow : Window
     [DllImport("NativeD3D12FluidRenderer.dll", CallingConvention = CallingConvention.Cdecl)]
     private static extern int NativeGetDeviceRemovedReason();
 
+    [DllImport("NativeD3D12FluidRenderer.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    private static extern int NativeGetInitializationReport(
+        [MarshalAs(UnmanagedType.LPStr)] StringBuilder buffer,
+        uint bufferSize);
+
     public MainWindow()
     {
         InitializeComponent();
@@ -108,6 +114,10 @@ public sealed partial class MainWindow : Window
                 var message = $"D3D12 initialization failed: 0x{unchecked((uint)hr):X8}";
                 StatusText.Text = message;
                 Console.WriteLine(message);
+                var report = new StringBuilder(4096);
+                var reportHr = NativeGetInitializationReport(report, (uint)report.Capacity);
+                if (reportHr == 0)
+                    Console.WriteLine(report.ToString());
                 return;
             }
 
@@ -133,6 +143,18 @@ public sealed partial class MainWindow : Window
             hr = NativeGetDeviceRemovedReason();
             Console.WriteLine($"D3D12 removed reason after SwapChainPanel handoff: 0x{unchecked((uint)hr):X8}");
             Marshal.Release(swapChain);
+
+            hr = NativeReset();
+            if (hr != 0)
+            {
+                var message = $"D3D12 first render failed: 0x{unchecked((uint)hr):X8}";
+                StatusText.Text = message;
+                Console.WriteLine(message);
+                var report = new StringBuilder(4096);
+                if (NativeGetInitializationReport(report, (uint)report.Capacity) == 0)
+                    Console.WriteLine(report.ToString());
+                return;
+            }
 
             _initialized = true;
             UpdateStatus();

@@ -27,10 +27,22 @@ dotnet build projects/grannys-house-trials/subprojects/windows-d3d12-fluid-sandb
 
 ## Local diagnostic status
 
-On the current Qualcomm Adreno X1-85 workstation, native initialization currently reaches
-`ID3D12Device::CreateRootSignature` and returns `DXGI_ERROR_DEVICE_REMOVED`
-(`0x887A0005`). The device-reason query reports `0x887A0001`.
+The native initialization sequence now passes on the Qualcomm Adreno X1-85 workstation:
 
-Windows Update and Winget had no matching Qualcomm/Adreno/display/graphics driver update
-for the installed `31.0.137.0` driver. This remains a platform/driver diagnosis and
-is not evidence that the WinUI shell or shader compilation is failing.
+- D3D12 11.0 device and composition swap chain initialize successfully.
+- The exact SRV root signature and graphics PSO create successfully.
+- The 192 x 128 field texture, upload buffer, RTV heap, and SRV create successfully.
+- The first reset/render no longer emits `E_INVALIDARG`.
+- The app reports `D3D12 ready` and is usable.
+
+The detailed stage report found and fixed two initialization defects:
+
+1. `D3D12_SHADER_RESOURCE_VIEW_DESC` needed explicit
+   `D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING`.
+2. The first render emitted a redundant `COPY_DEST -> COPY_DEST` resource-barrier
+   transition; same-state transitions are now omitted.
+
+Windows WER may still report an idle/close-time
+`Microsoft.UI.Xaml.dll` `RPC_E_DISCONNECTED (0x8001010E)` / `c000027b`.
+That lifetime report is separate from the resolved initialization and resource
+sequence and remains under investigation.

@@ -17,6 +17,9 @@
 #include <cstdio>
 #include <fstream>
 #include <vector>
+#include <chrono>
+
+#include "native_d3d12_diagnostics.h"
 
 using Microsoft::WRL::ComPtr;
 
@@ -31,6 +34,7 @@ constexpr double kMinimumWater = 0.001;
 
 std::uint32_t gInitializationStage = 0;
 ComPtr<ID3D12Device> gDiagnosticDevice;
+windows_d3d12_fluid::InitializationReport gInitializationReport;
 
 struct NativeStatus
 {
@@ -61,29 +65,87 @@ std::vector<unsigned char> read_file(const wchar_t* path)
     return bytes;
 }
 
+void record_initialization_observation(
+    windows_d3d12_fluid::InitializationStage stage,
+    HRESULT hresult,
+    const std::chrono::steady_clock::time_point& start)
+{
+    const HRESULT removedReason = gDiagnosticDevice
+        ? gDiagnosticDevice->GetDeviceRemovedReason()
+        : S_OK;
+    const std::uint64_t elapsed = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - start).count());
+    gInitializationReport.record(
+        stage,
+        static_cast<std::int32_t>(hresult),
+        static_cast<std::int32_t>(removedReason),
+        elapsed);
+}
+
+void record_initialization_observation(
+    windows_d3d12_fluid::InitializationStage stage,
+    HRESULT hresult)
+{
+    const HRESULT removedReason = gDiagnosticDevice
+        ? gDiagnosticDevice->GetDeviceRemovedReason()
+        : S_OK;
+    gInitializationReport.record(
+        stage,
+        static_cast<std::int32_t>(hresult),
+        static_cast<std::int32_t>(removedReason),
+        0);
+}
+
 class NativeD3D12FluidRenderer
 {
 public:
     NativeD3D12FluidRenderer(std::uint32_t width, std::uint32_t height, const wchar_t* shaderDirectory)
         : backbuffer_width_(std::max(width, 1u)), backbuffer_height_(std::max(height, 1u))
     {
-        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        gInitializationReport.reset();
+        const auto constructorStart = std::chrono::steady_clock::now();
+        const HRESULT comResult = S_OK;
         gInitializationStage = 2;
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::com_init,
+            comResult,
+            constructorStart);
+
         initialize_device();
         gInitializationStage = 3;
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::d3d12_device,
+            S_OK,
+            constructorStart);
+
         initialize_swap_chain();
         gInitializationStage = 4;
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::composition_swap_chain,
+            S_OK,
+            constructorStart);
+
         initialize_field_resources();
         gInitializationStage = 5;
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::field_resources,
+            S_OK,
+            constructorStart);
+
         initialize_pipeline(shaderDirectory);
         gInitializationStage = 6;
-        reset_field();
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::pipeline,
+            S_OK,
+            constructorStart);
+
+        reset_state();
     }
 
     ~NativeD3D12FluidRenderer()
     {
         wait_for_gpu();
-        CoUninitialize();
     }
 
     void resize(std::uint32_t width, std::uint32_t height)
@@ -114,7 +176,7 @@ public:
         *swapChain = dxgiSwapChain.Detach();
     }
 
-    void reset_field()
+    void reset_state()
     {
         terrain_.resize(kFieldWidth * kFieldHeight);
         water_.assign(kFieldWidth * kFieldHeight, 0.0f);
@@ -131,6 +193,11 @@ public:
         }
 
         tick_ = 0;
+    }
+
+    void reset_field()
+    {
+        reset_state();
         render();
     }
 
@@ -288,16 +355,33 @@ public:
 private:
     void initialize_device()
     {
-        throw_if_failed(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)));
-        throw_if_failed(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)));
+        HRESULT hr = CreateDXGIFactory2(0, IID_PPV_ARGS(&factory));
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::dxgi_factory,
+            hr);
+        throw_if_failed(hr);
+
+        hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device));
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::d3d12_device,
+            hr);
+        throw_if_failed(hr);
         gDiagnosticDevice = device;
 
         D3D12_COMMAND_QUEUE_DESC queueDescription{};
         queueDescription.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
         queueDescription.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-        throw_if_failed(device->CreateCommandQueue(&queueDescription, IID_PPV_ARGS(&queue)));
+        hr = device->CreateCommandQueue(&queueDescription, IID_PPV_ARGS(&queue));
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::command_queue,
+            hr);
+        throw_if_failed(hr);
 
-        throw_if_failed(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
+        hr = device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::fence,
+            hr);
+        throw_if_failed(hr);
         fence_value_ = 1;
         fence_event_ = CreateEvent(nullptr, FALSE, FALSE, nullptr);
         if (!fence_event_)
@@ -320,14 +404,26 @@ private:
 
         ComPtr<IDXGISwapChain1> swapChain;
         gInitializationStage = 32;
-        throw_if_failed(factory->CreateSwapChainForComposition(queue.Get(), &description, nullptr, &swapChain));
-        throw_if_failed(swapChain.As(&swap_chain_));
+        HRESULT hr = factory->CreateSwapChainForComposition(queue.Get(), &description, nullptr, &swapChain);
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::swap_chain_create,
+            hr);
+        throw_if_failed(hr);
+        hr = swapChain.As(&swap_chain_);
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::swap_chain_create,
+            hr);
+        throw_if_failed(hr);
 
         gInitializationStage = 35;
         D3D12_DESCRIPTOR_HEAP_DESC heapDescription{};
         heapDescription.NumDescriptors = kFrameCount;
         heapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-        throw_if_failed(device->CreateDescriptorHeap(&heapDescription, IID_PPV_ARGS(&rtv_heap)));
+        hr = device->CreateDescriptorHeap(&heapDescription, IID_PPV_ARGS(&rtv_heap));
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::rtv_heap_create,
+            hr);
+        throw_if_failed(hr);
         rtv_descriptor_size_ = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
         create_render_targets();
 
@@ -349,7 +445,11 @@ private:
         D3D12_CPU_DESCRIPTOR_HANDLE handle = rtv_heap->GetCPUDescriptorHandleForHeapStart();
         for (std::uint32_t i = 0; i < kFrameCount; ++i)
         {
-            throw_if_failed(swap_chain_->GetBuffer(i, IID_PPV_ARGS(&render_targets_[i])));
+            HRESULT hr = swap_chain_->GetBuffer(i, IID_PPV_ARGS(&render_targets_[i]));
+            record_initialization_observation(
+                windows_d3d12_fluid::InitializationStage::backbuffers_create,
+                hr);
+            throw_if_failed(hr);
             device->CreateRenderTargetView(render_targets_[i].Get(), nullptr, handle);
             handle.ptr += rtv_descriptor_size_;
         }
@@ -369,8 +469,12 @@ private:
 
         D3D12_HEAP_PROPERTIES defaultHeap{};
         defaultHeap.Type = D3D12_HEAP_TYPE_DEFAULT;
-        throw_if_failed(device->CreateCommittedResource(&defaultHeap, D3D12_HEAP_FLAG_NONE,
-            &textureDescription, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&field_texture)));
+        HRESULT hr = device->CreateCommittedResource(&defaultHeap, D3D12_HEAP_FLAG_NONE,
+            &textureDescription, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&field_texture));
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::field_texture_create,
+            hr);
+        throw_if_failed(hr);
 
         D3D12_HEAP_PROPERTIES uploadHeap{};
         uploadHeap.Type = D3D12_HEAP_TYPE_UPLOAD;
@@ -386,21 +490,33 @@ private:
         uploadDescription.Format = DXGI_FORMAT_UNKNOWN;
         uploadDescription.SampleDesc.Count = 1;
         uploadDescription.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-        throw_if_failed(device->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE,
-            &uploadDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&field_upload)));
+        hr = device->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE,
+            &uploadDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&field_upload));
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::field_upload_create,
+            hr);
+        throw_if_failed(hr);
 
         D3D12_DESCRIPTOR_HEAP_DESC srvHeapDescription{};
         srvHeapDescription.NumDescriptors = 1;
         srvHeapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
         srvHeapDescription.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-        throw_if_failed(device->CreateDescriptorHeap(&srvHeapDescription, IID_PPV_ARGS(&srv_heap)));
+        hr = device->CreateDescriptorHeap(&srvHeapDescription, IID_PPV_ARGS(&srv_heap));
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::srv_heap_create,
+            hr);
+        throw_if_failed(hr);
 
         D3D12_SHADER_RESOURCE_VIEW_DESC srvDescription{};
         srvDescription.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         srvDescription.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        srvDescription.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srvDescription.Texture2D.MipLevels = 1;
         device->CreateShaderResourceView(field_texture.Get(), &srvDescription,
             srv_heap->GetCPUDescriptorHandleForHeapStart());
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::srv_create,
+            S_OK);
     }
 
     void initialize_pipeline(const wchar_t* shaderDirectory)
@@ -427,11 +543,28 @@ private:
         ComPtr<ID3DBlob> rootSignatureBlob;
         ComPtr<ID3DBlob> errorBlob;
         gInitializationStage = 511;
-        throw_if_failed(D3D12SerializeRootSignature(&rootSignatureDescription, D3D_ROOT_SIGNATURE_VERSION_1,
-            &rootSignatureBlob, &errorBlob));
+        const HRESULT serializeResult = D3D12SerializeRootSignature(
+            &rootSignatureDescription,
+            D3D_ROOT_SIGNATURE_VERSION_1,
+            &rootSignatureBlob,
+            &errorBlob);
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::root_signature_serialize,
+            serializeResult,
+            std::chrono::steady_clock::now());
+        throw_if_failed(serializeResult);
+
         gInitializationStage = 512;
-        throw_if_failed(device->CreateRootSignature(0, rootSignatureBlob->GetBufferPointer(),
-            rootSignatureBlob->GetBufferSize(), IID_PPV_ARGS(&root_signature)));
+        const HRESULT createResult = device->CreateRootSignature(
+            0,
+            rootSignatureBlob->GetBufferPointer(),
+            rootSignatureBlob->GetBufferSize(),
+            IID_PPV_ARGS(&root_signature));
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::root_signature_create,
+            createResult,
+            std::chrono::steady_clock::now());
+        throw_if_failed(createResult);
 
         gInitializationStage = 52;
         std::wstring base(shaderDirectory);
@@ -439,6 +572,9 @@ private:
             base.push_back(L'\\');
         const std::vector<unsigned char> vertexBytes = read_file((base + L"field_render_vs.cso").c_str());
         const std::vector<unsigned char> pixelBytes = read_file((base + L"field_render_ps.cso").c_str());
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::shaders,
+            S_OK);
 
         gInitializationStage = 53;
         D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDescription{};
@@ -455,13 +591,21 @@ private:
         pipelineDescription.NumRenderTargets = 1;
         pipelineDescription.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
         pipelineDescription.SampleDesc.Count = 1;
-        throw_if_failed(device->CreateGraphicsPipelineState(&pipelineDescription, IID_PPV_ARGS(&pipeline)));
+        HRESULT hr = device->CreateGraphicsPipelineState(&pipelineDescription, IID_PPV_ARGS(&pipeline));
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::graphics_pso,
+            hr);
+        throw_if_failed(hr);
     }
 
     void update_field_texture()
     {
         void* mapped = nullptr;
-        throw_if_failed(field_upload->Map(0, nullptr, &mapped));
+        HRESULT hr = field_upload->Map(0, nullptr, &mapped);
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::reset_texture_upload,
+            hr);
+        throw_if_failed(hr);
         auto* pixels = static_cast<unsigned char*>(mapped);
         std::memset(pixels, 0, kFieldWidth * kFieldHeight * 4);
 
@@ -500,6 +644,10 @@ private:
 
     void transition(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after)
     {
+        if (windows_d3d12_fluid::is_redundant_resource_transition(
+            static_cast<std::uint32_t>(before),
+            static_cast<std::uint32_t>(after)))
+            return;
         D3D12_RESOURCE_BARRIER barrier{};
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier.Transition.pResource = resource;
@@ -511,9 +659,22 @@ private:
 
     void render()
     {
+        gInitializationStage = 71;
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::reset_start,
+            S_OK);
+
         update_field_texture();
-        throw_if_failed(allocators_[frame_index_]->Reset());
-        throw_if_failed(command_list->Reset(allocators_[frame_index_].Get(), pipeline.Get()));
+        HRESULT hr = allocators_[frame_index_]->Reset();
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::reset_command_record,
+            hr);
+        throw_if_failed(hr);
+        hr = command_list->Reset(allocators_[frame_index_].Get(), pipeline.Get());
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::reset_command_record,
+            hr);
+        throw_if_failed(hr);
 
         transition(field_texture.Get(), field_state_, D3D12_RESOURCE_STATE_COPY_DEST);
 
@@ -533,6 +694,9 @@ private:
         destinationLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
         destinationLocation.SubresourceIndex = 0;
         command_list->CopyTextureRegion(&destinationLocation, 0, 0, 0, &sourceLocation, nullptr);
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::reset_texture_copy,
+            S_OK);
 
         transition(field_texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         field_state_ = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
@@ -563,13 +727,24 @@ private:
         command_list->RSSetScissorRects(1, &scissor);
         command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         command_list->DrawInstanced(3, 1, 0, 0);
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::reset_draw,
+            S_OK);
 
         transition(render_targets_[frame_index_].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
-        throw_if_failed(command_list->Close());
+        hr = command_list->Close();
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::reset_resource_barriers,
+            hr);
+        throw_if_failed(hr);
 
         ID3D12CommandList* lists[] = { command_list.Get() };
         queue->ExecuteCommandLists(1, lists);
-        throw_if_failed(swap_chain_->Present(1, 0));
+        hr = swap_chain_->Present(1, 0);
+        record_initialization_observation(
+            windows_d3d12_fluid::InitializationStage::reset_present,
+            hr);
+        throw_if_failed(hr);
         wait_for_gpu();
         frame_index_ = (frame_index_ + 1) % kFrameCount;
     }
@@ -771,6 +946,19 @@ extern "C" __declspec(dllexport) int __cdecl NativeGetDeviceRemovedReason()
     if (!gDiagnosticDevice)
         return E_POINTER;
     return static_cast<int>(gDiagnosticDevice->GetDeviceRemovedReason());
+}
+
+extern "C" __declspec(dllexport) int __cdecl NativeGetInitializationReport(
+    char* buffer,
+    std::uint32_t bufferSize)
+{
+    if (!buffer || bufferSize == 0)
+        return E_INVALIDARG;
+    const std::string report = gInitializationReport.text();
+    if (report.size() >= bufferSize)
+        return E_NOT_SUFFICIENT_BUFFER;
+    std::memcpy(buffer, report.c_str(), report.size() + 1);
+    return S_OK;
 }
 
 extern "C" __declspec(dllexport) int __cdecl NativeDispose()
