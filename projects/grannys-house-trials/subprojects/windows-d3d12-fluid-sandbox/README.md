@@ -5,11 +5,16 @@ It is isolated in `feat/edge-d3d12-fluid-sandbox` and does not use the Blazor/We
 
 ## Current slice
 
-- WinUI 3 Fluent controls: Run, Pause, Step, Pour, Reset
+- WinUI 3 Fluent left-rail controls: Run, Pause, Step, Pour, Reset
+- Tick batches: 1, 2, 4, and 8
+- Independent native CPU reference state and mismatch readout
+- Pour depth and cellular max-flow/settle controls
+- Top-down and projected-column views
+- Zoom, horizontal/vertical position, and selection
+- Raise, carve, and select terrain tools
 - 192 x 128 cellular field
 - Direct3D 12 native renderer
 - ARM64 Windows build
-- No C# CPU-reference pane
 
 ## Build
 
