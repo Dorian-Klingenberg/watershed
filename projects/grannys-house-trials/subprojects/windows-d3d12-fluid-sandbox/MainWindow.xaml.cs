@@ -150,14 +150,6 @@ public sealed partial class MainWindow : Window
         _running = false;
         _timer.Stop();
 
-        if (_initialized)
-        {
-            var hr = NativeDispose();
-            _initialized = false;
-            if (hr != 0)
-                Console.WriteLine($"D3D12 disposal failed: 0x{unchecked((uint)hr):X8}");
-        }
-
         if (_panelNative != null)
         {
             try
@@ -175,6 +167,14 @@ public sealed partial class MainWindow : Window
         {
             Marshal.Release(_ownedSwapChain);
             _ownedSwapChain = IntPtr.Zero;
+        }
+
+        if (_initialized)
+        {
+            var hr = NativeDispose();
+            _initialized = false;
+            if (hr != 0)
+                Console.WriteLine($"D3D12 disposal failed: 0x{unchecked((uint)hr):X8}");
         }
     }
 
