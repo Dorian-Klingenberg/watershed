@@ -48,6 +48,25 @@ TEST_CASE("D3D12 same-state resource transitions are omitted", "[windows_d3d12]"
     REQUIRE_FALSE(windows_d3d12_fluid::is_redundant_resource_transition(0x4u, 0x8u));
 }
 
+TEST_CASE("D3D12 tick batches match the documented 1, 2, 4, 8 sequence", "[windows_d3d12]")
+{
+    REQUIRE(windows_d3d12_fluid::is_valid_tick_batch(1));
+    REQUIRE(windows_d3d12_fluid::is_valid_tick_batch(2));
+    REQUIRE(windows_d3d12_fluid::is_valid_tick_batch(4));
+    REQUIRE(windows_d3d12_fluid::is_valid_tick_batch(8));
+    REQUIRE_FALSE(windows_d3d12_fluid::is_valid_tick_batch(3));
+    REQUIRE_FALSE(windows_d3d12_fluid::is_valid_tick_batch(16));
+}
+
+TEST_CASE("D3D12 normalized picking maps into the 192 by 128 field", "[windows_d3d12]")
+{
+    REQUIRE(windows_d3d12_fluid::normalized_field_coordinate(0.5f, 0.5f, 1.0f, 192) == 96);
+    REQUIRE(windows_d3d12_fluid::normalized_field_coordinate(0.5f, 0.5f, 1.0f, 128) == 64);
+    REQUIRE(windows_d3d12_fluid::normalized_field_coordinate(0.0f, 0.5f, 1.0f, 192) == 0);
+    REQUIRE(windows_d3d12_fluid::normalized_field_coordinate(1.0f, 0.5f, 1.0f, 128) == 127);
+    REQUIRE(windows_d3d12_fluid::normalized_field_coordinate(1.5f, 0.5f, 1.0f, 192) == 191);
+}
+
 TEST_CASE("D3D12 exact app field texture and SRV create at feature level 11", "[windows_d3d12]")
 {
     ComPtr<ID3D12Device> device;

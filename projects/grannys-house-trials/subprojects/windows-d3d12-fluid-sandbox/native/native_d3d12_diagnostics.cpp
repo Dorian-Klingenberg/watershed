@@ -1,5 +1,7 @@
 #include "native_d3d12_diagnostics.h"
 
+#include <algorithm>
+#include <cmath>
 #include <iomanip>
 #include <sstream>
 
@@ -100,6 +102,32 @@ bool is_redundant_resource_transition(
     std::uint32_t after) noexcept
 {
     return before == after;
+}
+
+bool is_valid_tick_batch(std::uint32_t ticks) noexcept
+{
+    return ticks == 1 || ticks == 2 || ticks == 4 || ticks == 8;
+}
+
+std::uint32_t normalized_field_coordinate(
+    float normalized,
+    float panNormalized,
+    float zoom,
+    std::uint32_t extent) noexcept
+{
+    if (!std::isfinite(normalized) || !std::isfinite(panNormalized) ||
+        !std::isfinite(zoom) || zoom < 1.0f || extent == 0)
+        return 0;
+
+    const float clampedNormalized = std::clamp(normalized, 0.0f, 1.0f);
+    const float clampedPan = std::clamp(panNormalized, 0.0f, 1.0f);
+    const float fieldCoordinate =
+        (clampedNormalized - 0.5f) * zoom + clampedPan;
+    const float clampedCoordinate = std::clamp(fieldCoordinate, 0.0f, 1.0f);
+    return static_cast<std::uint32_t>(
+        std::clamp(std::round(clampedCoordinate * extent),
+            0.0f,
+            static_cast<float>(extent - 1)));
 }
 
 }

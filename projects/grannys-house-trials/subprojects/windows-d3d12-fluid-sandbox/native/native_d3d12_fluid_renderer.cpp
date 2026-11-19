@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -31,6 +32,8 @@ constexpr std::uint32_t kFrameCount = 2;
 constexpr double kMaxFlowInches = 2.0;
 constexpr double kSettleRate = 0.5;
 constexpr double kMinimumWater = 0.001;
+constexpr double kDefaultMaxFlow = 2.0;
+constexpr double kDefaultSettleRate = 0.5;
 
 std::uint32_t gInitializationStage = 0;
 ComPtr<ID3D12Device> gDiagnosticDevice;
@@ -42,6 +45,26 @@ struct NativeStatus
     std::uint32_t WetCells;
     float TotalWater;
     float MaximumDepth;
+    std::uint32_t CpuTick;
+    std::uint32_t CpuWetCells;
+    float CpuTotalWater;
+    float CpuMaximumDepth;
+    std::uint32_t MismatchCells;
+    float MaximumDepthMismatch;
+    std::uint32_t BatchSize;
+    std::uint32_t CpuReferenceEnabled;
+    float NativeStepMsPerTick;
+    float CpuStepMsPerTick;
+    float DrawMs;
+};
+
+struct NativeCellStatus
+{
+    std::uint32_t X;
+    std::uint32_t Y;
+    std::int32_t Terrain;
+    float Water;
+    float CpuWater;
 };
 
 void throw_if_failed(HRESULT hr)
@@ -145,7 +168,39 @@ public:
 
     ~NativeD3D12FluidRenderer()
     {
-        wait_for_gpu();
+        dispose();
+    }
+
+    void dispose() noexcept
+    {
+        try
+        {
+            wait_for_gpu();
+        }
+        catch (...)
+        {
+        }
+
+        for (auto& target : render_targets_)
+            target.Reset();
+        for (auto& allocator : allocators_)
+            allocator.Reset();
+
+        command_list.Reset();
+        field_texture.Reset();
+        field_upload.Reset();
+        srv_heap.Reset();
+        rtv_heap.Reset();
+        root_signature.Reset();
+        pipeline.Reset();
+        fence.Reset();
+        swap_chain_.Reset();
+
+        if (fence_event_)
+        {
+            CloseHandle(fence_event_);
+            fence_event_ = nullptr;
+        }
     }
 
     void resize(std::uint32_t width, std::uint32_t height)
@@ -179,6 +234,7 @@ public:
     void reset_state()
     {
         terrain_.resize(kFieldWidth * kFieldHeight);
+        initial_terrain_.resize(kFieldWidth * kFieldHeight);
         water_.assign(kFieldWidth * kFieldHeight, 0.0f);
 
         for (std::uint32_t y = 0; y < kFieldHeight; ++y)
@@ -186,18 +242,37 @@ public:
             for (std::uint32_t x = 0; x < kFieldWidth; ++x)
             {
                 const std::uint32_t index = y * kFieldWidth + x;
-                const float descent = static_cast<float>(kFieldHeight - y);
-                const float farSide = static_cast<float>(kFieldWidth - x);
-                terrain_[index] = static_cast<std::int32_t>(std::clamp(48.0f - descent * 0.18f - farSide * 0.03f, 12.0f, 48.0f));
+                const float channelX = kFieldWidth / 2.0f + 16.0f * std::sin(static_cast<float>(y) / 24.0f);
+                const float bank = std::min(28.0f, std::abs(static_cast<float>(x) - channelX) * 0.65f);
+                const float slope = std::max(0.0f, 88.0f - static_cast<float>(y)) * 0.35f
+                    + std::max(0.0f, 40.0f - static_cast<float>(y)) * 0.3f;
+                const float basinRim = y > 96 ? static_cast<float>(y - 96) * 0.325f : 0.0f;
+                float barrier = 0.0f;
+                if (y >= 74 && y <= 76 && x >= 60 && x <= 123)
+                    barrier = (x >= 90 && x <= 96) ? 5.0f : 12.0f;
+                terrain_[index] = static_cast<std::int32_t>(
+                    std::round(slope + bank + basinRim + barrier));
             }
         }
 
+        initial_terrain_ = terrain_;
         tick_ = 0;
+        cpu_tick_ = 0;
+        cpu_water_.assign(kFieldWidth * kFieldHeight, 0.0f);
+        cpu_reference_enabled_ = false;
     }
 
     void reset_field()
     {
-        reset_state();
+        terrain_ = initial_terrain_;
+        water_.assign(kFieldWidth * kFieldHeight, 0.0f);
+        tick_ = 0;
+        cpu_tick_ = 0;
+        batch_size_ = 1;
+        native_step_ms_per_tick_ = 0.0f;
+        cpu_step_ms_per_tick_ = 0.0f;
+        if (cpu_reference_enabled_)
+            cpu_water_ = water_;
         render();
     }
 
@@ -205,7 +280,23 @@ public:
     {
         const std::int32_t centerX = kFieldWidth / 2;
         const std::int32_t centerY = kFieldHeight / 3;
-        const std::int32_t radius = 8;
+        pour_at(static_cast<float>(centerX) / kFieldWidth,
+            static_cast<float>(centerY) / kFieldHeight,
+            inches);
+    }
+
+    void pour_at(float normalizedX, float normalizedY, float inches)
+    {
+        if (!std::isfinite(normalizedX) || !std::isfinite(normalizedY) ||
+            !std::isfinite(inches) || inches < 0.0f)
+            throw static_cast<HRESULT>(E_INVALIDARG);
+
+        float fieldX = 0.0f;
+        float fieldY = 0.0f;
+        normalized_to_field(normalizedX, normalizedY, fieldX, fieldY);
+        const std::int32_t centerX = static_cast<std::int32_t>(std::round(fieldX));
+        const std::int32_t centerY = static_cast<std::int32_t>(std::round(fieldY));
+        constexpr std::int32_t radius = 8;
 
         for (std::int32_t y = centerY - radius; y <= centerY + radius; ++y)
         {
@@ -216,14 +307,167 @@ public:
                 const std::int32_t dx = x - centerX;
                 const std::int32_t dy = y - centerY;
                 if (dx * dx + dy * dy <= radius * radius)
-                    water_[static_cast<std::size_t>(y) * kFieldWidth + x] += inches;
+                {
+                    const std::size_t index = static_cast<std::size_t>(y) * kFieldWidth + x;
+                    water_[index] += inches;
+                    if (cpu_reference_enabled_)
+                        cpu_water_[index] += inches;
+                }
             }
         }
 
         render();
     }
 
+    void edit_terrain(float normalizedX, float normalizedY, bool raiseTerrain)
+    {
+        if (!std::isfinite(normalizedX) || !std::isfinite(normalizedY))
+            throw static_cast<HRESULT>(E_INVALIDARG);
+
+        float fieldX = 0.0f;
+        float fieldY = 0.0f;
+        normalized_to_field(normalizedX, normalizedY, fieldX, fieldY);
+        const std::int32_t centerX = static_cast<std::int32_t>(std::round(fieldX));
+        const std::int32_t centerY = static_cast<std::int32_t>(std::round(fieldY));
+        constexpr std::int32_t radius = 5;
+
+        for (std::int32_t y = centerY - radius; y <= centerY + radius; ++y)
+        {
+            for (std::int32_t x = centerX - radius; x <= centerX + radius; ++x)
+            {
+                if (x < 0 || y < 0 || x >= static_cast<std::int32_t>(kFieldWidth) || y >= static_cast<std::int32_t>(kFieldHeight))
+                    continue;
+                const std::int32_t dx = x - centerX;
+                const std::int32_t dy = y - centerY;
+                if (dx * dx + dy * dy > radius * radius)
+                    continue;
+                const std::size_t index = static_cast<std::size_t>(y) * kFieldWidth + x;
+                terrain_[index] = raiseTerrain
+                    ? std::clamp(terrain_[index] + 12, 0, 4096)
+                    : std::clamp(terrain_[index] - 12, 0, 4096);
+            }
+        }
+
+        render();
+    }
+
+    void set_cpu_reference_enabled(bool enabled)
+    {
+        cpu_reference_enabled_ = enabled;
+        if (enabled)
+        {
+            cpu_water_ = water_;
+            cpu_tick_ = tick_;
+        }
+        else
+        {
+            cpu_water_.assign(kFieldWidth * kFieldHeight, 0.0f);
+            cpu_tick_ = 0;
+        }
+        render();
+    }
+
+    void set_view(float panX, float panY, float zoom, std::uint32_t mode)
+    {
+        view_pan_x_ = std::clamp(panX, 0.0f, static_cast<float>(kFieldWidth));
+        view_pan_y_ = std::clamp(panY, 0.0f, static_cast<float>(kFieldHeight));
+        view_zoom_ = std::clamp(zoom, 1.0f, 4.0f);
+        view_mode_ = mode == 0 ? 0u : 1u;
+        render();
+    }
+
+    void set_settings(float maxFlow, float settleRate)
+    {
+        if (!std::isfinite(maxFlow) || maxFlow < 0.01f || maxFlow > 12.0f ||
+            !std::isfinite(settleRate) || settleRate < 0.01f || settleRate > 1.0f)
+            throw static_cast<HRESULT>(E_INVALIDARG);
+        max_flow_ = static_cast<double>(maxFlow);
+        settle_rate_ = static_cast<double>(settleRate);
+    }
+
+    void set_selection(float normalizedX, float normalizedY)
+    {
+        if (!std::isfinite(normalizedX) || !std::isfinite(normalizedY))
+            return;
+        float fieldX = 0.0f;
+        float fieldY = 0.0f;
+        normalized_to_field(normalizedX, normalizedY, fieldX, fieldY);
+        selected_x_ = std::clamp(static_cast<std::int32_t>(std::round(fieldX)),
+            0, static_cast<std::int32_t>(kFieldWidth - 1));
+        selected_y_ = std::clamp(static_cast<std::int32_t>(std::round(fieldY)),
+            0, static_cast<std::int32_t>(kFieldHeight - 1));
+        render();
+    }
+
+    NativeCellStatus get_cell_status(std::uint32_t x, std::uint32_t y) const
+    {
+        if (x >= kFieldWidth || y >= kFieldHeight)
+            throw static_cast<HRESULT>(E_INVALIDARG);
+        const std::size_t index = y * kFieldWidth + x;
+        return {
+            x,
+            y,
+            terrain_[index],
+            water_[index],
+            cpu_reference_enabled_ ? cpu_water_[index] : 0.0f
+        };
+    }
+
     void step()
+    {
+        step_batch(1);
+    }
+
+    void step_batch(std::uint32_t ticks)
+    {
+        if (!windows_d3d12_fluid::is_valid_tick_batch(ticks))
+            throw static_cast<HRESULT>(E_INVALIDARG);
+        batch_size_ = ticks;
+
+        const auto nativeStart = std::chrono::steady_clock::now();
+        for (std::uint32_t i = 0; i < ticks; ++i)
+            step_once(water_);
+        tick_ += ticks;
+        native_step_ms_per_tick_ = static_cast<float>(
+            std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(
+                std::chrono::steady_clock::now() - nativeStart).count()) / ticks;
+
+        if (cpu_reference_enabled_)
+        {
+            const auto cpuStart = std::chrono::steady_clock::now();
+            for (std::uint32_t i = 0; i < ticks; ++i)
+                step_once(cpu_water_);
+            cpu_tick_ += ticks;
+            cpu_step_ms_per_tick_ = static_cast<float>(
+                std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(
+                    std::chrono::steady_clock::now() - cpuStart).count()) / ticks;
+        }
+        else
+        {
+            cpu_step_ms_per_tick_ = 0.0f;
+        }
+
+        render();
+    }
+
+private:
+    void normalized_to_field(float normalizedX, float normalizedY, float& fieldX, float& fieldY) const
+    {
+        const float nx = std::clamp(normalizedX, 0.0f, 1.0f);
+        const float ny = std::clamp(normalizedY, 0.0f, 1.0f);
+        fieldX = static_cast<float>(windows_d3d12_fluid::normalized_field_coordinate(
+            nx,
+            view_pan_x_ / kFieldWidth,
+            view_zoom_,
+            kFieldWidth));
+        fieldY = static_cast<float>(windows_d3d12_fluid::normalized_field_coordinate(
+            ny,
+            view_pan_y_ / kFieldHeight,
+            view_zoom_,
+            kFieldHeight));
+    }
+
+    void step_once(std::vector<float>& state)
     {
         std::vector<double> proposals(kFieldWidth * kFieldHeight * 5, 0.0);
 
@@ -232,7 +476,7 @@ public:
             for (std::uint32_t x = 0; x < kFieldWidth; ++x)
             {
                 const std::size_t index = y * kFieldWidth + x;
-                const double available = water_[index];
+                const double available = state[index];
                 if (available <= kMinimumWater)
                     continue;
 
@@ -247,7 +491,7 @@ public:
                 {
                     if (neighbor >= count)
                         return;
-                    const double surface = terrain_[neighbor] + water_[neighbor];
+                    const double surface = terrain_[neighbor] + state[neighbor];
                     if (surface < currentSurface - kMinimumWater)
                     {
                         neighborIndex[lowerCount] = static_cast<std::uint32_t>(neighbor);
@@ -280,8 +524,8 @@ public:
                 if (desiredOutflow <= kMinimumWater)
                     continue;
 
-                const double totalFlow = std::min(std::min(available, kMaxFlowInches),
-                    desiredOutflow * kSettleRate);
+                const double totalFlow = std::min(std::min(available, max_flow_),
+                    desiredOutflow * settle_rate_);
                 if (totalFlow <= kMinimumWater)
                     continue;
 
@@ -306,7 +550,7 @@ public:
             }
         }
 
-        std::vector<float> nextWater = water_;
+        std::vector<float> nextWater = state;
         for (std::uint32_t y = 0; y < kFieldHeight; ++y)
         {
             for (std::uint32_t x = 0; x < kFieldWidth; ++x)
@@ -326,28 +570,52 @@ public:
                 delta -= proposals[proposal + 2];
                 delta -= proposals[proposal + 3];
                 delta -= proposals[proposal + 4];
-                nextWater[index] = static_cast<float>(std::max(0.0, water_[index] + delta));
+                nextWater[index] = static_cast<float>(std::max(0.0, state[index] + delta));
 
                 if (x == 0 || y == 0 || x + 1 == kFieldWidth || y + 1 == kFieldHeight)
                     nextWater[index] = 0.0f;
             }
         }
 
-        water_ = std::move(nextWater);
-        ++tick_;
-        render();
+        state = std::move(nextWater);
     }
 
+public:
     NativeStatus status() const
     {
         NativeStatus result{};
         result.Tick = tick_;
+        result.BatchSize = batch_size_;
+        result.CpuReferenceEnabled = cpu_reference_enabled_ ? 1u : 0u;
+        result.NativeStepMsPerTick = native_step_ms_per_tick_;
+        result.CpuStepMsPerTick = cpu_reference_enabled_ ? cpu_step_ms_per_tick_ : 0.0f;
+        result.DrawMs = draw_ms_;
+
         for (float depth : water_)
         {
             if (depth > kMinimumWater)
                 ++result.WetCells;
             result.TotalWater += depth;
             result.MaximumDepth = std::max(result.MaximumDepth, depth);
+        }
+
+        result.CpuTick = cpu_reference_enabled_ ? cpu_tick_ : 0u;
+        if (cpu_reference_enabled_)
+        {
+            for (float depth : cpu_water_)
+            {
+                if (depth > kMinimumWater)
+                    ++result.CpuWetCells;
+                result.CpuTotalWater += depth;
+                result.CpuMaximumDepth = std::max(result.CpuMaximumDepth, depth);
+            }
+            for (std::size_t i = 0; i < water_.size(); ++i)
+            {
+                const float mismatch = std::abs(water_[i] - cpu_water_[i]);
+                if (mismatch > 0.0001f)
+                    ++result.MismatchCells;
+                result.MaximumDepthMismatch = std::max(result.MaximumDepthMismatch, mismatch);
+            }
         }
         return result;
     }
@@ -616,23 +884,84 @@ private:
         {
             for (std::uint32_t x = 0; x < kFieldWidth; ++x)
             {
-                const std::size_t index = y * kFieldWidth + x;
-                const float terrain = static_cast<float>(terrain_[index]);
-                const float water = water_[index];
+                const std::size_t pixel = y * rowPitch + x * 4;
+                float red = 8.0f;
+                float green = 12.0f;
+                float blue = 18.0f;
 
-                float red = std::clamp(72.0f + terrain * 0.8f, 72.0f, 150.0f);
-                float green = std::clamp(86.0f + terrain * 0.45f, 86.0f, 138.0f);
-                float blue = std::clamp(78.0f + terrain * 0.25f, 78.0f, 110.0f);
-
-                if (water > kMinimumWater)
+                float sourceX = static_cast<float>(x);
+                float sourceY = static_cast<float>(y);
+                if (view_zoom_ > 1.0f || view_pan_x_ != kFieldWidth / 2.0f ||
+                    view_pan_y_ != kFieldHeight / 2.0f)
                 {
-                    const float blend = std::clamp(water / 12.0f, 0.0f, 1.0f);
-                    red = red * (1.0f - blend) + 32.0f * blend;
-                    green = green * (1.0f - blend) + 118.0f * blend;
-                    blue = blue * (1.0f - blend) + 220.0f * blend;
+                    sourceX = std::clamp(view_pan_x_ + (static_cast<float>(x) / kFieldWidth - 0.5f)
+                        * kFieldWidth / view_zoom_, 0.0f, static_cast<float>(kFieldWidth - 1));
+                    sourceY = std::clamp(view_pan_y_ + (static_cast<float>(y) / kFieldHeight - 0.5f)
+                        * kFieldHeight / view_zoom_, 0.0f, static_cast<float>(kFieldHeight - 1));
                 }
 
-                const std::size_t pixel = y * rowPitch + x * 4;
+                if (view_mode_ == 0)
+                {
+                    const std::uint32_t sx = static_cast<std::uint32_t>(std::round(sourceX));
+                    const std::uint32_t sy = static_cast<std::uint32_t>(std::round(sourceY));
+                    const std::size_t index = sy * kFieldWidth + sx;
+                    const float terrain = static_cast<float>(terrain_[index]);
+                    const float water = water_[index];
+
+                    red = std::clamp(72.0f + terrain * 0.8f, 72.0f, 150.0f);
+                    green = std::clamp(86.0f + terrain * 0.45f, 86.0f, 138.0f);
+                    blue = std::clamp(78.0f + terrain * 0.25f, 78.0f, 110.0f);
+
+                    if (water > kMinimumWater)
+                    {
+                        const float blend = std::clamp(water / 12.0f, 0.0f, 1.0f);
+                        red = red * (1.0f - blend) + 32.0f * blend;
+                        green = green * (1.0f - blend) + 118.0f * blend;
+                        blue = blue * (1.0f - blend) + 220.0f * blend;
+                    }
+
+                    if (sx == selected_x_ && sy == selected_y_)
+                    {
+                        red = std::clamp(red + 90.0f, 0.0f, 255.0f);
+                        green = std::clamp(green + 60.0f, 0.0f, 255.0f);
+                        blue = std::clamp(blue - 30.0f, 0.0f, 255.0f);
+                    }
+                }
+                else
+                {
+                    const std::uint32_t sx = static_cast<std::uint32_t>(std::clamp(
+                        view_pan_x_ + (static_cast<float>(x) / kFieldWidth - 0.5f)
+                            * kFieldWidth / view_zoom_,
+                        0.0f,
+                        static_cast<float>(kFieldWidth - 1)));
+                    const std::size_t index = (kFieldHeight / 2) * kFieldWidth + sx;
+                    const float terrain = static_cast<float>(terrain_[index]);
+                    const float water = water_[index];
+                    const float scale = kFieldHeight / 110.0f;
+                    const float groundTop = kFieldHeight - terrain * scale;
+                    const float waterTop = kFieldHeight - (terrain + water) * scale;
+
+                    if (static_cast<float>(y) >= groundTop)
+                    {
+                        red = std::clamp(72.0f + terrain * 0.8f, 72.0f, 150.0f);
+                        green = std::clamp(86.0f + terrain * 0.45f, 86.0f, 138.0f);
+                        blue = std::clamp(78.0f + terrain * 0.25f, 78.0f, 110.0f);
+                    }
+                    if (static_cast<float>(y) >= waterTop && static_cast<float>(y) < groundTop &&
+                        water > kMinimumWater)
+                    {
+                        red = 32.0f;
+                        green = 118.0f;
+                        blue = 220.0f;
+                    }
+
+                    if (sx == selected_x_)
+                    {
+                        red = std::clamp(red + 60.0f, 0.0f, 255.0f);
+                        green = std::clamp(green + 45.0f, 0.0f, 255.0f);
+                    }
+                }
+
                 pixels[pixel + 0] = static_cast<unsigned char>(std::clamp(red, 0.0f, 255.0f));
                 pixels[pixel + 1] = static_cast<unsigned char>(std::clamp(green, 0.0f, 255.0f));
                 pixels[pixel + 2] = static_cast<unsigned char>(std::clamp(blue, 0.0f, 255.0f));
@@ -659,6 +988,7 @@ private:
 
     void render()
     {
+        const auto drawStart = std::chrono::steady_clock::now();
         gInitializationStage = 71;
         record_initialization_observation(
             windows_d3d12_fluid::InitializationStage::reset_start,
@@ -747,6 +1077,9 @@ private:
         throw_if_failed(hr);
         wait_for_gpu();
         frame_index_ = (frame_index_ + 1) % kFrameCount;
+        draw_ms_ = static_cast<float>(
+            std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(
+                std::chrono::steady_clock::now() - drawStart).count());
     }
 
     void wait_for_gpu()
@@ -785,8 +1118,24 @@ private:
     std::uint32_t backbuffer_height_;
 
     std::uint32_t tick_ = 0;
+    std::uint32_t cpu_tick_ = 0;
+    std::uint32_t batch_size_ = 1;
     std::vector<std::int32_t> terrain_;
+    std::vector<std::int32_t> initial_terrain_;
     std::vector<float> water_;
+    std::vector<float> cpu_water_;
+    bool cpu_reference_enabled_ = false;
+    float native_step_ms_per_tick_ = 0.0f;
+    float cpu_step_ms_per_tick_ = 0.0f;
+    float draw_ms_ = 0.0f;
+    float view_pan_x_ = static_cast<float>(kFieldWidth) / 2.0f;
+    float view_pan_y_ = static_cast<float>(kFieldHeight) / 2.0f;
+    float view_zoom_ = 1.0f;
+    std::uint32_t view_mode_ = 0;
+    std::int32_t selected_x_ = static_cast<std::int32_t>(kFieldWidth) / 2;
+    std::int32_t selected_y_ = static_cast<std::int32_t>(kFieldHeight) / 2;
+    double max_flow_ = kDefaultMaxFlow;
+    double settle_rate_ = kDefaultSettleRate;
 
     ComPtr<ID3D12CommandAllocator> allocator;
 };
@@ -914,6 +1263,175 @@ extern "C" __declspec(dllexport) int __cdecl NativeStep()
     }
 }
 
+extern "C" __declspec(dllexport) int __cdecl NativeStepBatch(std::uint32_t ticks)
+{
+    if (!gRenderer)
+        return E_POINTER;
+    try
+    {
+        gRenderer->step_batch(ticks);
+        return 0;
+    }
+    catch (HRESULT hr)
+    {
+        return static_cast<int>(hr);
+    }
+    catch (...)
+    {
+        return E_FAIL;
+    }
+}
+
+extern "C" __declspec(dllexport) int __cdecl NativePourAt(
+    float normalizedX,
+    float normalizedY,
+    float inches)
+{
+    if (!gRenderer)
+        return E_POINTER;
+    try
+    {
+        gRenderer->pour_at(normalizedX, normalizedY, inches);
+        return 0;
+    }
+    catch (HRESULT hr)
+    {
+        return static_cast<int>(hr);
+    }
+    catch (...)
+    {
+        return E_FAIL;
+    }
+}
+
+extern "C" __declspec(dllexport) int __cdecl NativeEditTerrain(
+    float normalizedX,
+    float normalizedY,
+    int raiseTerrain)
+{
+    if (!gRenderer)
+        return E_POINTER;
+    try
+    {
+        gRenderer->edit_terrain(normalizedX, normalizedY, raiseTerrain != 0);
+        return 0;
+    }
+    catch (HRESULT hr)
+    {
+        return static_cast<int>(hr);
+    }
+    catch (...)
+    {
+        return E_FAIL;
+    }
+}
+
+extern "C" __declspec(dllexport) int __cdecl NativeSetCpuReference(int enabled)
+{
+    if (!gRenderer)
+        return E_POINTER;
+    try
+    {
+        gRenderer->set_cpu_reference_enabled(enabled != 0);
+        return 0;
+    }
+    catch (HRESULT hr)
+    {
+        return static_cast<int>(hr);
+    }
+    catch (...)
+    {
+        return E_FAIL;
+    }
+}
+
+extern "C" __declspec(dllexport) int __cdecl NativeSetView(
+    float panX,
+    float panY,
+    float zoom,
+    std::uint32_t mode)
+{
+    if (!gRenderer)
+        return E_POINTER;
+    try
+    {
+        gRenderer->set_view(panX, panY, zoom, mode);
+        return 0;
+    }
+    catch (HRESULT hr)
+    {
+        return static_cast<int>(hr);
+    }
+    catch (...)
+    {
+        return E_FAIL;
+    }
+}
+
+extern "C" __declspec(dllexport) int __cdecl NativeSetSettings(
+    float maxFlow,
+    float settleRate)
+{
+    if (!gRenderer)
+        return E_POINTER;
+    try
+    {
+        gRenderer->set_settings(maxFlow, settleRate);
+        return 0;
+    }
+    catch (HRESULT hr)
+    {
+        return static_cast<int>(hr);
+    }
+    catch (...)
+    {
+        return E_FAIL;
+    }
+}
+
+extern "C" __declspec(dllexport) int __cdecl NativeSetSelection(
+    float normalizedX,
+    float normalizedY)
+{
+    if (!gRenderer)
+        return E_POINTER;
+    try
+    {
+        gRenderer->set_selection(normalizedX, normalizedY);
+        return 0;
+    }
+    catch (HRESULT hr)
+    {
+        return static_cast<int>(hr);
+    }
+    catch (...)
+    {
+        return E_FAIL;
+    }
+}
+
+extern "C" __declspec(dllexport) int __cdecl NativeGetCellStatus(
+    std::uint32_t x,
+    std::uint32_t y,
+    NativeCellStatus* status)
+{
+    if (!gRenderer || !status)
+        return E_POINTER;
+    try
+    {
+        *status = gRenderer->get_cell_status(x, y);
+        return 0;
+    }
+    catch (HRESULT hr)
+    {
+        return static_cast<int>(hr);
+    }
+    catch (...)
+    {
+        return E_FAIL;
+    }
+}
+
 extern "C" __declspec(dllexport) int __cdecl NativeGetStatus(NativeStatus* status)
 {
     if (!gRenderer || !status)
@@ -963,7 +1481,12 @@ extern "C" __declspec(dllexport) int __cdecl NativeGetInitializationReport(
 
 extern "C" __declspec(dllexport) int __cdecl NativeDispose()
 {
-    delete gRenderer;
-    gRenderer = nullptr;
+    if (gRenderer)
+    {
+        gRenderer->dispose();
+        delete gRenderer;
+        gRenderer = nullptr;
+    }
+    gDiagnosticDevice.Reset();
     return 0;
 }

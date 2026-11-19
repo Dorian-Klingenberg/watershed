@@ -69,5 +69,11 @@ private:
 [[nodiscard]] bool is_redundant_resource_transition(
     std::uint32_t before,
     std::uint32_t after) noexcept;
+[[nodiscard]] bool is_valid_tick_batch(std::uint32_t ticks) noexcept;
+[[nodiscard]] std::uint32_t normalized_field_coordinate(
+    float normalized,
+    float panNormalized,
+    float zoom,
+    std::uint32_t extent) noexcept;
 
 }
