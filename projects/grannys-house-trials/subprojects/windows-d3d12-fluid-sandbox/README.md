@@ -10,7 +10,8 @@ It is isolated in `feat/edge-d3d12-fluid-sandbox` and does not use the Blazor/We
 - Independent native CPU reference state and mismatch readout
 - Pour depth and cellular max-flow/settle controls
 - Top-down and projected-column views
-- Zoom, horizontal/vertical position, and selection
+- Zoom, pan, orbit yaw/elevation, and selection
+- Middle-drag orbit, right-drag pan, and wheel zoom
 - Raise, carve, and select terrain tools
 - 192 x 128 cellular field
 - Direct3D 12 native renderer

@@ -6,6 +6,8 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 
+#include <limits>
+
 using Microsoft::WRL::ComPtr;
 
 namespace
@@ -65,6 +67,16 @@ TEST_CASE("D3D12 normalized picking maps into the 192 by 128 field", "[windows_d
     REQUIRE(windows_d3d12_fluid::normalized_field_coordinate(0.0f, 0.5f, 1.0f, 192) == 0);
     REQUIRE(windows_d3d12_fluid::normalized_field_coordinate(1.0f, 0.5f, 1.0f, 128) == 127);
     REQUIRE(windows_d3d12_fluid::normalized_field_coordinate(1.5f, 0.5f, 1.0f, 192) == 191);
+}
+
+TEST_CASE("D3D12 orbit view normalizes yaw and clamps elevation", "[windows_d3d12]")
+{
+    REQUIRE(windows_d3d12_fluid::normalized_view_yaw(450.0f) == 90.0f);
+    REQUIRE(windows_d3d12_fluid::normalized_view_yaw(-45.0f) == 315.0f);
+    REQUIRE(windows_d3d12_fluid::normalized_view_yaw(std::numeric_limits<float>::quiet_NaN()) == 0.0f);
+    REQUIRE(windows_d3d12_fluid::clamped_view_elevation(5.0f) == 15.0f);
+    REQUIRE(windows_d3d12_fluid::clamped_view_elevation(45.0f) == 45.0f);
+    REQUIRE(windows_d3d12_fluid::clamped_view_elevation(95.0f) == 80.0f);
 }
 
 TEST_CASE("D3D12 exact app field texture and SRV create at feature level 11", "[windows_d3d12]")

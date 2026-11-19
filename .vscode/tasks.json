@@ -156,17 +156,28 @@
       "command": "cmake --build --preset build-vs2026-arm64-debug --target windows_d3d12_fluid_native",
       "options": { "cwd": "${workspaceFolder}" },
       "presentation": { "reveal": "always", "panel": "shared" },
-      "problemMatcher": "$msCompile"
+      "problemMatcher": "$msCompile",
+      "inAgents": true
     },
     {
       "label": "build: windows d3d12 fluid app",
       "type": "shell",
-      "command": "dotnet build projects/grannys-house-trials/subprojects/windows-d3d12-fluid-sandbox/WindowsD3D12FluidSandbox.csproj --configuration Debug --runtime win-arm64",
+      "command": "$env:DOTNET_CLI_TELEMETRY_OPTOUT='1'; dotnet build projects/grannys-house-trials/subprojects/windows-d3d12-fluid-sandbox/WindowsD3D12FluidSandbox.csproj --configuration Debug --runtime win-arm64 -p:EnableSourceControlManagerQueries=false -p:PublishRepositoryUrl=false",
       "options": { "cwd": "${workspaceFolder}" },
       "dependsOn": ["build: windows d3d12 fluid native"],
       "dependsOrder": "sequence",
       "presentation": { "reveal": "always", "panel": "shared" },
-      "problemMatcher": "$msCompile"
+      "problemMatcher": "$msCompile",
+      "inAgents": true
+    },
+    {
+      "label": "run: windows d3d12 fluid app",
+      "type": "shell",
+      "command": "$env:DOTNET_CLI_TELEMETRY_OPTOUT='1'; dotnet build projects/grannys-house-trials/subprojects/windows-d3d12-fluid-sandbox/WindowsD3D12FluidSandbox.csproj --configuration Debug --runtime win-arm64 -p:EnableSourceControlManagerQueries=false -p:PublishRepositoryUrl=false; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & '${workspaceFolder}\\projects\\grannys-house-trials\\subprojects\\windows-d3d12-fluid-sandbox\\bin\\Debug\\net10.0-windows10.0.26100.0\\win-arm64\\WindowsD3D12FluidSandbox.exe'",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": [],
+      "inAgents": true
     },
 
     // Tests

@@ -154,6 +154,36 @@
                         Value="64"
                         ValueChanged="ViewSlider_ValueChanged" />
 
+                <Slider x:Name="YawSlider"
+                        Header="Orbit yaw"
+                        Minimum="0"
+                        Maximum="360"
+                        SmallChange="1"
+                        LargeChange="15"
+                        StepFrequency="1"
+                        Value="0"
+                        ValueChanged="ViewSlider_ValueChanged" />
+
+                <Slider x:Name="ElevationSlider"
+                        Header="Orbit elevation"
+                        Minimum="15"
+                        Maximum="80"
+                        SmallChange="1"
+                        LargeChange="10"
+                        StepFrequency="1"
+                        Value="80"
+                        ValueChanged="ViewSlider_ValueChanged" />
+
+                <Button x:Name="ResetViewButton"
+                        Content="Reset view"
+                        MinHeight="44"
+                        HorizontalAlignment="Stretch"
+                        Click="ResetViewButton_Click" />
+
+                <TextBlock Text="Middle-drag: orbit · Right-drag: pan · Wheel: zoom"
+                           Opacity="0.75"
+                           TextWrapping="Wrap" />
+
                 <Border Padding="12"
                         CornerRadius="8"
                         BorderThickness="1"
@@ -181,6 +211,8 @@
                             PointerPressed="FluidSurface_PointerPressed"
                             PointerMoved="FluidSurface_PointerMoved"
                             PointerReleased="FluidSurface_PointerReleased"
+                            PointerCanceled="FluidSurface_PointerCanceled"
+                            PointerCaptureLost="FluidSurface_PointerCaptureLost"
                             PointerWheelChanged="FluidSurface_PointerWheelChanged"
                             RightTapped="FluidSurface_RightTapped" />
         </Border>

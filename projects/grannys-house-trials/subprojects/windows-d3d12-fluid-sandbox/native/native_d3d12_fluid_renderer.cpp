@@ -376,6 +376,13 @@ public:
         render();
     }
 
+    void set_orbit(float yawDegrees, float elevationDegrees)
+    {
+        view_yaw_degrees_ = windows_d3d12_fluid::normalized_view_yaw(yawDegrees);
+        view_elevation_degrees_ = windows_d3d12_fluid::clamped_view_elevation(elevationDegrees);
+        render();
+    }
+
     void set_settings(float maxFlow, float settleRate)
     {
         if (!std::isfinite(maxFlow) || maxFlow < 0.01f || maxFlow > 12.0f ||
@@ -455,16 +462,34 @@ private:
     {
         const float nx = std::clamp(normalizedX, 0.0f, 1.0f);
         const float ny = std::clamp(normalizedY, 0.0f, 1.0f);
-        fieldX = static_cast<float>(windows_d3d12_fluid::normalized_field_coordinate(
-            nx,
-            view_pan_x_ / kFieldWidth,
-            view_zoom_,
-            kFieldWidth));
-        fieldY = static_cast<float>(windows_d3d12_fluid::normalized_field_coordinate(
-            ny,
-            view_pan_y_ / kFieldHeight,
-            view_zoom_,
-            kFieldHeight));
+        if (view_mode_ == 0)
+        {
+            const float yawRadians = view_yaw_degrees_ * 3.14159265358979323846f / 180.0f;
+            const float elevationRadians =
+                view_elevation_degrees_ * 3.14159265358979323846f / 180.0f;
+            const float rightX = std::cos(yawRadians);
+            const float rightY = std::sin(yawRadians);
+            const float forwardX = -rightY;
+            const float forwardY = rightX;
+            const float screenX =
+                (nx - 0.5f) * kFieldWidth / view_zoom_;
+            const float screenY =
+                (ny - 0.5f) * kFieldHeight / view_zoom_;
+            const float forwardOffset =
+                screenY * std::sin(elevationRadians);
+            fieldX = view_pan_x_ + rightX * screenX + forwardX * forwardOffset;
+            fieldY = view_pan_y_ + rightY * screenX + forwardY * forwardOffset;
+        }
+        else
+        {
+            const float yawRadians = view_yaw_degrees_ * 3.14159265358979323846f / 180.0f;
+            const float crossSectionOffset =
+                (nx - 0.5f) * kFieldWidth / view_zoom_;
+            fieldX = view_pan_x_ + std::cos(yawRadians) * crossSectionOffset;
+            fieldY = view_pan_y_ + std::sin(yawRadians) * crossSectionOffset;
+        }
+        fieldX = std::clamp(fieldX, 0.0f, static_cast<float>(kFieldWidth - 1));
+        fieldY = std::clamp(fieldY, 0.0f, static_cast<float>(kFieldHeight - 1));
     }
 
     void step_once(std::vector<float>& state)
@@ -891,13 +916,32 @@ private:
 
                 float sourceX = static_cast<float>(x);
                 float sourceY = static_cast<float>(y);
-                if (view_zoom_ > 1.0f || view_pan_x_ != kFieldWidth / 2.0f ||
-                    view_pan_y_ != kFieldHeight / 2.0f)
+                if (view_mode_ == 0)
                 {
-                    sourceX = std::clamp(view_pan_x_ + (static_cast<float>(x) / kFieldWidth - 0.5f)
-                        * kFieldWidth / view_zoom_, 0.0f, static_cast<float>(kFieldWidth - 1));
-                    sourceY = std::clamp(view_pan_y_ + (static_cast<float>(y) / kFieldHeight - 0.5f)
-                        * kFieldHeight / view_zoom_, 0.0f, static_cast<float>(kFieldHeight - 1));
+                    const float yawRadians =
+                        view_yaw_degrees_ * 3.14159265358979323846f / 180.0f;
+                    const float elevationRadians =
+                        view_elevation_degrees_ * 3.14159265358979323846f / 180.0f;
+                    const float rightX = std::cos(yawRadians);
+                    const float rightY = std::sin(yawRadians);
+                    const float forwardX = -rightY;
+                    const float forwardY = rightX;
+                    const float screenX =
+                        (static_cast<float>(x) / kFieldWidth - 0.5f)
+                        * kFieldWidth / view_zoom_;
+                    const float screenY =
+                        (static_cast<float>(y) / kFieldHeight - 0.5f)
+                        * kFieldHeight / view_zoom_;
+                    const float forwardOffset =
+                        screenY * std::sin(elevationRadians);
+                    sourceX = std::clamp(
+                        view_pan_x_ + rightX * screenX + forwardX * forwardOffset,
+                        0.0f,
+                        static_cast<float>(kFieldWidth - 1));
+                    sourceY = std::clamp(
+                        view_pan_y_ + rightY * screenX + forwardY * forwardOffset,
+                        0.0f,
+                        static_cast<float>(kFieldHeight - 1));
                 }
 
                 if (view_mode_ == 0)
@@ -929,15 +973,27 @@ private:
                 }
                 else
                 {
+                    const float yawRadians =
+                        view_yaw_degrees_ * 3.14159265358979323846f / 180.0f;
+                    const float elevationRadians =
+                        view_elevation_degrees_ * 3.14159265358979323846f / 180.0f;
                     const std::uint32_t sx = static_cast<std::uint32_t>(std::clamp(
-                        view_pan_x_ + (static_cast<float>(x) / kFieldWidth - 0.5f)
+                        view_pan_x_ + std::cos(yawRadians)
+                            * (static_cast<float>(x) / kFieldWidth - 0.5f)
                             * kFieldWidth / view_zoom_,
                         0.0f,
                         static_cast<float>(kFieldWidth - 1)));
-                    const std::size_t index = (kFieldHeight / 2) * kFieldWidth + sx;
+                    const std::uint32_t sy = static_cast<std::uint32_t>(std::clamp(
+                        view_pan_y_ + std::sin(yawRadians)
+                            * (static_cast<float>(x) / kFieldWidth - 0.5f)
+                            * kFieldWidth / view_zoom_,
+                        0.0f,
+                        static_cast<float>(kFieldHeight - 1)));
+                    const std::size_t index = sy * kFieldWidth + sx;
                     const float terrain = static_cast<float>(terrain_[index]);
                     const float water = water_[index];
-                    const float scale = kFieldHeight / 110.0f;
+                    const float scale = kFieldHeight / 110.0f
+                        * std::sin(elevationRadians);
                     const float groundTop = kFieldHeight - terrain * scale;
                     const float waterTop = kFieldHeight - (terrain + water) * scale;
 
@@ -1131,6 +1187,8 @@ private:
     float view_pan_x_ = static_cast<float>(kFieldWidth) / 2.0f;
     float view_pan_y_ = static_cast<float>(kFieldHeight) / 2.0f;
     float view_zoom_ = 1.0f;
+    float view_yaw_degrees_ = 0.0f;
+    float view_elevation_degrees_ = 80.0f;
     std::uint32_t view_mode_ = 0;
     std::int32_t selected_x_ = static_cast<std::int32_t>(kFieldWidth) / 2;
     std::int32_t selected_y_ = static_cast<std::int32_t>(kFieldHeight) / 2;
@@ -1356,6 +1414,27 @@ extern "C" __declspec(dllexport) int __cdecl NativeSetView(
     try
     {
         gRenderer->set_view(panX, panY, zoom, mode);
+        return 0;
+    }
+    catch (HRESULT hr)
+    {
+        return static_cast<int>(hr);
+    }
+    catch (...)
+    {
+        return E_FAIL;
+    }
+}
+
+extern "C" __declspec(dllexport) int __cdecl NativeSetOrbit(
+    float yawDegrees,
+    float elevationDegrees)
+{
+    if (!gRenderer)
+        return E_POINTER;
+    try
+    {
+        gRenderer->set_orbit(yawDegrees, elevationDegrees);
         return 0;
     }
     catch (HRESULT hr)

@@ -130,4 +130,21 @@ std::uint32_t normalized_field_coordinate(
             static_cast<float>(extent - 1)));
 }
 
+float normalized_view_yaw(float yawDegrees) noexcept
+{
+    if (!std::isfinite(yawDegrees))
+        return 0.0f;
+    float yaw = std::fmod(yawDegrees, 360.0f);
+    if (yaw < 0.0f)
+        yaw += 360.0f;
+    return yaw;
+}
+
+float clamped_view_elevation(float elevationDegrees) noexcept
+{
+    if (!std::isfinite(elevationDegrees))
+        return 45.0f;
+    return std::clamp(elevationDegrees, 15.0f, 80.0f);
+}
+
 }

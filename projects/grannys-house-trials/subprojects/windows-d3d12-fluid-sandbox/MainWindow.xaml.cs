@@ -31,6 +31,15 @@ public sealed partial class MainWindow : Window
     private bool _cpuReference;
     private uint _batchSize = 1;
     private string _terrainTool = "raise";
+    private string? _cameraGesture;
+    private Windows.Foundation.Point _cameraGestureStart;
+    private double _cameraGestureStartPanX;
+    private double _cameraGestureStartPanY;
+    private double _cameraGestureStartYaw;
+    private double _cameraGestureStartElevation;
+    private double _orbitAnchorX;
+    private double _orbitAnchorY;
+    private bool _rightDragOccurred;
     private IntPtr _ownedSwapChain;
     private ISwapChainPanelNative? _panelNative;
 
@@ -98,6 +107,9 @@ public sealed partial class MainWindow : Window
     private static extern int NativeSetView(float panX, float panY, float zoom, uint mode);
 
     [DllImport("NativeD3D12FluidRenderer.dll", CallingConvention = CallingConvention.Cdecl)]
+    private static extern int NativeSetOrbit(float yawDegrees, float elevationDegrees);
+
+    [DllImport("NativeD3D12FluidRenderer.dll", CallingConvention = CallingConvention.Cdecl)]
     private static extern int NativeSetSettings(float maxFlow, float settleRate);
 
     [DllImport("NativeD3D12FluidRenderer.dll", CallingConvention = CallingConvention.Cdecl)]
@@ -149,14 +161,6 @@ public sealed partial class MainWindow : Window
         _disposing = true;
         _running = false;
         _timer.Stop();
-
-        if (_initialized)
-        {
-            var hr = NativeDispose();
-            _initialized = false;
-            if (hr != 0)
-                Console.WriteLine($"D3D12 disposal failed: 0x{unchecked((uint)hr):X8}");
-        }
 
         if (_panelNative != null)
         {
@@ -395,15 +399,124 @@ public sealed partial class MainWindow : Window
             (float)PanYSlider.Value,
             (float)ZoomSlider.Value,
             mode);
+        if (hr == 0)
+        {
+            hr = NativeSetOrbit(
+                (float)YawSlider.Value,
+                (float)ElevationSlider.Value);
+        }
         if (hr != 0)
             StatusText.Text = $"D3D12 view update failed: 0x{unchecked((uint)hr):X8}";
+    }
+
+    private void ResetViewButton_Click(object sender, RoutedEventArgs e)
+    {
+        _cameraGesture = null;
+        YawSlider.Value = 0;
+        ElevationSlider.Value = 80;
+        PanXSlider.Value = 96;
+        PanYSlider.Value = 64;
+        ZoomSlider.Value = 1;
+        ApplyView();
+    }
+
+    private Windows.Foundation.Point NormalizeCapturedPoint(Windows.Foundation.Point position)
+    {
+        return NormalizeSurfacePoint(position);
+    }
+
+    private void FieldCoordinateAtPoint(
+        Windows.Foundation.Point position,
+        out double fieldX,
+        out double fieldY)
+    {
+        var normalized = NormalizeCapturedPoint(position);
+        fieldX = _view_field_x(normalized.X, normalized.Y);
+        fieldY = _view_field_y(normalized.X, normalized.Y);
+    }
+
+    private double _view_field_x(double normalizedX, double normalizedY)
+    {
+        var yawRadians = YawSlider.Value * Math.PI / 180.0;
+        var elevationRadians = ElevationSlider.Value * Math.PI / 180.0;
+        var rightX = Math.Cos(yawRadians);
+        var rightY = Math.Sin(yawRadians);
+        var forwardX = -rightY;
+        var forwardY = rightX;
+        var screenX = (normalizedX - 0.5) * 192.0 / Math.Max(1.0, ZoomSlider.Value);
+        var screenY = (normalizedY - 0.5) * 128.0 / Math.Max(1.0, ZoomSlider.Value);
+        return PanXSlider.Value + rightX * screenX + forwardX * screenY * Math.Sin(elevationRadians);
+    }
+
+    private double _view_field_y(double normalizedX, double normalizedY)
+    {
+        var yawRadians = YawSlider.Value * Math.PI / 180.0;
+        var elevationRadians = ElevationSlider.Value * Math.PI / 180.0;
+        var rightX = Math.Cos(yawRadians);
+        var rightY = Math.Sin(yawRadians);
+        var forwardX = -rightY;
+        var forwardY = rightX;
+        var screenX = (normalizedX - 0.5) * 192.0 / Math.Max(1.0, ZoomSlider.Value);
+        var screenY = (normalizedY - 0.5) * 128.0 / Math.Max(1.0, ZoomSlider.Value);
+        return PanYSlider.Value + rightY * screenX + forwardY * screenY * Math.Sin(elevationRadians);
+    }
+
+    private void ApplyViewKeepingFieldPoint(
+        double anchorFieldX,
+        double anchorFieldY,
+        double normalizedX,
+        double normalizedY,
+        double yawDegrees,
+        double elevationDegrees,
+        double zoom)
+    {
+        var yawRadians = yawDegrees * Math.PI / 180.0;
+        var elevationRadians = elevationDegrees * Math.PI / 180.0;
+        var rightX = Math.Cos(yawRadians);
+        var rightY = Math.Sin(yawRadians);
+        var forwardX = -rightY;
+        var forwardY = rightX;
+        var screenX = (normalizedX - 0.5) * 192.0 / zoom;
+        var screenY = (normalizedY - 0.5) * 128.0 / zoom;
+        var panX = anchorFieldX
+            - rightX * screenX
+            - forwardX * screenY * Math.Sin(elevationRadians);
+        var panY = anchorFieldY
+            - rightY * screenX
+            - forwardY * screenY * Math.Sin(elevationRadians);
+
+        PanXSlider.Value = Math.Clamp(panX, PanXSlider.Minimum, PanXSlider.Maximum);
+        PanYSlider.Value = Math.Clamp(panY, PanYSlider.Minimum, PanYSlider.Maximum);
     }
 
     private void FluidSurface_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
         if (!_initialized)
             return;
-        var position = e.GetCurrentPoint(FluidSurface).Position;
+        var point = e.GetCurrentPoint(FluidSurface);
+        var position = point.Position;
+        if (point.Properties.IsMiddleButtonPressed)
+        {
+            _cameraGesture = "orbit";
+            _cameraGestureStart = position;
+            _cameraGestureStartYaw = YawSlider.Value;
+            _cameraGestureStartElevation = ElevationSlider.Value;
+            FieldCoordinateAtPoint(position, out _orbitAnchorX, out _orbitAnchorY);
+            FluidSurface.CapturePointer(e.Pointer);
+            e.Handled = true;
+            return;
+        }
+        if (point.Properties.IsRightButtonPressed)
+        {
+            _cameraGesture = "pan";
+            _cameraGestureStart = position;
+            _cameraGestureStartPanX = PanXSlider.Value;
+            _cameraGestureStartPanY = PanYSlider.Value;
+            _rightDragOccurred = false;
+            FluidSurface.CapturePointer(e.Pointer);
+            e.Handled = true;
+            return;
+        }
         var normalized = NormalizeSurfacePoint(position);
         var normalizedX = (float)normalized.X;
         var normalizedY = (float)normalized.Y;
@@ -430,11 +543,68 @@ public sealed partial class MainWindow : Window
         if (!_initialized)
             return;
         var point = e.GetCurrentPoint(FluidSurface);
+        if (_cameraGesture == "orbit")
+        {
+            var dx = point.Position.X - _cameraGestureStart.X;
+            var dy = point.Position.Y - _cameraGestureStart.Y;
+            var yaw = _cameraGestureStartYaw - dx * 0.35;
+            yaw = (yaw % 360 + 360) % 360;
+            var elevation = Math.Clamp(
+                _cameraGestureStartElevation + dy * 0.25,
+                ElevationSlider.Minimum,
+                ElevationSlider.Maximum);
+            var orbitAnchorNormalized = NormalizeSurfacePoint(_cameraGestureStart);
+
+            YawSlider.Value = yaw;
+            ElevationSlider.Value = elevation;
+            ApplyViewKeepingFieldPoint(
+                _orbitAnchorX,
+                _orbitAnchorY,
+                orbitAnchorNormalized.X,
+                orbitAnchorNormalized.Y,
+                yaw,
+                elevation,
+                ZoomSlider.Value);
+            e.Handled = true;
+            return;
+        }
+        if (_cameraGesture == "pan")
+        {
+            var dx = point.Position.X - _cameraGestureStart.X;
+            var dy = point.Position.Y - _cameraGestureStart.Y;
+            if (Math.Abs(dx) > 3 || Math.Abs(dy) > 3)
+                _rightDragOccurred = true;
+            var width = Math.Max(1.0, FluidSurface.ActualWidth);
+            var height = Math.Max(1.0, FluidSurface.ActualHeight);
+            var zoom = Math.Max(1.0, ZoomSlider.Value);
+            var yawRadians = YawSlider.Value * Math.PI / 180.0;
+            var elevationRadians = ElevationSlider.Value * Math.PI / 180.0;
+            var rightX = Math.Cos(yawRadians);
+            var rightY = Math.Sin(yawRadians);
+            var forwardX = -rightY;
+            var forwardY = rightX;
+            var screenDeltaX = -dx * 192.0 / width / zoom;
+            var screenDeltaY = -dy * 128.0 / height / zoom;
+            var panDeltaX = rightX * screenDeltaX
+                + forwardX * screenDeltaY * Math.Sin(elevationRadians);
+            var panDeltaY = rightY * screenDeltaX
+                + forwardY * screenDeltaY * Math.Sin(elevationRadians);
+            PanXSlider.Value = Math.Clamp(
+                _cameraGestureStartPanX + panDeltaX,
+                PanXSlider.Minimum,
+                PanXSlider.Maximum);
+            PanYSlider.Value = Math.Clamp(
+                _cameraGestureStartPanY + panDeltaY,
+                PanYSlider.Minimum,
+                PanYSlider.Maximum);
+            e.Handled = true;
+            return;
+        }
         if (!point.Properties.IsLeftButtonPressed)
             return;
-        var normalized = NormalizeSurfacePoint(point.Position);
-        var normalizedX = (float)normalized.X;
-        var normalizedY = (float)normalized.Y;
+        var terrainPointNormalized = NormalizeSurfacePoint(point.Position);
+        var normalizedX = (float)terrainPointNormalized.X;
+        var normalizedY = (float)terrainPointNormalized.Y;
         if (_terrainTool == "raise")
             NativeEditTerrain(normalizedX, normalizedY, 1);
         else if (_terrainTool == "carve")
@@ -444,9 +614,35 @@ public sealed partial class MainWindow : Window
     private void FluidSurface_PointerReleased(object sender, PointerRoutedEventArgs e)
     {
         if (!_initialized)
+        {
             return;
+        }
+        if (_cameraGesture != null)
+        {
+            FluidSurface.ReleasePointerCapture(e.Pointer);
+            _cameraGesture = null;
+            e.Handled = true;
+            return;
+        }
         var normalized = NormalizeSurfacePoint(e.GetCurrentPoint(FluidSurface).Position);
         UpdateCellStatus((float)normalized.X, (float)normalized.Y);
+    }
+
+    private void FluidSurface_PointerCanceled(object sender, PointerRoutedEventArgs e)
+    {
+        CancelCameraGesture(e.Pointer);
+    }
+
+    private void FluidSurface_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        CancelCameraGesture(e.Pointer);
+    }
+
+    private void CancelCameraGesture(Microsoft.UI.Xaml.Input.Pointer pointer)
+    {
+        if (_cameraGesture == null)
+            return;
+        _cameraGesture = null;
     }
 
     private void FluidSurface_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
@@ -454,8 +650,22 @@ public sealed partial class MainWindow : Window
         if (!_initialized)
             return;
         var delta = e.GetCurrentPoint(FluidSurface).Properties.MouseWheelDelta;
-        var value = ZoomSlider.Value + (delta > 0 ? 0.25 : -0.25);
-        ZoomSlider.Value = Math.Clamp(value, ZoomSlider.Minimum, ZoomSlider.Maximum);
+        var normalized = NormalizeSurfacePoint(e.GetCurrentPoint(FluidSurface).Position);
+        var zoomBefore = ZoomSlider.Value;
+        var anchorFieldX = _view_field_x(normalized.X, normalized.Y);
+        var anchorFieldY = _view_field_y(normalized.X, normalized.Y);
+        var value = zoomBefore + (delta > 0 ? 0.25 : -0.25);
+        var zoom = Math.Clamp(value, ZoomSlider.Minimum, ZoomSlider.Maximum);
+
+        ZoomSlider.Value = zoom;
+        ApplyViewKeepingFieldPoint(
+            anchorFieldX,
+            anchorFieldY,
+            normalized.X,
+            normalized.Y,
+            YawSlider.Value,
+            ElevationSlider.Value,
+            zoom);
         e.Handled = true;
     }
 
@@ -463,6 +673,12 @@ public sealed partial class MainWindow : Window
     {
         if (!_initialized)
             return;
+        if (_rightDragOccurred)
+        {
+            _rightDragOccurred = false;
+            e.Handled = true;
+            return;
+        }
         var normalized = NormalizeSurfacePoint(e.GetPosition(FluidSurface));
         var hr = NativePourAt((float)normalized.X, (float)normalized.Y, CurrentPourDepth());
         if (hr == 0)

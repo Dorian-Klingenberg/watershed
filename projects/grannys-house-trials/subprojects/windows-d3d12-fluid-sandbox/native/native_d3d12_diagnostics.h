@@ -75,5 +75,7 @@ private:
     float panNormalized,
     float zoom,
     std::uint32_t extent) noexcept;
+[[nodiscard]] float normalized_view_yaw(float yawDegrees) noexcept;
+[[nodiscard]] float clamped_view_elevation(float elevationDegrees) noexcept;
 
 }
