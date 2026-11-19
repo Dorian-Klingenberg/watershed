@@ -28,6 +28,22 @@
       "description": "Optimized local build preset for Visual Studio 2026.",
       "inherits": "vs2026-debug",
       "binaryDir": "${sourceDir}/build/vs2026-release"
+    },
+    {
+      "name": "vs2026-arm64-debug",
+      "displayName": "Visual Studio 2026 ARM64 Debug",
+      "description": "ARM64 native build preset for the Windows D3D12 fluid sandbox.",
+      "generator": "Visual Studio 18 2026",
+      "architecture": {
+        "value": "ARM64",
+        "strategy": "external"
+      },
+      "binaryDir": "${sourceDir}/build/vs2026-arm64-debug",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_CXX_STANDARD_REQUIRED": "ON",
+        "CMAKE_CXX_EXTENSIONS": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -51,6 +67,12 @@
       "displayName": "Build Release",
       "configurePreset": "vs2026-release",
       "configuration": "Release"
+    },
+    {
+      "name": "build-vs2026-arm64-debug",
+      "displayName": "Build ARM64 Debug",
+      "configurePreset": "vs2026-arm64-debug",
+      "configuration": "Debug"
     }
   ],
   "testPresets": [
