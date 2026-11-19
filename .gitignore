@@ -9,6 +9,13 @@ exports/
 # CMake user-local preset overrides (machine-specific, not shared)
 CMakeUserPresets.json
 
+# .NET and native subproject build outputs
+**/bin/
+**/obj/
+**/native/Debug/
+**/native/Release/
+**/native/shaders/
+
 # MSVC build artifacts (prevent in-source build pollution)
 *.obj
 *.exe
