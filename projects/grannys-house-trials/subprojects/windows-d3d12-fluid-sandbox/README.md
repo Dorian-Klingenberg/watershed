@@ -9,8 +9,11 @@ It is isolated in `feat/edge-d3d12-fluid-sandbox` and does not use the Blazor/We
 - Tick batches: 1, 2, 4, and 8
 - Independent native CPU reference state and mismatch readout
 - Pour depth and cellular max-flow/settle controls
-- Top-down and projected-column views
-- Zoom, pan, orbit yaw/elevation, and selection
+- Top-down and height-aware projected-column views
+- Terrain, water-depth, and combined display modes
+- Orbit-aware hover, cell picking, selection, and terrain editing
+- Shared pan/zoom/orbit focus across top-down and projected views
+- Screen Y grows downward while field/world Y grows upward
 - Middle-drag orbit, right-drag pan, and wheel zoom
 - Raise, carve, and select terrain tools
 - 192 x 128 cellular field

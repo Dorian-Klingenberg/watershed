@@ -19,6 +19,7 @@
 #include <fstream>
 #include <vector>
 #include <chrono>
+#include <limits>
 
 #include "native_d3d12_diagnostics.h"
 
@@ -28,6 +29,7 @@ namespace
 {
 constexpr std::uint32_t kFieldWidth = 192;
 constexpr std::uint32_t kFieldHeight = 128;
+constexpr float kProjectionHeightRange = 128.0f;
 constexpr std::uint32_t kFrameCount = 2;
 constexpr double kMaxFlowInches = 2.0;
 constexpr double kSettleRate = 0.5;
@@ -293,7 +295,8 @@ public:
 
         float fieldX = 0.0f;
         float fieldY = 0.0f;
-        normalized_to_field(normalizedX, normalizedY, fieldX, fieldY);
+        if (!normalized_to_field(normalizedX, normalizedY, fieldX, fieldY))
+            return;
         const std::int32_t centerX = static_cast<std::int32_t>(std::round(fieldX));
         const std::int32_t centerY = static_cast<std::int32_t>(std::round(fieldY));
         constexpr std::int32_t radius = 8;
@@ -326,7 +329,8 @@ public:
 
         float fieldX = 0.0f;
         float fieldY = 0.0f;
-        normalized_to_field(normalizedX, normalizedY, fieldX, fieldY);
+        if (!normalized_to_field(normalizedX, normalizedY, fieldX, fieldY))
+            return;
         const std::int32_t centerX = static_cast<std::int32_t>(std::round(fieldX));
         const std::int32_t centerY = static_cast<std::int32_t>(std::round(fieldY));
         constexpr std::int32_t radius = 5;
@@ -367,12 +371,18 @@ public:
         render();
     }
 
-    void set_view(float panX, float panY, float zoom, std::uint32_t mode)
+    void set_view(
+        float panX,
+        float panY,
+        float zoom,
+        std::uint32_t viewMode,
+        std::uint32_t displayMode)
     {
         view_pan_x_ = std::clamp(panX, 0.0f, static_cast<float>(kFieldWidth));
         view_pan_y_ = std::clamp(panY, 0.0f, static_cast<float>(kFieldHeight));
         view_zoom_ = std::clamp(zoom, 1.0f, 4.0f);
-        view_mode_ = mode == 0 ? 0u : 1u;
+        view_mode_ = std::min(viewMode, 1u);
+        display_mode_ = std::min(displayMode, 2u);
         render();
     }
 
@@ -396,14 +406,52 @@ public:
     {
         if (!std::isfinite(normalizedX) || !std::isfinite(normalizedY))
             return;
-        float fieldX = 0.0f;
-        float fieldY = 0.0f;
-        normalized_to_field(normalizedX, normalizedY, fieldX, fieldY);
-        selected_x_ = std::clamp(static_cast<std::int32_t>(std::round(fieldX)),
-            0, static_cast<std::int32_t>(kFieldWidth - 1));
-        selected_y_ = std::clamp(static_cast<std::int32_t>(std::round(fieldY)),
-            0, static_cast<std::int32_t>(kFieldHeight - 1));
+        std::uint32_t x = 0;
+        std::uint32_t y = 0;
+        float surfaceHeight = 0.0f;
+        if (!pick_cell(normalizedX, normalizedY, x, y, surfaceHeight))
+        {
+            if (selected_x_ >= 0)
+            {
+                selected_x_ = -1;
+                selected_y_ = -1;
+                render();
+            }
+            return;
+        }
+        if (selected_x_ == static_cast<std::int32_t>(x) &&
+            selected_y_ == static_cast<std::int32_t>(y))
+            return;
+        selected_x_ = static_cast<std::int32_t>(x);
+        selected_y_ = static_cast<std::int32_t>(y);
         render();
+    }
+
+    bool pick_cell(
+        float normalizedX,
+        float normalizedY,
+        std::uint32_t& x,
+        std::uint32_t& y,
+        float& surfaceHeight) const
+    {
+        if (!std::isfinite(normalizedX) || !std::isfinite(normalizedY) ||
+            normalizedX < 0.0f || normalizedX > 1.0f ||
+            normalizedY < 0.0f || normalizedY > 1.0f)
+            return false;
+        const auto pixelX = std::min(
+            static_cast<std::uint32_t>(normalizedX * kFieldWidth),
+            kFieldWidth - 1);
+        const auto pixelY = std::min(
+            static_cast<std::uint32_t>(normalizedY * kFieldHeight),
+            kFieldHeight - 1);
+        const std::size_t pixel = static_cast<std::size_t>(pixelY) * kFieldWidth + pixelX;
+        const std::int32_t cell = pick_cells_[pixel];
+        if (cell < 0)
+            return false;
+        x = static_cast<std::uint32_t>(cell % static_cast<std::int32_t>(kFieldWidth));
+        y = static_cast<std::uint32_t>(cell / static_cast<std::int32_t>(kFieldWidth));
+        surfaceHeight = pick_heights_[pixel];
+        return true;
     }
 
     NativeCellStatus get_cell_status(std::uint32_t x, std::uint32_t y) const
@@ -458,38 +506,20 @@ public:
     }
 
 private:
-    void normalized_to_field(float normalizedX, float normalizedY, float& fieldX, float& fieldY) const
+    bool normalized_to_field(
+        float normalizedX,
+        float normalizedY,
+        float& fieldX,
+        float& fieldY) const
     {
-        const float nx = std::clamp(normalizedX, 0.0f, 1.0f);
-        const float ny = std::clamp(normalizedY, 0.0f, 1.0f);
-        if (view_mode_ == 0)
-        {
-            const float yawRadians = view_yaw_degrees_ * 3.14159265358979323846f / 180.0f;
-            const float elevationRadians =
-                view_elevation_degrees_ * 3.14159265358979323846f / 180.0f;
-            const float rightX = std::cos(yawRadians);
-            const float rightY = std::sin(yawRadians);
-            const float forwardX = -rightY;
-            const float forwardY = rightX;
-            const float screenX =
-                (nx - 0.5f) * kFieldWidth / view_zoom_;
-            const float screenY =
-                (ny - 0.5f) * kFieldHeight / view_zoom_;
-            const float forwardOffset =
-                screenY * std::sin(elevationRadians);
-            fieldX = view_pan_x_ + rightX * screenX + forwardX * forwardOffset;
-            fieldY = view_pan_y_ + rightY * screenX + forwardY * forwardOffset;
-        }
-        else
-        {
-            const float yawRadians = view_yaw_degrees_ * 3.14159265358979323846f / 180.0f;
-            const float crossSectionOffset =
-                (nx - 0.5f) * kFieldWidth / view_zoom_;
-            fieldX = view_pan_x_ + std::cos(yawRadians) * crossSectionOffset;
-            fieldY = view_pan_y_ + std::sin(yawRadians) * crossSectionOffset;
-        }
-        fieldX = std::clamp(fieldX, 0.0f, static_cast<float>(kFieldWidth - 1));
-        fieldY = std::clamp(fieldY, 0.0f, static_cast<float>(kFieldHeight - 1));
+        std::uint32_t x = 0;
+        std::uint32_t y = 0;
+        float surfaceHeight = 0.0f;
+        if (!pick_cell(normalizedX, normalizedY, x, y, surfaceHeight))
+            return false;
+        fieldX = static_cast<float>(x);
+        fieldY = static_cast<float>(y);
+        return true;
     }
 
     void step_once(std::vector<float>& state)
@@ -893,6 +923,272 @@ private:
 
     void update_field_texture()
     {
+        struct Color
+        {
+            std::uint8_t r;
+            std::uint8_t g;
+            std::uint8_t b;
+        };
+        struct ScreenVertex
+        {
+            float x;
+            float y;
+            float depth;
+        };
+
+        constexpr Color background{ 8, 12, 18 };
+        const std::size_t pixelCount = kFieldWidth * kFieldHeight;
+        std::vector<std::uint8_t> image(pixelCount * 4);
+        std::vector<float> depthBuffer(pixelCount, std::numeric_limits<float>::lowest());
+        pick_cells_.assign(pixelCount, -1);
+        pick_heights_.assign(pixelCount, 0.0f);
+        for (std::size_t i = 0; i < pixelCount; ++i)
+        {
+            image[i * 4 + 0] = background.r;
+            image[i * 4 + 1] = background.g;
+            image[i * 4 + 2] = background.b;
+            image[i * 4 + 3] = 255;
+        }
+
+        const float yaw = view_yaw_degrees_ * 3.14159265358979323846f / 180.0f;
+        const float elevation = view_elevation_degrees_ * 3.14159265358979323846f / 180.0f;
+        const float rightX = std::cos(yaw);
+        const float rightY = std::sin(yaw);
+        const float forwardX = -rightY;
+        const float forwardY = rightX;
+        const float elevationSin = std::sin(elevation);
+        const float elevationCos = std::cos(elevation);
+        const float rightSpan = std::abs(rightX) * kFieldWidth + std::abs(rightY) * kFieldHeight;
+        const float forwardSpan = std::abs(forwardX) * kFieldWidth + std::abs(forwardY) * kFieldHeight;
+        const float verticalSpan = view_mode_ == 0
+            ? forwardSpan
+            : forwardSpan * elevationCos + kProjectionHeightRange * elevationSin;
+        const float pixelsPerCell = std::min(
+            static_cast<float>(kFieldWidth) / rightSpan,
+            static_cast<float>(kFieldHeight) / verticalSpan) * view_zoom_;
+
+        const auto terrainColor = [](float terrain) -> Color
+        {
+            return {
+                static_cast<std::uint8_t>(std::clamp(72.0f + terrain * 0.8f, 72.0f, 150.0f)),
+                static_cast<std::uint8_t>(std::clamp(86.0f + terrain * 0.45f, 86.0f, 138.0f)),
+                static_cast<std::uint8_t>(std::clamp(78.0f + terrain * 0.25f, 78.0f, 110.0f))
+            };
+        };
+        const auto tint = [](Color color, float r, float g, float b) -> Color
+        {
+            return {
+                static_cast<std::uint8_t>(std::clamp(color.r * r, 0.0f, 255.0f)),
+                static_cast<std::uint8_t>(std::clamp(color.g * g, 0.0f, 255.0f)),
+                static_cast<std::uint8_t>(std::clamp(color.b * b, 0.0f, 255.0f))
+            };
+        };
+        const auto highlight = [](Color color) -> Color
+        {
+            return {
+                static_cast<std::uint8_t>(std::min(255, color.r + 90)),
+                static_cast<std::uint8_t>(std::min(255, color.g + 60)),
+                static_cast<std::uint8_t>(std::max(0, color.b - 30))
+            };
+        };
+        const auto topDownColor = [&](std::size_t index) -> Color
+        {
+            const float terrain = static_cast<float>(terrain_[index]);
+            const float water = std::max(0.0f, water_[index]);
+            Color ground = terrainColor(terrain);
+            if (display_mode_ == 2)
+                ground = tint(ground, 0.34f, 0.38f, 0.48f);
+            if (display_mode_ != 1 && water > kMinimumWater)
+            {
+                const float blend = display_mode_ == 2
+                    ? std::clamp(0.45f + water / 18.0f, 0.45f, 1.0f)
+                    : std::clamp(water / 12.0f, 0.0f, 1.0f);
+                ground = {
+                    static_cast<std::uint8_t>(ground.r * (1.0f - blend) + 32.0f * blend),
+                    static_cast<std::uint8_t>(ground.g * (1.0f - blend) + 118.0f * blend),
+                    static_cast<std::uint8_t>(ground.b * (1.0f - blend) + 220.0f * blend)
+                };
+            }
+            if (static_cast<std::int32_t>(index % kFieldWidth) == selected_x_ &&
+                static_cast<std::int32_t>(index / kFieldWidth) == selected_y_)
+                return highlight(ground);
+            return ground;
+        };
+
+        if (view_mode_ == 0)
+        {
+            for (std::uint32_t y = 0; y < kFieldHeight; ++y)
+            {
+                for (std::uint32_t x = 0; x < kFieldWidth; ++x)
+                {
+                    const float screenX =
+                        (static_cast<float>(x) + 0.5f - kFieldWidth * 0.5f) / pixelsPerCell;
+                    const float screenY =
+                        (static_cast<float>(y) + 0.5f - kFieldHeight * 0.5f) / pixelsPerCell;
+                    // Screen Y grows downward; field/world Y grows upward.
+                    const float worldX = view_pan_x_ + rightX * screenX - forwardX * screenY;
+                    const float worldY = view_pan_y_ + rightY * screenX - forwardY * screenY;
+                    if (worldX < 0.0f || worldY < 0.0f ||
+                        worldX >= kFieldWidth || worldY >= kFieldHeight)
+                        continue;
+                    const auto cellX = static_cast<std::uint32_t>(worldX);
+                    const auto cellY = static_cast<std::uint32_t>(worldY);
+                    const std::size_t cellIndex = cellY * kFieldWidth + cellX;
+                    const std::size_t pixel = y * kFieldWidth + x;
+                    const Color color = topDownColor(cellIndex);
+                    image[pixel * 4 + 0] = color.r;
+                    image[pixel * 4 + 1] = color.g;
+                    image[pixel * 4 + 2] = color.b;
+                    pick_cells_[pixel] = static_cast<std::int32_t>(cellIndex);
+                    pick_heights_[pixel] = static_cast<float>(terrain_[cellIndex])
+                        + (display_mode_ == 1 ? 0.0f : std::max(0.0f, water_[cellIndex]));
+                }
+            }
+        }
+        else
+        {
+            const auto project = [&](float x, float y, float z) -> ScreenVertex
+            {
+                const float dx = x - view_pan_x_;
+                const float dy = y - view_pan_y_;
+                const float right = dx * rightX + dy * rightY;
+                const float forward = dx * forwardX + dy * forwardY;
+                return {
+                    kFieldWidth * 0.5f + right * pixelsPerCell,
+                    kFieldHeight * 0.5f +
+                        (-forward * elevationCos - z * elevationSin
+                            + kProjectionHeightRange * elevationSin * 0.5f) * pixelsPerCell,
+                    forward * elevationSin + z * elevationCos
+                };
+            };
+            const auto drawTriangle = [&](
+                const ScreenVertex& a,
+                const ScreenVertex& b,
+                const ScreenVertex& c,
+                Color color,
+                std::int32_t cell,
+                float surfaceHeight)
+            {
+                const float area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+                if (std::abs(area) < 0.0001f)
+                    return;
+                const int minX = std::max(0, static_cast<int>(std::floor(std::min({ a.x, b.x, c.x }))));
+                const int maxX = std::min(static_cast<int>(kFieldWidth) - 1,
+                    static_cast<int>(std::ceil(std::max({ a.x, b.x, c.x }))));
+                const int minY = std::max(0, static_cast<int>(std::floor(std::min({ a.y, b.y, c.y }))));
+                const int maxY = std::min(static_cast<int>(kFieldHeight) - 1,
+                    static_cast<int>(std::ceil(std::max({ a.y, b.y, c.y }))));
+                for (int y = minY; y <= maxY; ++y)
+                {
+                    for (int x = minX; x <= maxX; ++x)
+                    {
+                        const float px = x + 0.5f;
+                        const float py = y + 0.5f;
+                        const float w0 = ((b.x - px) * (c.y - py) - (b.y - py) * (c.x - px)) / area;
+                        const float w1 = ((c.x - px) * (a.y - py) - (c.y - py) * (a.x - px)) / area;
+                        const float w2 = 1.0f - w0 - w1;
+                        if (w0 < -0.0001f || w1 < -0.0001f || w2 < -0.0001f)
+                            continue;
+                        const float depth = w0 * a.depth + w1 * b.depth + w2 * c.depth;
+                        const std::size_t pixel = static_cast<std::size_t>(y) * kFieldWidth + x;
+                        if (depth <= depthBuffer[pixel])
+                            continue;
+                        depthBuffer[pixel] = depth;
+                        image[pixel * 4 + 0] = color.r;
+                        image[pixel * 4 + 1] = color.g;
+                        image[pixel * 4 + 2] = color.b;
+                        pick_cells_[pixel] = cell;
+                        pick_heights_[pixel] = surfaceHeight;
+                    }
+                }
+            };
+            const auto drawQuad = [&](
+                const ScreenVertex& a,
+                const ScreenVertex& b,
+                const ScreenVertex& c,
+                const ScreenVertex& d,
+                Color color,
+                std::int32_t cell,
+                float surfaceHeight)
+            {
+                drawTriangle(a, b, c, color, cell, surfaceHeight);
+                drawTriangle(a, c, d, color, cell, surfaceHeight);
+            };
+            const auto drawColumn = [&](
+                std::uint32_t x,
+                std::uint32_t y,
+                float lower,
+                float upper,
+                Color topColor,
+                Color sideColor,
+                std::int32_t cell)
+            {
+                if (upper <= lower)
+                    return;
+                const auto p00 = project(static_cast<float>(x), static_cast<float>(y), upper);
+                const auto p10 = project(static_cast<float>(x + 1), static_cast<float>(y), upper);
+                const auto p11 = project(static_cast<float>(x + 1), static_cast<float>(y + 1), upper);
+                const auto p01 = project(static_cast<float>(x), static_cast<float>(y + 1), upper);
+                drawQuad(p00, p10, p11, p01, topColor, cell, upper);
+
+                if (forwardX > 0.0001f)
+                    drawQuad(
+                        project(static_cast<float>(x + 1), static_cast<float>(y), lower),
+                        project(static_cast<float>(x + 1), static_cast<float>(y + 1), lower),
+                        p11, p10, sideColor, cell, upper);
+                else if (forwardX < -0.0001f)
+                    drawQuad(
+                        project(static_cast<float>(x), static_cast<float>(y + 1), lower),
+                        project(static_cast<float>(x), static_cast<float>(y), lower),
+                        p00, p01, sideColor, cell, upper);
+
+                if (forwardY > 0.0001f)
+                    drawQuad(
+                        project(static_cast<float>(x), static_cast<float>(y + 1), lower),
+                        project(static_cast<float>(x + 1), static_cast<float>(y + 1), lower),
+                        p11, p01, sideColor, cell, upper);
+                else if (forwardY < -0.0001f)
+                    drawQuad(
+                        project(static_cast<float>(x + 1), static_cast<float>(y), lower),
+                        project(static_cast<float>(x), static_cast<float>(y), lower),
+                        p00, p10, sideColor, cell, upper);
+            };
+
+            for (std::uint32_t y = 0; y < kFieldHeight; ++y)
+            {
+                for (std::uint32_t x = 0; x < kFieldWidth; ++x)
+                {
+                    const std::size_t index = y * kFieldWidth + x;
+                    const auto cell = static_cast<std::int32_t>(index);
+                    const float terrain = static_cast<float>(std::max(0, terrain_[index]));
+                    const float water = std::max(0.0f, water_[index]);
+                    const bool selected = static_cast<std::int32_t>(x) == selected_x_ &&
+                        static_cast<std::int32_t>(y) == selected_y_;
+                    Color ground = terrainColor(terrain);
+                    if (display_mode_ == 2)
+                        ground = tint(ground, 0.34f, 0.38f, 0.48f);
+                    if (selected)
+                        ground = highlight(ground);
+                    drawColumn(x, y, 0.0f, terrain, ground, tint(ground, 0.62f, 0.64f, 0.72f), cell);
+
+                    if (display_mode_ != 1 && water > kMinimumWater)
+                    {
+                        const float intensity = std::clamp(0.55f + water / 24.0f, 0.55f, 1.0f);
+                        Color waterColor{
+                            static_cast<std::uint8_t>(32.0f * intensity),
+                            static_cast<std::uint8_t>(118.0f * intensity),
+                            static_cast<std::uint8_t>(220.0f * intensity)
+                        };
+                        if (selected)
+                            waterColor = highlight(waterColor);
+                        drawColumn(
+                            x, y, terrain, terrain + water,
+                            waterColor, tint(waterColor, 0.62f, 0.68f, 0.78f), cell);
+                    }
+                }
+            }
+        }
+
         void* mapped = nullptr;
         HRESULT hr = field_upload->Map(0, nullptr, &mapped);
         record_initialization_observation(
@@ -900,129 +1196,14 @@ private:
             hr);
         throw_if_failed(hr);
         auto* pixels = static_cast<unsigned char*>(mapped);
-        std::memset(pixels, 0, kFieldWidth * kFieldHeight * 4);
-
         const std::uint64_t rowPitch = (kFieldWidth * 4 + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1)
             & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
-
         for (std::uint32_t y = 0; y < kFieldHeight; ++y)
         {
-            for (std::uint32_t x = 0; x < kFieldWidth; ++x)
-            {
-                const std::size_t pixel = y * rowPitch + x * 4;
-                float red = 8.0f;
-                float green = 12.0f;
-                float blue = 18.0f;
-
-                float sourceX = static_cast<float>(x);
-                float sourceY = static_cast<float>(y);
-                if (view_mode_ == 0)
-                {
-                    const float yawRadians =
-                        view_yaw_degrees_ * 3.14159265358979323846f / 180.0f;
-                    const float elevationRadians =
-                        view_elevation_degrees_ * 3.14159265358979323846f / 180.0f;
-                    const float rightX = std::cos(yawRadians);
-                    const float rightY = std::sin(yawRadians);
-                    const float forwardX = -rightY;
-                    const float forwardY = rightX;
-                    const float screenX =
-                        (static_cast<float>(x) / kFieldWidth - 0.5f)
-                        * kFieldWidth / view_zoom_;
-                    const float screenY =
-                        (static_cast<float>(y) / kFieldHeight - 0.5f)
-                        * kFieldHeight / view_zoom_;
-                    const float forwardOffset =
-                        screenY * std::sin(elevationRadians);
-                    sourceX = std::clamp(
-                        view_pan_x_ + rightX * screenX + forwardX * forwardOffset,
-                        0.0f,
-                        static_cast<float>(kFieldWidth - 1));
-                    sourceY = std::clamp(
-                        view_pan_y_ + rightY * screenX + forwardY * forwardOffset,
-                        0.0f,
-                        static_cast<float>(kFieldHeight - 1));
-                }
-
-                if (view_mode_ == 0)
-                {
-                    const std::uint32_t sx = static_cast<std::uint32_t>(std::round(sourceX));
-                    const std::uint32_t sy = static_cast<std::uint32_t>(std::round(sourceY));
-                    const std::size_t index = sy * kFieldWidth + sx;
-                    const float terrain = static_cast<float>(terrain_[index]);
-                    const float water = water_[index];
-
-                    red = std::clamp(72.0f + terrain * 0.8f, 72.0f, 150.0f);
-                    green = std::clamp(86.0f + terrain * 0.45f, 86.0f, 138.0f);
-                    blue = std::clamp(78.0f + terrain * 0.25f, 78.0f, 110.0f);
-
-                    if (water > kMinimumWater)
-                    {
-                        const float blend = std::clamp(water / 12.0f, 0.0f, 1.0f);
-                        red = red * (1.0f - blend) + 32.0f * blend;
-                        green = green * (1.0f - blend) + 118.0f * blend;
-                        blue = blue * (1.0f - blend) + 220.0f * blend;
-                    }
-
-                    if (sx == selected_x_ && sy == selected_y_)
-                    {
-                        red = std::clamp(red + 90.0f, 0.0f, 255.0f);
-                        green = std::clamp(green + 60.0f, 0.0f, 255.0f);
-                        blue = std::clamp(blue - 30.0f, 0.0f, 255.0f);
-                    }
-                }
-                else
-                {
-                    const float yawRadians =
-                        view_yaw_degrees_ * 3.14159265358979323846f / 180.0f;
-                    const float elevationRadians =
-                        view_elevation_degrees_ * 3.14159265358979323846f / 180.0f;
-                    const std::uint32_t sx = static_cast<std::uint32_t>(std::clamp(
-                        view_pan_x_ + std::cos(yawRadians)
-                            * (static_cast<float>(x) / kFieldWidth - 0.5f)
-                            * kFieldWidth / view_zoom_,
-                        0.0f,
-                        static_cast<float>(kFieldWidth - 1)));
-                    const std::uint32_t sy = static_cast<std::uint32_t>(std::clamp(
-                        view_pan_y_ + std::sin(yawRadians)
-                            * (static_cast<float>(x) / kFieldWidth - 0.5f)
-                            * kFieldWidth / view_zoom_,
-                        0.0f,
-                        static_cast<float>(kFieldHeight - 1)));
-                    const std::size_t index = sy * kFieldWidth + sx;
-                    const float terrain = static_cast<float>(terrain_[index]);
-                    const float water = water_[index];
-                    const float scale = kFieldHeight / 110.0f
-                        * std::sin(elevationRadians);
-                    const float groundTop = kFieldHeight - terrain * scale;
-                    const float waterTop = kFieldHeight - (terrain + water) * scale;
-
-                    if (static_cast<float>(y) >= groundTop)
-                    {
-                        red = std::clamp(72.0f + terrain * 0.8f, 72.0f, 150.0f);
-                        green = std::clamp(86.0f + terrain * 0.45f, 86.0f, 138.0f);
-                        blue = std::clamp(78.0f + terrain * 0.25f, 78.0f, 110.0f);
-                    }
-                    if (static_cast<float>(y) >= waterTop && static_cast<float>(y) < groundTop &&
-                        water > kMinimumWater)
-                    {
-                        red = 32.0f;
-                        green = 118.0f;
-                        blue = 220.0f;
-                    }
-
-                    if (sx == selected_x_)
-                    {
-                        red = std::clamp(red + 60.0f, 0.0f, 255.0f);
-                        green = std::clamp(green + 45.0f, 0.0f, 255.0f);
-                    }
-                }
-
-                pixels[pixel + 0] = static_cast<unsigned char>(std::clamp(red, 0.0f, 255.0f));
-                pixels[pixel + 1] = static_cast<unsigned char>(std::clamp(green, 0.0f, 255.0f));
-                pixels[pixel + 2] = static_cast<unsigned char>(std::clamp(blue, 0.0f, 255.0f));
-                pixels[pixel + 3] = 255;
-            }
+            std::memcpy(
+                pixels + static_cast<std::size_t>(y) * rowPitch,
+                image.data() + static_cast<std::size_t>(y) * kFieldWidth * 4,
+                kFieldWidth * 4);
         }
         field_upload->Unmap(0, nullptr);
     }
@@ -1178,6 +1359,10 @@ private:
     std::uint32_t batch_size_ = 1;
     std::vector<std::int32_t> terrain_;
     std::vector<std::int32_t> initial_terrain_;
+    std::vector<std::int32_t> pick_cells_ =
+        std::vector<std::int32_t>(kFieldWidth * kFieldHeight, -1);
+    std::vector<float> pick_heights_ =
+        std::vector<float>(kFieldWidth * kFieldHeight, 0.0f);
     std::vector<float> water_;
     std::vector<float> cpu_water_;
     bool cpu_reference_enabled_ = false;
@@ -1190,6 +1375,7 @@ private:
     float view_yaw_degrees_ = 0.0f;
     float view_elevation_degrees_ = 80.0f;
     std::uint32_t view_mode_ = 0;
+    std::uint32_t display_mode_ = 0;
     std::int32_t selected_x_ = static_cast<std::int32_t>(kFieldWidth) / 2;
     std::int32_t selected_y_ = static_cast<std::int32_t>(kFieldHeight) / 2;
     double max_flow_ = kDefaultMaxFlow;
@@ -1407,13 +1593,14 @@ extern "C" __declspec(dllexport) int __cdecl NativeSetView(
     float panX,
     float panY,
     float zoom,
-    std::uint32_t mode)
+    std::uint32_t viewMode,
+    std::uint32_t displayMode)
 {
     if (!gRenderer)
         return E_POINTER;
     try
     {
-        gRenderer->set_view(panX, panY, zoom, mode);
+        gRenderer->set_view(panX, panY, zoom, viewMode, displayMode);
         return 0;
     }
     catch (HRESULT hr)
@@ -1487,6 +1674,20 @@ extern "C" __declspec(dllexport) int __cdecl NativeSetSelection(
     {
         return E_FAIL;
     }
+}
+
+extern "C" __declspec(dllexport) int __cdecl NativePickCell(
+    float normalizedX,
+    float normalizedY,
+    std::uint32_t* x,
+    std::uint32_t* y,
+    float* surfaceHeight)
+{
+    if (!gRenderer || !x || !y || !surfaceHeight)
+        return E_POINTER;
+    return gRenderer->pick_cell(normalizedX, normalizedY, *x, *y, *surfaceHeight)
+        ? S_OK
+        : S_FALSE;
 }
 
 extern "C" __declspec(dllexport) int __cdecl NativeGetCellStatus(

@@ -114,6 +114,16 @@
                     <ComboBoxItem Content="Projected column" Tag="1" />
                 </ComboBox>
 
+                <ComboBox x:Name="DisplayModeBox"
+                          Header="Displayed layers"
+                          HorizontalAlignment="Stretch"
+                          MinHeight="44"
+                          SelectionChanged="ViewModeBox_SelectionChanged">
+                    <ComboBoxItem Content="Terrain + water" Tag="0" IsSelected="True" />
+                    <ComboBoxItem Content="Terrain only" Tag="1" />
+                    <ComboBoxItem Content="Water depth" Tag="2" />
+                </ComboBox>
+
                 <ComboBox x:Name="TerrainToolBox"
                           Header="Terrain tool"
                           HorizontalAlignment="Stretch"
