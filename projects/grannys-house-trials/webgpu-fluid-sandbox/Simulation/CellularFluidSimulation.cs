@@ -390,6 +390,28 @@ public sealed class CellularFluidSimulation
     public FluidState GetStateSnapshot() => new(GetWaterSnapshot(), (float[])_momentum.Clone(), CycleCount, Algorithm)
         { Settings = Settings, Direction = Direction };
 
+    public CellularFluidSimulation Clone()
+    {
+        var clone = new CellularFluidSimulation(Width, Height, _initialTerrain)
+        {
+            Algorithm = Algorithm,
+            Settings = Settings,
+            Scene = Scene,
+            Direction = Direction,
+            CycleCount = CycleCount
+        };
+        _terrainHeights.CopyTo(clone._terrainHeights, 0);
+        _waterDepths.CopyTo(clone._waterDepths, 0);
+        _momentum.CopyTo(clone._momentum, 0);
+        _stepDeltas.CopyTo(clone._stepDeltas, 0);
+        _proposed.CopyTo(clone._proposed, 0);
+        _transfers.CopyTo(clone._transfers, 0);
+        _scales.CopyTo(clone._scales, 0);
+        _forcing.CopyTo(clone._forcing, 0);
+        _springRates.CopyTo(clone._springRates, 0);
+        return clone;
+    }
+
     public void SynchronizeState(FluidState state)
     {
         if (state.Direction != Direction || state.Settings != Settings || state.Algorithm != Algorithm || state.Momentum.Length != _momentum.Length ||

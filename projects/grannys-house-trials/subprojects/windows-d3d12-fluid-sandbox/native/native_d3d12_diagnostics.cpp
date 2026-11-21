@@ -144,7 +144,7 @@ float clamped_view_elevation(float elevationDegrees) noexcept
 {
     if (!std::isfinite(elevationDegrees))
         return 45.0f;
-    return std::clamp(elevationDegrees, 15.0f, 80.0f);
+    return std::clamp(elevationDegrees, 14.323945f, 80.0f);
 }
 
 }

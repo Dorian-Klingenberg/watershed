@@ -74,7 +74,7 @@ TEST_CASE("D3D12 orbit view normalizes yaw and clamps elevation", "[windows_d3d1
     REQUIRE(windows_d3d12_fluid::normalized_view_yaw(450.0f) == 90.0f);
     REQUIRE(windows_d3d12_fluid::normalized_view_yaw(-45.0f) == 315.0f);
     REQUIRE(windows_d3d12_fluid::normalized_view_yaw(std::numeric_limits<float>::quiet_NaN()) == 0.0f);
-    REQUIRE(windows_d3d12_fluid::clamped_view_elevation(5.0f) == 15.0f);
+    REQUIRE(windows_d3d12_fluid::clamped_view_elevation(5.0f) == 14.323945f);
     REQUIRE(windows_d3d12_fluid::clamped_view_elevation(45.0f) == 45.0f);
     REQUIRE(windows_d3d12_fluid::clamped_view_elevation(95.0f) == 80.0f);
 }

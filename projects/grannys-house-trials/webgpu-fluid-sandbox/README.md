@@ -163,7 +163,7 @@ values.
 | Left click | Select a cell and show terrain height plus CPU/GPU water depths |
 | Left drag | Orbit around the terrain point under the initial press |
 | Mouse wheel | Zoom relative to the hovered terrain point |
-| Right click | Add 12 inches of water in a small brush at the pointed cell |
+| Right click | Add one spring-flow increment at the pointed cell; repeat to raise that spring's rate |
 | Right drag | Preview a barrier stroke; release to raise its cells 12 inches above starting terrain |
 | Horizontal landscape slider | Move both cameras sideways together |
 | Vertical landscape slider, physically right of the views | Move both cameras along the other terrain axis |
