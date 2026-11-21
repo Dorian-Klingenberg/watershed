@@ -1,4 +1,4 @@
-<Window
+﻿<Window
     x:Class="WindowsD3D12FluidSandbox.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -6,9 +6,9 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     Title="D3D12 Fluid Sandbox">
-    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    <Grid x:Name="RootGrid" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="296" MinWidth="296" MaxWidth="296" />
+            <ColumnDefinition Width="352" MinWidth="352" MaxWidth="352" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
@@ -17,198 +17,127 @@
                       HorizontalScrollBarVisibility="Disabled"
                       Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
             <StackPanel Padding="16,14,16,16" Spacing="10">
-                <TextBlock Text="Fluent Fluid Lab" FontSize="20" FontWeight="SemiBold" />
-                <TextBlock Text="Direct3D 12 · Cellular" Opacity="0.75" />
+                <TextBlock Text="Fluid Algorithm Lab" FontSize="22" FontWeight="SemiBold" />
+                <TextBlock x:Name="EngineStatusText" Text="Starting Direct3D 12…" Opacity="0.8" />
+
+                <ComboBox x:Name="AlgorithmBox" Header="Algorithm" MinHeight="44"
+                          SelectionChanged="AlgorithmBox_SelectionChanged">
+                    <ComboBoxItem Content="Cellular" Tag="0" IsSelected="True" />
+                    <ComboBoxItem Content="Pipe-flux shallow water" Tag="1" />
+                    <ComboBoxItem Content="Terrain-head pipe flow" Tag="2" />
+                    <ComboBoxItem Content="Staggered MAC shallow water" Tag="3" />
+                </ComboBox>
 
                 <Grid ColumnSpacing="8" RowSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="44" />
-                        <RowDefinition Height="44" />
-                    </Grid.RowDefinitions>
-                    <Button x:Name="RunButton"
-                            Grid.Row="0"
-                            Grid.Column="0"
-                            Content="Run"
-                            MinHeight="44"
-                            HorizontalAlignment="Stretch"
-                            Click="RunButton_Click" />
-                    <Button x:Name="StepButton"
-                            Grid.Row="0"
-                            Grid.Column="1"
-                            Content="Step"
-                            MinHeight="44"
-                            HorizontalAlignment="Stretch"
-                            Click="StepButton_Click" />
-                    <Button x:Name="PourButton"
-                            Grid.Row="1"
-                            Grid.Column="0"
-                            Content="Pour"
-                            MinHeight="44"
-                            HorizontalAlignment="Stretch"
-                            Click="PourButton_Click" />
-                    <Button x:Name="ResetButton"
-                            Grid.Row="1"
-                            Grid.Column="1"
-                            Content="Reset"
-                            MinHeight="44"
-                            HorizontalAlignment="Stretch"
-                            Click="ResetButton_Click" />
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="44" /><RowDefinition Height="44" /></Grid.RowDefinitions>
+                    <Button x:Name="RunButton" Grid.Row="0" Grid.Column="0" Content="Run" MinHeight="44" Click="RunButton_Click" />
+                    <Button x:Name="PourButton" Grid.Row="0" Grid.Column="1" Content="Pour 12 in" MinHeight="44" Click="PourButton_Click" />
+                    <Button x:Name="StepButton" Grid.Row="1" Grid.Column="0" Content="Step" MinHeight="44" Click="StepButton_Click" />
+                    <Button x:Name="ResetButton" Grid.Row="1" Grid.Column="1" Content="Reset" MinHeight="44" Click="ResetButton_Click" />
                 </Grid>
-
-                <ComboBox x:Name="BatchSizeBox"
-                          Header="Ticks / display"
-                          HorizontalAlignment="Stretch"
-                          MinHeight="44"
-                          SelectionChanged="BatchSizeBox_SelectionChanged">
-                    <ComboBoxItem Content="1" Tag="1" IsSelected="True" />
-                    <ComboBoxItem Content="2" Tag="2" />
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <ToggleSwitch x:Name="CpuReferenceToggle" Grid.Column="0" Header="CPU reference" IsOn="False" Toggled="CpuReferenceToggle_Toggled" />
+                    <Button x:Name="CompareButton" Grid.Column="1" Content="Compare states" MinHeight="44" Click="CompareButton_Click" />
+                </Grid>
+                <ComboBox x:Name="TicksPerDisplayBox" Header="Ticks / display" MinHeight="44" SelectionChanged="TicksPerDisplayBox_SelectionChanged">
+                    <ComboBoxItem Content="1" Tag="1" />
+                    <ComboBoxItem Content="2" Tag="2" IsSelected="True" />
                     <ComboBoxItem Content="4" Tag="4" />
                     <ComboBoxItem Content="8" Tag="8" />
                 </ComboBox>
 
-                <ToggleSwitch x:Name="CpuReferenceToggle"
-                              Header="CPU reference"
-                              OnContent="On"
-                              OffContent="Off"
-                              Toggled="CpuReferenceToggle_Toggled" />
+                <Border Padding="12" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Springs" FontWeight="SemiBold" />
+                        <TextBlock x:Name="SpringReadoutText" Text="Springs: 0 · 0.00 ft³/s" TextWrapping="Wrap" />
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <Button x:Name="RemoveSpringButton" Grid.Column="0" Content="Remove selected" Click="RemoveSpringButton_Click" />
+                            <Button x:Name="ClearSpringsButton" Grid.Column="1" Content="Clear" Click="ClearSpringsButton_Click" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
 
-                <NumberBox x:Name="PourDepthBox"
-                           Header="Pour depth"
-                           Minimum="1"
-                           Maximum="72"
-                           SmallChange="1"
-                           LargeChange="12"
-                           Value="12"
-                           SpinButtonPlacementMode="Inline" />
+                <Border Padding="12" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Terrain" FontWeight="SemiBold" />
+                        <ComboBox x:Name="SceneBox" Header="Scene" MinHeight="44" SelectionChanged="SceneBox_SelectionChanged">
+                            <ComboBoxItem Content="Slope and spillway" Tag="0" IsSelected="True" />
+                            <ComboBoxItem Content="Enclosed basin" Tag="1" />
+                            <ComboBoxItem Content="Water slide" Tag="2" />
+                            <ComboBoxItem Content="Tesla valve · stamped bitmap map" Tag="3" />
+                            <ComboBoxItem Content="Incline → flat workbench" Tag="4" />
+                        </ComboBox>
+                        <ComboBox x:Name="TerrainToolBox" Header="Edit" MinHeight="44" SelectionChanged="TerrainToolBox_SelectionChanged">
+                            <ComboBoxItem Content="Raise" Tag="raise" IsSelected="True" />
+                            <ComboBoxItem Content="Carve" Tag="carve" />
+                        </ComboBox>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Content="Save / export" Click="SaveTerrainButton_Click" />
+                            <Button Grid.Column="1" Content="Restore" Click="RestoreTerrainButton_Click" />
+                        </Grid>
+                        <Button Content="Import JSON map" Click="ImportTerrainButton_Click" />
+                        <TextBlock x:Name="TerrainStatusText" Text="Raise terrain is selected." TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
 
-                <NumberBox x:Name="MaxFlowBox"
-                           Header="Max flow (in/tick)"
-                           Minimum="0.01"
-                           Maximum="12"
-                           SmallChange="0.01"
-                           LargeChange="1"
-                           Value="2"
-                           ValueChanged="FlowSettings_ValueChanged"
-                           SpinButtonPlacementMode="Inline" />
+                <Border Padding="12" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Flow" FontWeight="SemiBold" />
+                        <NumberBox x:Name="CellularMaxFlowBox" Header="Cellular max flow (in/tick)" Minimum="0.01" Maximum="12" Value="2" ValueChanged="FlowSettings_ValueChanged" />
+                        <NumberBox x:Name="CellularSettleRateBox" Header="Cellular settle rate" Minimum="0.01" Maximum="1" Value="0.5" ValueChanged="FlowSettings_ValueChanged" />
+                        <NumberBox x:Name="PipeAreaBox" Header="Pipe area" Minimum="0.01" Maximum="1" Value="0.25" ValueChanged="FlowSettings_ValueChanged" />
+                        <NumberBox x:Name="PipeRetentionBox" Header="Pipe retention" Minimum="0" Maximum="1" Value="0.94" ValueChanged="FlowSettings_ValueChanged" />
+                        <NumberBox x:Name="TerrainHeadAreaBox" Header="Terrain-head area" Minimum="0.01" Maximum="1" Value="0.25" ValueChanged="FlowSettings_ValueChanged" />
+                        <NumberBox x:Name="ManningRoughnessBox" Header="Manning roughness" Minimum="0.001" Maximum="0.2" Value="0.04" ValueChanged="FlowSettings_ValueChanged" />
+                        <NumberBox x:Name="MacDampingBox" Header="MAC damping (1/s)" Minimum="0" Maximum="5" Value="0.02" ValueChanged="FlowSettings_ValueChanged" />
+                        <CheckBox x:Name="MacAdvectionBox" Content="Upwind advection" Checked="MacAdvectionBox_Changed" Unchecked="MacAdvectionBox_Changed" />
+                        <Button Content="Defaults" Click="DefaultsButton_Click" />
+                    </StackPanel>
+                </Border>
 
-                <NumberBox x:Name="SettleRateBox"
-                           Header="Settle rate"
-                           Minimum="0.01"
-                           Maximum="1"
-                           SmallChange="0.01"
-                           LargeChange="0.1"
-                           Value="0.5"
-                           ValueChanged="FlowSettings_ValueChanged"
-                           SpinButtonPlacementMode="Inline" />
+                <Border x:Name="ExperimentPanel" Padding="12" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Visibility="Collapsed">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Flow experiment" FontWeight="SemiBold" />
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Content="Forward" Click="ForwardExperimentButton_Click" />
+                            <Button Grid.Column="1" Content="Reverse" Click="ReverseExperimentButton_Click" />
+                        </Grid>
+                        <Button Content="Advance 128 ticks" Click="AdvanceExperimentButton_Click" />
+                        <TextBlock x:Name="ExperimentStatusText" Text="None · 0.00000 ft³/s · bypass 0.00000 ft³/s" TextWrapping="Wrap" />
+                        <TextBlock x:Name="ExperimentComparisonText" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
 
-                <ComboBox x:Name="ViewModeBox"
-                          Header="Field view"
-                          HorizontalAlignment="Stretch"
-                          MinHeight="44"
-                          SelectionChanged="ViewModeBox_SelectionChanged">
-                    <ComboBoxItem Content="Top-down" Tag="0" IsSelected="True" />
-                    <ComboBoxItem Content="Projected column" Tag="1" />
-                </ComboBox>
+                <TextBlock Text="Camera" FontSize="18" FontWeight="SemiBold" Margin="0,6,0,0" />
+                <Slider x:Name="ZoomSlider" Header="Zoom" Minimum="0.4" Maximum="12" SmallChange="0.05" LargeChange="1" StepFrequency="0.01" Value="1" ValueChanged="ViewSlider_ValueChanged" />
+                <Slider x:Name="PanXSlider" Header="Field X" Minimum="-192" Maximum="384" SmallChange="1" LargeChange="12" StepFrequency="1" Value="96" ValueChanged="ViewSlider_ValueChanged" />
+                <Slider x:Name="PanYSlider" Header="Field Y" Minimum="-128" Maximum="256" SmallChange="1" LargeChange="12" StepFrequency="1" Value="64" ValueChanged="ViewSlider_ValueChanged" />
+                <Slider x:Name="PanZSlider" Header="Field Z" Minimum="-64" Maximum="64" SmallChange="0.5" LargeChange="8" StepFrequency="0.1" Value="16" ValueChanged="ViewSlider_ValueChanged" />
+                <Slider x:Name="YawSlider" Header="Orbit azimuth" Minimum="0" Maximum="360" SmallChange="1" LargeChange="15" StepFrequency="1" Value="325.6" ValueChanged="ViewSlider_ValueChanged" />
+                <Slider x:Name="ElevationSlider" Header="Orbit elevation" Minimum="14.3" Maximum="80" SmallChange="1" LargeChange="10" StepFrequency="1" Value="48.7" ValueChanged="ViewSlider_ValueChanged" />
+                <Slider x:Name="RollSlider" Header="Orbit roll" Minimum="-180" Maximum="180" SmallChange="1" LargeChange="15" StepFrequency="1" Value="0" ValueChanged="ViewSlider_ValueChanged" />
+                <Button Content="Reset view" Click="ResetViewButton_Click" />
+                <TextBlock Text="Left-drag: orbit · Right-drag: raise/carve stroke · Right-click: add spring · Wheel: cursor-anchored zoom" Opacity="0.75" TextWrapping="Wrap" />
 
-                <ComboBox x:Name="DisplayModeBox"
-                          Header="Displayed layers"
-                          HorizontalAlignment="Stretch"
-                          MinHeight="44"
-                          SelectionChanged="ViewModeBox_SelectionChanged">
-                    <ComboBoxItem Content="Terrain + water" Tag="0" IsSelected="True" />
-                    <ComboBoxItem Content="Terrain only" Tag="1" />
-                    <ComboBoxItem Content="Water depth" Tag="2" />
-                </ComboBox>
-
-                <ComboBox x:Name="TerrainToolBox"
-                          Header="Terrain tool"
-                          HorizontalAlignment="Stretch"
-                          MinHeight="44"
-                          SelectionChanged="TerrainToolBox_SelectionChanged">
-                    <ComboBoxItem Content="Raise" Tag="raise" IsSelected="True" />
-                    <ComboBoxItem Content="Carve" Tag="carve" />
-                    <ComboBoxItem Content="Select" Tag="select" />
-                </ComboBox>
-
-                <Slider x:Name="ZoomSlider"
-                        Header="Zoom"
-                        Minimum="1"
-                        Maximum="4"
-                        SmallChange="0.1"
-                        LargeChange="0.5"
-                        StepFrequency="0.1"
-                        Value="1"
-                        ValueChanged="ViewSlider_ValueChanged" />
-
-                <Slider x:Name="PanXSlider"
-                        Header="Horizontal position"
-                        Minimum="0"
-                        Maximum="192"
-                        SmallChange="1"
-                        LargeChange="12"
-                        StepFrequency="1"
-                        Value="96"
-                        ValueChanged="ViewSlider_ValueChanged" />
-
-                <Slider x:Name="PanYSlider"
-                        Header="Vertical position"
-                        Minimum="0"
-                        Maximum="128"
-                        SmallChange="1"
-                        LargeChange="12"
-                        StepFrequency="1"
-                        Value="64"
-                        ValueChanged="ViewSlider_ValueChanged" />
-
-                <Slider x:Name="YawSlider"
-                        Header="Orbit yaw"
-                        Minimum="0"
-                        Maximum="360"
-                        SmallChange="1"
-                        LargeChange="15"
-                        StepFrequency="1"
-                        Value="0"
-                        ValueChanged="ViewSlider_ValueChanged" />
-
-                <Slider x:Name="ElevationSlider"
-                        Header="Orbit elevation"
-                        Minimum="15"
-                        Maximum="80"
-                        SmallChange="1"
-                        LargeChange="10"
-                        StepFrequency="1"
-                        Value="80"
-                        ValueChanged="ViewSlider_ValueChanged" />
-
-                <Button x:Name="ResetViewButton"
-                        Content="Reset view"
-                        MinHeight="44"
-                        HorizontalAlignment="Stretch"
-                        Click="ResetViewButton_Click" />
-
-                <TextBlock Text="Middle-drag: orbit · Right-drag: pan · Wheel: zoom"
-                           Opacity="0.75"
-                           TextWrapping="Wrap" />
-
-                <Border Padding="12"
-                        CornerRadius="8"
-                        BorderThickness="1"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+                <Border Padding="12" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                     <StackPanel Spacing="6">
-                        <TextBlock Text="Native status" FontWeight="SemiBold" />
-                        <TextBlock x:Name="SelectionStatusText"
-                                   Text="Select a cell in the field."
-                                   TextWrapping="Wrap"
-                                   LineHeight="22" />
-                        <TextBlock x:Name="StatusText"
-                                   Text="Initializing D3D12…"
-                                   TextWrapping="Wrap"
-                                   LineHeight="22" />
+                        <TextBlock Text="Simulation" FontWeight="SemiBold" />
+                        <TextBlock x:Name="TickSummaryText" Text="Tick 0 · GPU-only display" TextWrapping="Wrap" />
+                        <TextBlock x:Name="PerformanceText" Text="Ticks/sec 0 · Solver 0 ms/tick · D3D12 render 0 ms" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <Border Padding="12" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Selection" FontWeight="SemiBold" />
+                        <TextBlock x:Name="SelectionStatusText" Text="Select a cell in the field." TextWrapping="Wrap" />
+                        <TextBlock x:Name="ReferenceStatusText" Text="D3D12 renderer readying." TextWrapping="Wrap" />
+                        <TextBlock x:Name="StatusText" Text="Initializing Direct3D 12…" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -222,9 +151,7 @@
                             PointerMoved="FluidSurface_PointerMoved"
                             PointerReleased="FluidSurface_PointerReleased"
                             PointerCanceled="FluidSurface_PointerCanceled"
-                            PointerCaptureLost="FluidSurface_PointerCaptureLost"
-                            PointerWheelChanged="FluidSurface_PointerWheelChanged"
-                            RightTapped="FluidSurface_RightTapped" />
+                            PointerCaptureLost="FluidSurface_PointerCaptureLost" />
         </Border>
     </Grid>
 </Window>

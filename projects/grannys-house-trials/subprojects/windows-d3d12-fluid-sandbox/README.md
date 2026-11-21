@@ -1,24 +1,39 @@
 # Windows D3D12 Fluid Sandbox
 
-This is a small Windows-native WinUI 3 and Direct3D 12 cellular-fluid sandbox.
-It is isolated in `feat/edge-d3d12-fluid-sandbox` and does not use the Blazor/WebGPU app.
+This is the Windows-native WinUI 3 and Direct3D 12 presentation of the Fluid
+Algorithm Lab reference. It links the same `CellularFluidSimulation` domain
+model as the WebGPU app; Direct3D 12 owns the swap chain and terrain view.
+The shared C# model remains the fluid solver. The native renderer rasterizes
+the current terrain/water snapshot and presents it through a D3D12 swap chain;
+this is not a D3D12 compute-solver port. The optional comparison model is an
+independent clone of the shared C# model.
 
 ## Current slice
 
-- WinUI 3 Fluent left-rail controls: Run, Pause, Step, Pour, Reset
-- Tick batches: 1, 2, 4, and 8
-- Independent native CPU reference state and mismatch readout
-- Pour depth and cellular max-flow/settle controls
-- Top-down and height-aware projected-column views
-- Terrain, water-depth, and combined display modes
-- Orbit-aware hover, cell picking, selection, and terrain editing
-- Shared pan/zoom/orbit focus across top-down and projected views
-- Screen Y grows downward while field/world Y grows upward
-- Middle-drag orbit, right-drag pan, and wheel zoom
-- Raise, carve, and select terrain tools
-- 192 x 128 cellular field
-- Direct3D 12 native renderer
+- All four current algorithms: Cellular, Pipe-flux shallow water, Terrain-head
+  pipe flow, and Staggered MAC with optional upwind advection
+- Run/Pause, one-tick Step, 1/2/4/8 ticks per display, pour, reset, a cloned CPU
+  reference state, and state comparison
+- Five terrain scenes, spring sources, 12-inch right-drag raise/carve strokes,
+  versioned map save/restore/import/export, and Tesla forward/reverse trials
+- Water totals, wet-cell counts, max depth, solver timing, render/upload timing,
+  and ticks/second readouts
+- One height-aware projected terrain view with shared hover, selection, and
+  spring markers
+- Full six-degree camera controls: X/Y/Z focus, yaw, elevation, and roll
+- Left click selects; left drag orbits from the exact picked world point;
+  right-click increments a spring; right-drag previews then commits a terrain
+  stroke; the wheel zooms continuously around its picked world point
+- WebGPU-compatible projection and positive screen-down/field-Y mapping
+- Cursor-anchored zoom from 0.4x to 12x and aspect-correct resize behavior
+- 192 x 128 terrain field
+- Direct3D 12 swap chain and native presentation
 - ARM64 Windows build
+
+The shared C# model is the fluid solver. The D3D12 app renders its primary
+snapshot and runs an independent cloned reference model for comparison; this
+slice does not implement D3D12 compute shaders or the WebGPU app's second,
+side-by-side CPU canvas.
 
 ## Build
 
@@ -51,7 +66,8 @@ The detailed stage report found and fixed two initialization defects:
 2. The first render emitted a redundant `COPY_DEST -> COPY_DEST` resource-barrier
    transition; same-state transitions are now omitted.
 
-Windows WER may still report an idle/close-time
-`Microsoft.UI.Xaml.dll` `RPC_E_DISCONNECTED (0x8001010E)` / `c000027b`.
-That lifetime report is separate from the resolved initialization and resource
-sequence and remains under investigation.
+The camera parity rewrite also restored the native `NativePickCell` export.
+Without it, a pointer press raised `EntryPointNotFoundException` across the
+WinUI event callback and Windows reported `Microsoft.UI.Xaml.dll` `0xc000027b`.
+The export and managed pick-call guards are now present; the rebuilt ARM64 app
+stays open during orbit, zoom, spring, and terrain-stroke interaction checks.

@@ -19,6 +19,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\webgpu-fluid-sandbox\Simulation\*.cs"
+             Link="Simulation\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\webgpu-fluid-sandbox\artifacts\tesla-valve-map.json"
+                      LogicalName="TeslaTerrain.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="native\**\*.dll"
           Link="%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest"

@@ -21,6 +21,26 @@ Assert(afterStep.Where((_, index) => index != 12).Any(depth => depth > 0.0f), "w
 AssertNear(8.0, simulation.GetSummary().TotalWater, 0.0001, "closed-field water conservation");
 Assert(afterStep.All(depth => depth >= 0.0f && float.IsFinite(depth)), "water depths remain finite and non-negative");
 
+var cloneSource = CellularFluidSimulation.CreateDefault();
+cloneSource.SelectAlgorithm(FluidAlgorithm.Mac);
+cloneSource.Configure(new FluidSettings(MacDamping: 0.04f, MacAdvection: true));
+cloneSource.AddCenterWater(radius: 3, depthInches: 6.0f);
+cloneSource.AddSpring(20, 20);
+cloneSource.Step();
+var simulationClone = cloneSource.Clone();
+Assert(FluidComparison.Compare(cloneSource.GetStateSnapshot(), simulationClone.GetStateSnapshot()).Matches,
+    "simulation clone preserves the complete solver state");
+Assert(cloneSource.GetTerrainSnapshot().SequenceEqual(simulationClone.GetTerrainSnapshot()),
+    "simulation clone preserves terrain");
+Assert(cloneSource.GetSpringRates().SequenceEqual(simulationClone.GetSpringRates()),
+    "simulation clone preserves spring rates");
+simulationClone.Step();
+simulationClone.AddBarrier([0]);
+Assert(cloneSource.CycleCount + 1 == simulationClone.CycleCount,
+    "simulation clone advances independently");
+Assert(cloneSource.GetTerrainHeight(0, 0) != simulationClone.GetTerrainHeight(0, 0),
+    "simulation clone edits do not mutate the source terrain");
+
 var edgePour = new CellularFluidSimulation(2, 2, new int[4]);
 edgePour.AddCenterWater(radius: 1, depthInches: 2.0f);
 AssertNear(6.0, edgePour.GetSummary().TotalWater, 0.0001, "center pour clips at field boundaries");
